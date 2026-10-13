@@ -18,17 +18,23 @@ Distanțele sunt în linie dreaptă, nu pe drum.
 | Ce | Unde | Cum |
 |---|---|---|
 | Date OpenStreetMap | automat | lunar, pe 1 ale lunii (workflow „Date hartă”) |
-| Lista hidranților | `data/hidranti/` | pune fișierul (CSV, Excel, GeoJSON sau KML); harta se reconstruiește singură |
+| Lista hidranților | aplicație → Administrare | încarci fișierul (Excel, CSV, GeoJSON, KML), descarci `hidranti.enc` și îl urci în `web/data/` |
+| Utilizatori | aplicație → Administrare | adaugi sau resetezi, descarci `users.json` și îl urci în `web/` |
 | Aplicația | `web/` | orice modificare se publică automat (workflow „Site”) |
 
 Ramura `site` conține aplicația gata de publicat. Ramura `date` conține doar tile-urile și datele.
+
+## Acces și securitate
+
+Aplicația cere utilizator și parolă. Hidranții sunt publicați doar criptați (AES-GCM); cheia lor
+se deschide numai cu parola unui utilizator (PBKDF2-SHA256, 310.000 iterații). În repository nu
+există parole și nici lista de hidranți necriptată. Datele OpenStreetMap sunt publice oricum.
 
 ## Structură
 
 ```
 pipeline/   descărcare OSM, decupare județ, straturi, index de căutare, hidranți
 web/        aplicația (MapLibre GL, fără server, fără conturi externe)
-data/       lista hidranților (fișierul primit de la ISU)
 ```
 
 ## Surse
