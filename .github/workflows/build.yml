@@ -1,0 +1,59 @@
+name: Construiește harta
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "17 2 1 * *"   # lunar, pe 1 la ora 05:17 (ora României), ca datele OSM să fie la zi
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Instrumente
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq osmium-tool build-essential libsqlite3-dev zlib1g-dev
+          pip install --quiet shapely pyproj openpyxl
+
+      - name: Tippecanoe (din cache)
+        id: tip-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/tippecanoe-bin
+          key: tippecanoe-2.79.0-${{ runner.os }}
+
+      - name: Tippecanoe (compilare)
+        if: steps.tip-cache.outputs.cache-hit != 'true'
+        run: |
+          git clone --depth 1 --branch 2.79.0 https://github.com/felt/tippecanoe.git /tmp/tippecanoe \
+            || git clone --depth 1 https://github.com/felt/tippecanoe.git /tmp/tippecanoe
+          make -C /tmp/tippecanoe -j"$(nproc)"
+          mkdir -p ~/tippecanoe-bin
+          cp /tmp/tippecanoe/tippecanoe ~/tippecanoe-bin/
+
+      - name: Construiește harta
+        run: |
+          export PATH="$HOME/tippecanoe-bin:$PATH"
+          bash pipeline/build.sh
+
+      - name: Publică pe ramura site
+        run: |
+          cd dist
+          git init -q -b site
+          git config user.name "github-actions[bot]"
+          git config user.email "41898333+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -q -m "Hartă construită din ${GITHUB_SHA::7}, date OSM $(date -u +%Y-%m-%d)"
+          git push -q --force "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" site

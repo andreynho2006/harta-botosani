@@ -1,0 +1,10 @@
+{
+  "attributes": {
+    "type": "@type",
+    "id": "@id"
+  },
+  "exclude_tags": [
+    "created_by", "source", "source:*", "note", "note:*", "fixme", "FIXME",
+    "name:*", "alt_name:*", "old_name:*", "wikipedia:*", "tiger:*", "gnis:*"
+  ]
+}
