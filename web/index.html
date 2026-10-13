@@ -1,1 +1,119 @@
-<!-- aplicația urmează -->
+<!doctype html>
+<html lang="ro">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Harta Botoșani</title>
+  <meta name="robots" content="noindex, nofollow">
+  <link rel="stylesheet" href="vendor/maplibre-gl.css">
+  <link rel="stylesheet" href="css/app.css">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='1' y='6' width='30' height='20' rx='4' fill='%23c8102e'/%3E%3Ctext x='16' y='21.5' font-family='Arial' font-weight='700' font-size='13' fill='white' text-anchor='middle'%3EBT%3C/text%3E%3C/svg%3E">
+  <script>
+    try {
+      const t = localStorage.getItem("hb.theme");
+      const dark = t ? t === "noapte" : matchMedia("(prefers-color-scheme: dark)").matches;
+      document.documentElement.dataset.theme = dark ? "dark" : "light";
+    } catch (e) { document.documentElement.dataset.theme = "light"; }
+  </script>
+  <script src="vendor/proj4.js"></script>
+  <script src="vendor/maplibre-gl.js"></script>
+  <script type="module" src="js/main.js"></script>
+</head>
+<body>
+<div class="app">
+  <aside class="side">
+    <header class="brand">
+      <div class="plate" aria-hidden="true">BT</div>
+      <div>
+        <h1>Harta Botoșani</h1>
+        <p id="data-info">Se încarcă datele…</p>
+      </div>
+    </header>
+
+    <div class="search" role="search">
+      <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>
+      <input id="q" type="search" placeholder="Localitate, stradă, adresă, obiectiv, coordonate" autocomplete="off" spellcheck="false"
+             aria-label="Caută pe hartă" aria-controls="results" aria-autocomplete="list">
+      <kbd>/</kbd>
+      <ul id="results" class="results" role="listbox" hidden></ul>
+    </div>
+
+    <nav class="tabs" role="tablist">
+      <button role="tab" id="tb-straturi" data-tab="straturi" aria-selected="true">Straturi</button>
+      <button role="tab" id="tb-analiza" data-tab="analiza" aria-selected="false">Analiză punct</button>
+      <button role="tab" id="tb-ajutor" data-tab="ajutor" aria-selected="false">Ajutor</button>
+    </nav>
+
+    <section class="panel" id="tab-straturi" role="tabpanel"></section>
+    <section class="panel" id="tab-analiza" role="tabpanel" hidden></section>
+    <section class="panel" id="tab-ajutor" role="tabpanel" hidden>
+      <div class="help">
+        <h3>Căutare</h3>
+        <p>Scrie numele unei localități, străzi, adrese, instituții sau numărul unui hidrant. Funcționează și fără diacritice.</p>
+        <p>Poți căuta și coordonate, de exemplu de la un apel 112:</p>
+        <p><code>47.7412, 26.6631</code> &nbsp; <code>47°44'28"N 26°39'47"E</code> &nbsp; <code>694000 624000</code> (Stereo 70)</p>
+        <h3>Analiza unui punct</h3>
+        <p>Clic dreapta pe hartă și alege <b>Analizează punctul</b>. Vezi cei mai apropiați hidranți, subunitatea ISU, spitalul și poliția, plus clădirile și obiectivele dintr-o rază aleasă.</p>
+        <p>Distanțele sunt <b>în linie dreaptă</b>, nu pe drum.</p>
+        <h3>Scurtături</h3>
+        <div class="keys">
+          <kbd>/</kbd><span>Caută</span>
+          <kbd>A</kbd><span>Analizează un punct</span>
+          <kbd>M</kbd><span>Măsoară distanța</span>
+          <kbd>S</kbd><span>Hartă / satelit</span>
+          <kbd>N</kbd><span>Mod zi / noapte</span>
+          <kbd>Esc</kbd><span>Închide / anulează</span>
+        </div>
+        <h3>Date</h3>
+        <p id="help-data">Drumuri, ape, clădiri, localități și instituții: © contribuitorii OpenStreetMap, actualizate lunar. Imagini satelitare: Esri. Hidranți: lista ISU.</p>
+        <p>Datele OpenStreetMap pot fi incomplete. Verifică informațiile critice din surse oficiale.</p>
+      </div>
+    </section>
+  </aside>
+
+  <main class="mapwrap">
+    <div id="map"></div>
+    <div class="loading" id="loading">Se încarcă harta…</div>
+
+    <div class="toolbar">
+      <div class="tb">
+        <button id="t-analiza" title="Analizează un punct (A)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="2.5" fill="currentColor"/><path d="M12 1.5v3M12 19.5v3M1.5 12h3M19.5 12h3"/></svg>
+          Analizează <kbd>A</kbd></button>
+        <button id="t-masoara" title="Măsoară distanța (M)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 17L17 3l4 4L7 21z"/><path d="M7 13l2 2M10 10l2 2M13 7l2 2"/></svg>
+          Măsoară <kbd>M</kbd></button>
+      </div>
+      <div class="tb" role="group" aria-label="Fundal">
+        <button id="t-harta" aria-pressed="true">Hartă</button>
+        <button id="t-satelit" aria-pressed="false">Satelit</button>
+      </div>
+      <div class="tb">
+        <button id="t-tema" title="Mod zi / noapte (N)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/></svg>
+          <span id="t-tema-l">Noapte</span></button>
+        <button id="t-export" title="Salvează imaginea hărții">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12M7 10l5 5 5-5M4 21h16"/></svg>
+          Imagine</button>
+        <button id="t-full" title="Ecran complet">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>
+        </button>
+      </div>
+    </div>
+
+    <div class="modebar" id="modebar" hidden></div>
+    <article class="info" id="info" hidden aria-live="polite"></article>
+    <div class="ctx" id="ctx" hidden role="menu"></div>
+
+    <footer class="status">
+      <span><span class="k">WGS84</span><span class="mono" id="st-wgs">–</span></span>
+      <span><span class="k">Stereo 70</span><span class="mono" id="st-s70">–</span></span>
+      <span><span class="k">UAT</span><span id="st-uat">–</span></span>
+      <span class="sp"></span>
+      <span><span class="k">Zoom</span><span class="mono" id="st-zoom">–</span></span>
+    </footer>
+    <div class="toast" id="toast" hidden role="status"></div>
+  </main>
+</div>
+</body>
+</html>

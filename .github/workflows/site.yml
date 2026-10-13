@@ -1,0 +1,46 @@
+name: Site
+
+# Pune împreună aplicația (web/) și datele (ramura date) pe ramura site, de unde se publică.
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ["web/**", ".github/workflows/site.yml"]
+  workflow_run:
+    workflows: ["Date hartă"]
+    types: [completed]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: site
+  cancel-in-progress: true
+
+jobs:
+  site:
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Aplicație + date
+        run: |
+          git clone -q --depth 1 --branch date "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" /tmp/date
+          mkdir -p site
+          cp -r web/. site/
+          cp -r /tmp/date/tiles /tmp/date/data site/
+          printf '/tiles/*\n  Cache-Control: public, max-age=86400\n/vendor/*\n  Cache-Control: public, max-age=604800\n/fonts/*\n  Cache-Control: public, max-age=604800\n' > site/_headers
+          touch site/.nojekyll
+
+      - name: Publică pe ramura site
+        run: |
+          cd site
+          git init -q -b site
+          git config user.name "github-actions[bot]"
+          git config user.email "41898333+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -q -m "Site din ${GITHUB_SHA::7}"
+          git push -q --force "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" site

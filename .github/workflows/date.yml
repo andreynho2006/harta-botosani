@@ -1,21 +1,24 @@
-name: Construiește harta
+name: Date hartă
 
+# Descarcă OpenStreetMap, decupează județul, adaugă hidranții și construiește tile-urile.
+# Rulează lunar, la orice modificare a scripturilor sau a listei de hidranți, sau manual.
 on:
   workflow_dispatch:
   push:
     branches: [main]
+    paths: ["pipeline/**", "data/**", ".github/workflows/date.yml"]
   schedule:
-    - cron: "17 2 1 * *"   # lunar, pe 1 la ora 05:17 (ora României), ca datele OSM să fie la zi
+    - cron: "17 2 1 * *"   # pe 1 ale lunii, 05:17 ora României
 
 permissions:
   contents: write
 
 concurrency:
-  group: build
+  group: date
   cancel-in-progress: true
 
 jobs:
-  build:
+  date:
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:
@@ -37,23 +40,22 @@ jobs:
       - name: Tippecanoe (compilare)
         if: steps.tip-cache.outputs.cache-hit != 'true'
         run: |
-          git clone --depth 1 --branch 2.79.0 https://github.com/felt/tippecanoe.git /tmp/tippecanoe \
-            || git clone --depth 1 https://github.com/felt/tippecanoe.git /tmp/tippecanoe
+          git clone --depth 1 --branch 2.79.0 https://github.com/felt/tippecanoe.git /tmp/tippecanoe
           make -C /tmp/tippecanoe -j"$(nproc)"
           mkdir -p ~/tippecanoe-bin
           cp /tmp/tippecanoe/tippecanoe ~/tippecanoe-bin/
 
-      - name: Construiește harta
+      - name: Construiește datele
         run: |
           export PATH="$HOME/tippecanoe-bin:$PATH"
           bash pipeline/build.sh
 
-      - name: Publică pe ramura site
+      - name: Publică pe ramura date
         run: |
-          cd dist
-          git init -q -b site
+          cd dist-data
+          git init -q -b date
           git config user.name "github-actions[bot]"
           git config user.email "41898333+github-actions[bot]@users.noreply.github.com"
           git add -A
-          git commit -q -m "Hartă construită din ${GITHUB_SHA::7}, date OSM $(date -u +%Y-%m-%d)"
-          git push -q --force "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" site
+          git commit -q -m "Date OSM $(date -u +%Y-%m-%d), din ${GITHUB_SHA::7}"
+          git push -q --force "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" date

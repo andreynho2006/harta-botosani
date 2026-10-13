@@ -1,0 +1,932 @@
+/* global maplibregl */
+import { POI, LAYER_GROUPS, LABELS, START_VIEW, itemLabel } from "./config.js";
+import { buildStyle, PALETTES } from "./style.js";
+import { buildIcons, iconDataURL } from "./icons.js";
+import { SearchIndex, typeInfo, norm } from "./search.js";
+import {
+  distance, bearing, direction, circle, fmtDistance, fmtLatLon, fmtStereo, fmtDMS,
+  parseCoordinates, makeUatLookup,
+} from "./geo.js";
+
+const $ = (s) => document.querySelector(s);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const FC = () => ({ type: "FeatureCollection", features: [] });
+const store = {
+  get(k, d) { try { const v = localStorage.getItem("hb." + k); return v === null ? d : JSON.parse(v); } catch { return d; } },
+  set(k, v) { try { localStorage.setItem("hb." + k, JSON.stringify(v)); } catch { /* fără stocare */ } },
+};
+
+// ------------------------------------------------------------------ stare
+
+const defaults = {};
+for (const g of LAYER_GROUPS) for (const it of g.items) defaults[it.id] = it.on;
+
+const state = {
+  theme: document.documentElement.dataset.theme === "dark" ? "noapte" : "zi",
+  basemap: "harta",
+  visible: { ...defaults, ...store.get("visible", {}) },
+  data: { pois: FC(), hydrants: FC(), admin: FC() },
+  overlays: { sel: FC(), analysis: FC(), measure: FC(), pin: FC() },
+  hoverUat: "",
+  mode: null, // null | "measure" | "pick"
+  measure: [],
+  analysis: null,
+};
+
+const search = new SearchIndex();
+let uatAt = () => null;
+let stats = null;
+let map;
+const icons = buildIcons();
+
+// ------------------------------------------------------------------ pornire
+
+async function loadJSON(path, fallback) {
+  try {
+    const r = await fetch(path, { cache: "no-cache" });
+    if (!r.ok) throw new Error(r.status);
+    return await r.json();
+  } catch (e) {
+    console.warn("Nu pot încărca", path, e);
+    return fallback;
+  }
+}
+
+const HYD_LABEL_KEYS = ["nr", "numar", "nrhidrant", "cod", "id", "indicativ", "denumire", "nume", "name"];
+
+function prepareHydrants(fc) {
+  const keys = fc.features.length ? Object.keys(fc.features[0].properties) : [];
+  const labelKey = keys.find((k) => HYD_LABEL_KEYS.includes(norm(k).replace(/[^a-z0-9]/g, "")));
+  for (const f of fc.features) {
+    const v = labelKey ? f.properties[labelKey] : null;
+    f.properties._label = v != null && v !== "" ? String(v) : String(f.id + 1);
+  }
+  return fc;
+}
+
+async function init() {
+  const [pois, hydrants, admin, searchRows, st] = await Promise.all([
+    loadJSON("data/pois.geojson", FC()),
+    loadJSON("data/hidranti.geojson", FC()),
+    loadJSON("data/admin.geojson", FC()),
+    loadJSON("data/search.json", []),
+    loadJSON("data/stats.json", null),
+  ]);
+  state.data.pois = pois;
+  state.data.hydrants = prepareHydrants(hydrants);
+  state.data.admin = admin;
+  stats = st;
+  uatAt = makeUatLookup(admin);
+  search.add(searchRows);
+  search.add(state.data.hydrants.features.map((f) => [
+    "Hidrant " + f.properties._label, "hid", ...f.geometry.coordinates, f.properties._uat || "", null, f.id]));
+
+  const date = stats?.generated ? new Date(stats.generated).toLocaleDateString("ro-RO", { day: "numeric", month: "long", year: "numeric" }) : "–";
+  const nh = state.data.hydrants.features.length;
+  $("#data-info").textContent = `Date OSM din ${date} · ${nh ? nh.toLocaleString("ro-RO") + " hidranți" : "fără listă de hidranți"}`;
+
+  renderLayerPanel();
+  renderAnalysis();
+  initMap();
+  initSearch();
+  initUI();
+}
+
+// ------------------------------------------------------------------ hartă
+
+function applyStyle() {
+  if (!map) return;
+  map.setStyle(buildStyle(state), { diff: true });
+  store.set("visible", state.visible);
+}
+
+function setOverlay(name, fc) {
+  state.overlays[name] = fc;
+  map.getSource(name)?.setData(fc);
+}
+
+function initMap() {
+  map = new maplibregl.Map({
+    container: "map",
+    style: buildStyle(state),
+    center: START_VIEW.center,
+    zoom: START_VIEW.zoom,
+    minZoom: 7,
+    maxZoom: 19,
+    maxBounds: [[24.9, 46.9], [28.4, 48.9]],
+    hash: "harta",
+    attributionControl: { compact: true },
+    locale: {
+      "NavigationControl.ZoomIn": "Mărește",
+      "NavigationControl.ZoomOut": "Micșorează",
+      "NavigationControl.ResetBearing": "Orientează spre nord",
+      "AttributionControl.ToggleAttribution": "Surse",
+    },
+  });
+  map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), "bottom-right");
+  map.addControl(new maplibregl.ScaleControl({ unit: "metric", maxWidth: 120 }), "bottom-left");
+
+  map.on("styleimagemissing", (e) => {
+    const ic = icons[e.id];
+    if (ic && !map.hasImage(e.id)) map.addImage(e.id, ic.image, ic.options);
+  });
+  map.once("load", () => $("#loading").remove());
+  map.on("error", (e) => {
+    if (e?.error?.status === 404) return; // tile lipsă în afara județului
+    console.warn(e.error || e);
+  });
+
+  let raf = 0;
+  map.on("mousemove", (e) => {
+    if (raf) return;
+    raf = requestAnimationFrame(() => {
+      raf = 0;
+      const { lng, lat } = e.lngLat;
+      $("#st-wgs").textContent = fmtLatLon(lng, lat);
+      const s = fmtStereo(lng, lat);
+      $("#st-s70").textContent = `X ${s.X}  Y ${s.Y}`;
+      $("#st-uat").textContent = uatAt(lng, lat)?.name || "în afara județului";
+      if (state.mode === "measure" && state.measure.length) drawMeasure([lng, lat]);
+    });
+  });
+  const zoomTxt = () => ($("#st-zoom").textContent = map.getZoom().toFixed(1));
+  map.on("zoom", zoomTxt);
+  zoomTxt();
+
+  const clickable = ["hydrant-icon", "hydrant-dot", "poi-major", "poi-minor", "pin"];
+  for (const id of clickable) {
+    map.on("mouseenter", id, () => { if (!state.mode) map.getCanvas().style.cursor = "pointer"; });
+    map.on("mouseleave", id, () => { if (!state.mode) map.getCanvas().style.cursor = ""; });
+  }
+
+  map.on("click", onMapClick);
+  map.on("dblclick", (e) => {
+    if (state.mode === "measure") { e.preventDefault(); finishMeasure(); }
+  });
+  map.on("contextmenu", (e) => openContextMenu(e));
+  map.on("movestart", closeContextMenu);
+}
+
+// prioritatea la clic: ce e deasupra și mai important câștigă
+const PICK_ORDER = ["hydrant-icon", "hydrant-dot", "poi-major", "poi-minor", "pin", "buildings", "roads", "tracks", "rail",
+  "dams", "rivers", "streams", "water", "places", "landuse"];
+
+function onMapClick(e) {
+  closeContextMenu();
+  const ll = [e.lngLat.lng, e.lngLat.lat];
+  if (state.mode === "measure") return addMeasurePoint(ll);
+  if (state.mode === "pick") { setMode(null); return analyzePoint(ll); }
+
+  const box = [[e.point.x - 6, e.point.y - 6], [e.point.x + 6, e.point.y + 6]];
+  const layers = PICK_ORDER.filter((id) => map.getLayer(id) && map.getLayoutProperty(id, "visibility") !== "none");
+  const feats = map.queryRenderedFeatures(box, { layers });
+  feats.sort((a, b) => PICK_ORDER.indexOf(a.layer.id) - PICK_ORDER.indexOf(b.layer.id));
+  const f = feats[0];
+  if (f?.layer.id === "pin" && state.analysis) return selectTab("analiza");
+  showInfo(f || null, ll);
+}
+
+// ------------------------------------------------------------------ fișa de informații
+
+const ICON = {
+  copy: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3"/></svg>',
+  target: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="2.5" fill="currentColor"/></svg>',
+  ext: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></svg>',
+  info: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5v.5"/></svg>',
+  ruler: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 17L17 3l4 4L7 21z"/><path d="M7 13l2 2M10 10l2 2M13 7l2 2"/></svg>',
+};
+
+function osmLink(ref) {
+  if (!ref) return null;
+  const t = { n: "node", w: "way", r: "relation" }[ref[0]];
+  return t ? `https://www.openstreetmap.org/${t}/${ref.slice(1)}` : null;
+}
+
+function describe(f) {
+  const p = f.properties || {};
+  const id = f.layer.id;
+  const rows = [];
+  const add = (k, v, cls) => { if (v !== undefined && v !== null && v !== "") rows.push([k, v, cls]); };
+
+  if (id.startsWith("hydrant")) {
+    for (const [k, v] of Object.entries(p)) if (!k.startsWith("_")) add(k, v);
+    add("UAT", p._uat);
+    return { title: `Hidrant ${p._label}`, kind: "Hidrant ISU", icon: iconDataURL("hidranti", 26), rows };
+  }
+  if (id.startsWith("poi")) {
+    const c = POI[p.cat];
+    add("Operator", p.operator); add("Adresă", p.addr); add("Telefon", p.phone); add("Cod", p.ref);
+    add("Înălțime", p.height && `${p.height} m`); add("UAT", p.uat);
+    if (p.website) add("Site", `<a href="${esc(p.website)}" target="_blank" rel="noopener">${esc(p.website.replace(/^https?:\/\//, ""))}</a>`, "html");
+    return { title: p.name || c.label, kind: c.label, icon: iconDataURL(p.cat, 26), rows, osm: p.osm };
+  }
+  if (id === "buildings" || id === "buildings-bloc-line") {
+    add("Nivele", p.levels); add("Adresă", p.addr); add("Înălțime", p.height && `${p.height} m`);
+    add("Material", p.material); add("Acoperiș", p.roof);
+    if (p.b && p.b !== "yes") add("Etichetă OSM", p.b);
+    return { title: p.name || p.addr || LABELS.building[p.kind], kind: LABELS.building[p.kind], rows, osm: p.osm };
+  }
+  if (id === "roads" || id === "tracks") {
+    add("Număr drum", p.ref); add("Denumire", p.name);
+    add("Îmbrăcăminte", LABELS.surface[p.surface] || p.surface);
+    if (p.bridge) add("Pod", "da");
+    if (p.tunnel) add("Tunel", "da");
+    if (p.oneway) add("Sens unic", "da");
+    add("Tonaj maxim", p.maxweight && `${p.maxweight} t`, "warn");
+    add("Înălțime maximă", p.maxheight && `${p.maxheight} m`, "warn");
+    add("Lățime maximă", p.maxwidth && `${p.maxwidth} m`, "warn");
+    const title = [p.ref, p.name].filter(Boolean).join(" · ") || LABELS.road[p.cls];
+    return { title, kind: LABELS.road[p.cls] + (p.bridge ? " · pod" : ""), rows, osm: p.osm };
+  }
+  if (id === "rail") return { title: p.name || "Cale ferată", kind: "Cale ferată", rows };
+  if (["rivers", "streams", "dams", "water"].includes(id)) {
+    add("Suprafață", p.area_ha && `${p.area_ha.toLocaleString("ro-RO")} ha`);
+    if (p.intermittent) add("Regim", "temporar (seacă vara)");
+    return { title: p.name || LABELS.water[p.kind], kind: LABELS.water[p.kind], rows, osm: p.osm };
+  }
+  if (id === "places") {
+    add("Populație", p.population && p.population.toLocaleString("ro-RO"));
+    return { title: p.name, kind: LABELS.place[p.kind] || "Localitate", rows };
+  }
+  if (id === "landuse") return { title: LABELS.landuse[p.kind], kind: "Folosința terenului", rows };
+  return { title: "Obiect", kind: id, rows };
+}
+
+function coordsBlock(ll) {
+  const [lon, lat] = ll;
+  const s = fmtStereo(lon, lat);
+  return `<div class="coords">
+    <div><span class="k">WGS84</span><span class="v">${fmtLatLon(lon, lat)}</span><button data-copy="${fmtLatLon(lon, lat)}" title="Copiază">${ICON.copy}</button></div>
+    <div><span class="k">GMS</span><span class="v">${fmtDMS(lon, lat)}</span><button data-copy="${fmtDMS(lon, lat)}" title="Copiază">${ICON.copy}</button></div>
+    <div><span class="k">Stereo 70</span><span class="v">X ${s.X} · Y ${s.Y}</span><button data-copy="X ${s.raw.split(" ")[0]}  Y ${s.raw.split(" ")[1]}" title="Copiază">${ICON.copy}</button></div>
+  </div>`;
+}
+
+function extLinks(ll) {
+  const [lon, lat] = ll.map((v) => v.toFixed(6));
+  return `<a class="btn" href="https://www.google.com/maps/search/?api=1&query=${lat},${lon}" target="_blank" rel="noopener">${ICON.ext}Google Maps</a>
+    <a class="btn" href="https://www.waze.com/ul?ll=${lat},${lon}&navigate=yes" target="_blank" rel="noopener">${ICON.ext}Waze</a>`;
+}
+
+function showInfo(f, clickLL) {
+  const box = $("#info");
+  let ll = clickLL;
+  let d;
+  if (f) {
+    d = describe(f);
+    if (f.geometry.type === "Point") ll = f.geometry.coordinates;
+    const geom = f.layer.id === "landuse" ? { type: "Point", coordinates: ll } : f.geometry;
+    setOverlay("sel", { type: "FeatureCollection", features: [{ type: "Feature", properties: {}, geometry: geom }] });
+  } else {
+    const u = uatAt(...ll);
+    d = { title: "Punct pe hartă", kind: u ? `UAT ${u.name}` : "În afara județului", rows: [] };
+    setOverlay("sel", { type: "FeatureCollection", features: [{ type: "Feature", properties: {}, geometry: { type: "Point", coordinates: ll } }] });
+  }
+  const uat = uatAt(...ll);
+  if (f && !d.rows.some(([k]) => k === "UAT") && uat) d.rows.push(["UAT", uat.name]);
+  const osm = osmLink(d.osm);
+  box.innerHTML = `
+    <div class="info-h">
+      ${d.icon ? `<img src="${d.icon}" alt="">` : ""}
+      <div class="t"><h2>${esc(d.title)}</h2>${d.kind && d.kind !== d.title ? `<span class="kind">${esc(d.kind)}</span>` : ""}</div>
+      <button class="x" data-act="close" aria-label="Închide">×</button>
+    </div>
+    ${d.rows.length ? `<dl class="attrs">${d.rows.map(([k, v, cls]) =>
+      `<dt>${esc(k)}</dt><dd class="${cls === "warn" ? "warn" : ""}">${cls === "html" ? v : esc(v)}</dd>`).join("")}</dl>` : ""}
+    ${coordsBlock(ll)}
+    <div class="info-a">
+      <button class="btn primary" data-act="analyze">${ICON.target}Analizează punctul</button>
+      ${extLinks(ll)}
+      ${osm ? `<a class="btn" href="${osm}" target="_blank" rel="noopener">${ICON.ext}OSM</a>` : ""}
+    </div>`;
+  box.hidden = false;
+  box.onclick = (ev) => {
+    const b = ev.target.closest("button");
+    if (!b) return;
+    if (b.dataset.copy) copy(b.dataset.copy);
+    if (b.dataset.act === "close") closeInfo();
+    if (b.dataset.act === "analyze") analyzePoint(ll);
+  };
+}
+
+function closeInfo() {
+  $("#info").hidden = true;
+  setOverlay("sel", FC());
+}
+
+// ------------------------------------------------------------------ analiza unui punct
+
+const NEAR_GROUPS = [
+  { key: "hid", title: "Hidranți ISU", n: 5, color: "#c8102e" },
+  { key: "pompieri", title: "Subunități ISU", n: 2, color: "#8e1018" },
+  { key: "spital", title: "Spitale", n: 2, color: "#b0174a" },
+  { key: "ambulanta", title: "Ambulanță", n: 1 },
+  { key: "politie", title: "Poliție", n: 2 },
+  { key: "jandarmerie", title: "Jandarmerie", n: 1 },
+  { key: "sursa_apa", title: "Surse de apă (OSM)", n: 3, color: "#2a8bd0" },
+];
+
+function nearest(ll, features, n) {
+  return features
+    .map((f) => ({ f, d: distance(ll, f.geometry.coordinates) }))
+    .sort((a, b) => a.d - b.d)
+    .slice(0, n);
+}
+
+function nearestPlace(ll) {
+  let best = null;
+  for (const it of search.items) {
+    if (!it.type.startsWith("loc:") || it.type === "loc:locality") continue;
+    const d = distance(ll, [it.lon, it.lat]);
+    if (!best || d < best.d) best = { it, d };
+  }
+  return best;
+}
+
+function analyzePoint(ll, radius = state.analysis?.radius || null) {
+  closeContextMenu();
+  const uat = uatAt(...ll);
+  const groups = [];
+  const lines = [];
+  for (const g of NEAR_GROUPS) {
+    const feats = g.key === "hid" ? state.data.hydrants.features
+      : state.data.pois.features.filter((f) => f.properties.cat === g.key);
+    if (!feats.length) { groups.push({ ...g, items: [] }); continue; }
+    const items = nearest(ll, feats, g.n);
+    groups.push({ ...g, items });
+    if (g.color) {
+      const limit = g.key === "hid" ? 3 : g.key === "sursa_apa" ? 1 : 1;
+      for (const { f, d } of items.slice(0, limit)) {
+        lines.push({ type: "Feature", properties: { role: "link", color: g.color, label: fmtDistance(d) },
+          geometry: { type: "LineString", coordinates: [ll, f.geometry.coordinates] } });
+      }
+    }
+  }
+  state.analysis = { ll, uat: uat?.name || null, place: nearestPlace(ll), groups, lines, radius, inRadius: null };
+  setOverlay("pin", { type: "FeatureCollection", features: [{ type: "Feature", properties: {}, geometry: { type: "Point", coordinates: ll } }] });
+  map.setFilter("uat-hover", ["==", ["get", "name"], uat?.name || ""]);
+  state.hoverUat = uat?.name || "";
+  drawAnalysis();
+  renderAnalysis();
+  selectTab("analiza");
+  $("#tb-analiza").innerHTML = 'Analiză punct<span class="badge"></span>';
+  if (radius) applyRadius(radius);
+  else {
+    const pts = [ll, ...lines.map((l) => l.geometry.coordinates[1])];
+    fitTo(pts, 15);
+  }
+}
+
+function fitTo(points, maxZoom) {
+  const xs = points.map((p) => p[0]), ys = points.map((p) => p[1]);
+  map.fitBounds([[Math.min(...xs), Math.min(...ys)], [Math.max(...xs), Math.max(...ys)]],
+    { padding: { top: 80, bottom: 60, left: 60, right: $("#info").hidden ? 60 : 400 }, maxZoom, duration: 600 });
+}
+
+function drawAnalysis() {
+  const a = state.analysis;
+  const feats = a ? [...a.lines] : [];
+  if (a?.radius) feats.unshift({ type: "Feature", properties: { role: "radius" }, geometry: circle(a.ll, a.radius) });
+  setOverlay("analysis", { type: "FeatureCollection", features: feats });
+}
+
+function applyRadius(radius) {
+  const a = state.analysis;
+  if (!a) return;
+  a.radius = radius;
+  a.inRadius = radius ? { pending: true } : null;
+  drawAnalysis();
+  renderAnalysis();
+  if (!radius) return;
+  const ring = circle(a.ll, radius).coordinates[0];
+  fitTo(ring, 17);
+  map.once("idle", () => {
+    if (state.analysis !== a || a.radius !== radius) return;
+    a.inRadius = countInRadius(a.ll, radius);
+    renderAnalysis();
+  });
+}
+
+function countInRadius(ll, radius) {
+  const res = { buildings: {}, totalB: 0, blocLevels: 0, pois: {}, hydrants: 0, partial: map.getZoom() < 13 };
+  if (!res.partial) {
+    const seen = new Set();
+    for (const f of map.querySourceFeatures("osm", { sourceLayer: "buildings" })) {
+      const p = f.properties;
+      const key = p.osm || JSON.stringify(f.geometry.coordinates[0]?.[0]);
+      if (seen.has(key)) continue;
+      const ring = f.geometry.type === "Polygon" ? f.geometry.coordinates[0] : f.geometry.coordinates[0][0];
+      let x = 0, y = 0;
+      for (const c of ring) { x += c[0]; y += c[1]; }
+      if (distance(ll, [x / ring.length, y / ring.length]) > radius) continue;
+      seen.add(key);
+      res.buildings[p.kind] = (res.buildings[p.kind] || 0) + 1;
+      res.totalB++;
+      if (p.kind === "bloc") res.blocLevels += p.levels || 0;
+    }
+  }
+  for (const f of state.data.pois.features) {
+    if (distance(ll, f.geometry.coordinates) <= radius) res.pois[f.properties.cat] = (res.pois[f.properties.cat] || 0) + 1;
+  }
+  for (const f of state.data.hydrants.features) if (distance(ll, f.geometry.coordinates) <= radius) res.hydrants++;
+  return res;
+}
+
+function renderAnalysis() {
+  const el = $("#tab-analiza");
+  const a = state.analysis;
+  if (!a) {
+    el.innerHTML = `<div class="an-empty"><strong>Niciun punct analizat</strong>
+      Alege un punct pe hartă ca să vezi cei mai apropiați hidranți, subunitatea ISU, spitalul și poliția.
+      <br><button class="btn primary" data-act="pick">${ICON.target}Alege un punct</button>
+      <p class="muted" style="margin-top:14px">Sau: clic dreapta pe hartă → Analizează punctul</p></div>`;
+    el.onclick = (e) => { if (e.target.closest("[data-act=pick]")) setMode("pick"); };
+    return;
+  }
+  const [lon, lat] = a.ll;
+  const place = a.place;
+  const placeTxt = place
+    ? (place.d < 400 ? `în ${place.it.label}` : `la ${fmtDistance(place.d)} ${direction(bearing([place.it.lon, place.it.lat], a.ll))} de ${place.it.label}`)
+    : "";
+  const groupHtml = a.groups.map((g) => {
+    if (!g.items.length) {
+      if (g.key === "hid") return `<h3>${g.title}</h3><p class="muted">Lista de hidranți nu a fost încă adăugată.</p>`;
+      return "";
+    }
+    const icon = g.key === "hid" ? iconDataURL("hidranti", 20) : iconDataURL(g.key, 20);
+    return `<h3>${g.title}</h3><ul class="near">${g.items.map(({ f, d }) => {
+      const p = f.properties;
+      const name = g.key === "hid" ? `Hidrant ${p._label}` : (p.name || POI[g.key].label);
+      const sub = g.key === "hid" ? hydrantSummary(p) : (p.addr || p.uat || "");
+      const dir = direction(bearing(a.ll, f.geometry.coordinates));
+      return `<li data-ll="${f.geometry.coordinates.join(",")}" data-src="${g.key === "hid" ? "hid" : "poi"}" data-id="${f.id}">
+        <img src="${icon}" alt=""><div style="min-width:0"><div class="n-name">${esc(name)}</div><div class="n-sub">${esc(sub)}</div></div>
+        <div class="n-d">${fmtDistance(d)}<small>${dir}</small></div></li>`;
+    }).join("")}</ul>`;
+  }).join("");
+
+  const r = a.inRadius;
+  let radiusHtml = "";
+  if (a.radius && r?.pending) radiusHtml = `<p class="muted">Se numără clădirile din rază…</p>`;
+  else if (a.radius && r) {
+    const b = r.buildings;
+    const order = ["bloc", "casa", "public", "industrial", "comercial", "cult", "anexa", "altele"];
+    const poiRows = Object.entries(r.pois).sort((x, y) => y[1] - x[1])
+      .map(([c, n]) => `<dt>${POI[c].label}</dt><dd>${n}</dd>`).join("");
+    radiusHtml = `<dl class="stats">
+      ${r.partial ? `<dt>Clădiri</dt><dd>–</dd>` : `<dt><b>Clădiri în rază</b></dt><dd>${r.totalB}</dd>
+      ${order.filter((k) => b[k]).map((k) => `<dt>${LABELS.building[k]}</dt><dd>${b[k]}</dd>`).join("")}
+      ${b.bloc && r.blocLevels ? `<dt>Nivele însumate (blocuri)</dt><dd>${r.blocLevels}</dd>` : ""}`}
+      <dt><b>Hidranți ISU în rază</b></dt><dd>${r.hydrants}</dd>
+      ${poiRows}
+    </dl>
+    ${r.partial ? `<p class="muted">Raza e prea mare ca să număr clădirile. Alege o rază mai mică.</p>` :
+      `<p class="muted">Clădirile sunt cele cartate în OpenStreetMap; în unele sate lipsesc.</p>`}`;
+  }
+
+  el.innerHTML = `<div class="an">
+    <h3>Punct analizat</h3>
+    <div class="where">${a.uat ? `UAT ${esc(a.uat)}` : "În afara județului"}<small>${esc(placeTxt)}</small></div>
+    ${coordsBlock(a.ll).replace('class="coords"', 'class="coords" style="margin:10px 0 0"')}
+    ${groupHtml}
+    <h3>Zonă în jurul punctului</h3>
+    <div class="chips">${[50, 100, 250, 500, 1000, 2000].map((m) =>
+      `<button class="chip" data-r="${m}" aria-pressed="${a.radius === m}">${m < 1000 ? m + " m" : m / 1000 + " km"}</button>`).join("")}
+      ${a.radius ? `<button class="chip" data-r="0">Fără rază</button>` : ""}</div>
+    ${radiusHtml}
+    <div class="row-btns">
+      <button class="btn" data-act="summary">${ICON.copy}Copiază rezumatul</button>
+      ${extLinks(a.ll)}
+      <button class="btn" data-act="clear">Șterge analiza</button>
+    </div>
+  </div>`;
+  el.onclick = (e) => {
+    const li = e.target.closest("li[data-ll]");
+    if (li) {
+      const ll2 = li.dataset.ll.split(",").map(Number);
+      map.flyTo({ center: ll2, zoom: Math.max(map.getZoom(), 17), duration: 700 });
+      const src = li.dataset.src === "hid" ? state.data.hydrants : state.data.pois;
+      const f = src.features.find((x) => String(x.id) === li.dataset.id);
+      if (f) showInfo({ ...f, layer: { id: li.dataset.src === "hid" ? "hydrant-icon" : "poi-major" } }, ll2);
+      return;
+    }
+    const b = e.target.closest("button");
+    if (!b) return;
+    if (b.dataset.copy) copy(b.dataset.copy);
+    if (b.dataset.r !== undefined) applyRadius(+b.dataset.r || null);
+    if (b.dataset.act === "summary") copy(analysisSummary(), "Rezumatul a fost copiat");
+    if (b.dataset.act === "clear") clearAnalysis();
+  };
+}
+
+function hydrantSummary(p) {
+  return Object.entries(p).filter(([k, v]) => !k.startsWith("_") && v !== "" && !/^(x|y|lat|lon|latitudine|longitudine|nr|cod|id)$/i.test(k))
+    .slice(0, 3).map(([, v]) => v).join(" · ");
+}
+
+function analysisSummary() {
+  const a = state.analysis;
+  const [lon, lat] = a.ll;
+  const s = fmtStereo(lon, lat);
+  const out = [`Punct: ${fmtLatLon(lon, lat)} (Stereo 70: X ${s.raw.split(" ")[0]} Y ${s.raw.split(" ")[1]})`];
+  if (a.uat) out.push(`UAT: ${a.uat}`);
+  if (a.place) out.push(`Localitate apropiată: ${a.place.it.label} (${fmtDistance(a.place.d)})`);
+  for (const g of a.groups) {
+    if (!g.items.length) continue;
+    out.push(`${g.title}: ` + g.items.map(({ f, d }) =>
+      `${g.key === "hid" ? "H" + f.properties._label : f.properties.name || POI[g.key].label} ${fmtDistance(d)}`).join("; "));
+  }
+  if (a.radius && a.inRadius && !a.inRadius.pending) {
+    const r = a.inRadius;
+    out.push(`Rază ${fmtDistance(a.radius)}: ${r.partial ? "" : r.totalB + " clădiri (" + (r.buildings.bloc || 0) + " blocuri), "}${r.hydrants} hidranți`);
+  }
+  out.push(`https://www.google.com/maps/search/?api=1&query=${lat.toFixed(6)},${lon.toFixed(6)}`);
+  out.push("Distanțe în linie dreaptă.");
+  return out.join("\n");
+}
+
+function clearAnalysis() {
+  state.analysis = null;
+  setOverlay("analysis", FC());
+  setOverlay("pin", FC());
+  map.setFilter("uat-hover", ["==", ["get", "name"], ""]);
+  state.hoverUat = "";
+  $("#tb-analiza").textContent = "Analiză punct";
+  renderAnalysis();
+}
+
+// ------------------------------------------------------------------ măsurare
+
+function setMode(mode) {
+  if (state.mode === "measure" && mode !== "measure") finishMeasure(true);
+  state.mode = mode;
+  $("#map").classList.toggle("picking", !!mode);
+  map.getCanvas().style.cursor = mode ? "crosshair" : "";
+  $("#t-masoara").setAttribute("aria-pressed", mode === "measure");
+  $("#t-analiza").setAttribute("aria-pressed", mode === "pick");
+  const bar = $("#modebar");
+  if (mode === "pick") {
+    bar.innerHTML = `Clic pe hartă pe locul de analizat <button data-act="cancel">Anulează</button>`;
+    bar.hidden = false;
+  } else if (mode === "measure") {
+    map.doubleClickZoom.disable();
+    state.measure = [];
+    drawMeasure();
+  } else {
+    bar.hidden = true;
+    map.doubleClickZoom.enable();
+  }
+}
+
+function measureTotal(pts) {
+  let t = 0;
+  for (let i = 1; i < pts.length; i++) t += distance(pts[i - 1], pts[i]);
+  return t;
+}
+
+function drawMeasure(hover) {
+  const pts = state.measure;
+  const line = hover && state.mode === "measure" ? [...pts, hover] : pts;
+  const feats = [];
+  if (line.length > 1) feats.push({ type: "Feature", properties: {}, geometry: { type: "LineString", coordinates: line } });
+  let acc = 0;
+  pts.forEach((p, i) => {
+    if (i) acc += distance(pts[i - 1], p);
+    feats.push({ type: "Feature", properties: i ? { label: fmtDistance(acc) } : {}, geometry: { type: "Point", coordinates: p } });
+  });
+  setOverlay("measure", { type: "FeatureCollection", features: feats });
+  const bar = $("#modebar");
+  if (state.mode === "measure") {
+    const tot = measureTotal(line);
+    bar.innerHTML = pts.length
+      ? `Distanță <strong>${fmtDistance(tot)}</strong>
+         <button data-act="undo">Șterge ultimul</button><button data-act="finish">Gata</button><button data-act="cancel">Anulează</button>`
+      : `Clic pe hartă pentru primul punct · dublu clic sau Esc pentru a termina <button data-act="cancel">Anulează</button>`;
+    bar.hidden = false;
+  }
+}
+
+function addMeasurePoint(ll) {
+  state.measure.push(ll);
+  drawMeasure();
+}
+
+function finishMeasure(silent) {
+  const pts = state.measure;
+  const tot = measureTotal(pts);
+  state.mode = null;
+  $("#map").classList.remove("picking");
+  map.getCanvas().style.cursor = "";
+  $("#t-masoara").setAttribute("aria-pressed", "false");
+  setTimeout(() => map.doubleClickZoom.enable(), 0);
+  const bar = $("#modebar");
+  if (pts.length > 1 && !silent) {
+    bar.innerHTML = `Distanță măsurată <strong>${fmtDistance(tot)}</strong>
+      <button data-copy="${fmtDistance(tot)}">Copiază</button><button data-act="clearmeasure">Șterge</button>`;
+    bar.hidden = false;
+  } else {
+    bar.hidden = true;
+    setOverlay("measure", FC());
+  }
+}
+
+// ------------------------------------------------------------------ meniu contextual
+
+function openContextMenu(e) {
+  e.preventDefault();
+  const ll = [e.lngLat.lng, e.lngLat.lat];
+  const m = $("#ctx");
+  const s = fmtStereo(...ll);
+  m.innerHTML = `<div class="hd">${fmtLatLon(...ll)}</div>
+    <button data-act="analyze">${ICON.target}Analizează punctul</button>
+    <button data-act="info">${ICON.info}Coordonate și UAT</button>
+    <button data-act="measure">${ICON.ruler}Măsoară de aici</button>
+    <hr>
+    <button data-copy="${fmtLatLon(...ll)}">${ICON.copy}Copiază WGS84</button>
+    <button data-copy="X ${s.raw.split(" ")[0]}  Y ${s.raw.split(" ")[1]}">${ICON.copy}Copiază Stereo 70</button>
+    <button data-act="gmaps">${ICON.ext}Deschide în Google Maps</button>`;
+  const wrap = $(".mapwrap").getBoundingClientRect();
+  m.hidden = false;
+  const x = Math.min(e.point.x, wrap.width - m.offsetWidth - 8);
+  const y = Math.min(e.point.y, wrap.height - m.offsetHeight - 40);
+  m.style.left = x + "px";
+  m.style.top = y + "px";
+  m.querySelector("button").focus({ preventScroll: true });
+  m.onclick = (ev) => {
+    const b = ev.target.closest("button");
+    if (!b) return;
+    closeContextMenu();
+    if (b.dataset.copy) copy(b.dataset.copy);
+    if (b.dataset.act === "analyze") analyzePoint(ll);
+    if (b.dataset.act === "info") showInfo(null, ll);
+    if (b.dataset.act === "measure") { setMode("measure"); addMeasurePoint(ll); }
+    if (b.dataset.act === "gmaps") window.open(`https://www.google.com/maps/search/?api=1&query=${ll[1].toFixed(6)},${ll[0].toFixed(6)}`, "_blank", "noopener");
+  };
+}
+
+function closeContextMenu() {
+  $("#ctx").hidden = true;
+}
+
+// ------------------------------------------------------------------ panoul de straturi
+
+function swatch(item) {
+  const p = PALETTES[state.theme];
+  const [kind, key] = item.id.split(":");
+  if (kind === "poi") return `<img src="${iconDataURL(key, 20)}" alt="">`;
+  if (item.id === "hidranti") return `<img src="${iconDataURL("hidranti", 20)}" alt="">`;
+  if (kind === "road") {
+    const dash = key === "track" ? `background:repeating-linear-gradient(90deg,${p.road.track} 0 5px,transparent 5px 8px)` : `background:${p.road[key]}`;
+    const h = { dn: 6, dj: 5, dc: 4, local: 4, street: 3, service: 2, track: 3 }[key];
+    return `<i class="ln" style="height:${h}px;${dash};box-shadow:0 0 0 1px ${p.casing[key]}"></i>`;
+  }
+  if (kind === "bld") return `<i class="sq" style="background:${p.bld[key]};box-shadow:inset 0 0 0 1px ${key === "bloc" ? p.bldBlocLine : p.bldLine}"></i>`;
+  const solid = {
+    rail: `<i class="ln" style="height:3px;background:repeating-linear-gradient(90deg,${p.rail} 0 5px,${p.railDash} 5px 9px);box-shadow:0 0 0 1px ${p.rail}"></i>`,
+    roadlabels: `<i class="sq" style="background:#c93a31;width:20px;height:12px;border-radius:3px"></i>`,
+    water: `<i class="sq" style="background:${p.water};box-shadow:inset 0 0 0 1px ${p.waterLine}"></i>`,
+    rivers: `<i class="ln" style="height:3px;background:${p.waterLine}"></i>`,
+    streams: `<i class="ln" style="height:1.5px;background:${p.waterLine}"></i>`,
+    dams: `<i class="ln" style="height:4px;background:#5d5d5d"></i>`,
+    places: `<b style="font-size:12px">Aa</b>`,
+    uat: `<i class="ln" style="height:0;border-top:2px dashed ${p.uat}"></i>`,
+    landuse: `<i class="sq" style="background:${p.forest}"></i>`,
+  };
+  return solid[item.id] || "";
+}
+
+function itemCount(item) {
+  const [kind, key] = item.id.split(":");
+  if (kind === "poi") return state.data.pois.features.filter((f) => f.properties.cat === key).length;
+  if (item.id === "hidranti") return state.data.hydrants.features.length;
+  if (kind === "bld") return stats?.counts?.["cladire_" + key] ?? null;
+  return null;
+}
+
+function renderLayerPanel() {
+  const el = $("#tab-straturi");
+  el.innerHTML = LAYER_GROUPS.map((g) => {
+    const allOn = g.items.every((it) => state.visible[it.id]);
+    return `<div class="grp">
+      <div class="grp-h"><h2>${g.label}</h2><button data-grp="${g.id}">${allOn ? "Ascunde tot" : "Arată tot"}</button></div>
+      ${g.items.map((it) => {
+        const n = itemCount(it);
+        const on = !!state.visible[it.id];
+        const note = it.id === "hidranti" && !n ? `<div class="note">Lista nu a fost încă adăugată.</div>` : "";
+        return `<label class="li ${on ? "" : "off"}"><input type="checkbox" data-id="${it.id}" ${on ? "checked" : ""}>
+          <span class="sw">${swatch(it)}</span><span class="lbl">${itemLabel(it)}</span>
+          <span class="cnt">${n != null ? n.toLocaleString("ro-RO") : ""}</span></label>${note}`;
+      }).join("")}
+    </div>`;
+  }).join("");
+  el.onchange = (e) => {
+    const id = e.target.dataset.id;
+    if (!id) return;
+    state.visible[id] = e.target.checked;
+    e.target.closest(".li").classList.toggle("off", !e.target.checked);
+    applyStyle();
+    renderLayerPanelHeaders();
+  };
+  el.onclick = (e) => {
+    const b = e.target.closest("button[data-grp]");
+    if (!b) return;
+    const g = LAYER_GROUPS.find((x) => x.id === b.dataset.grp);
+    const allOn = g.items.every((it) => state.visible[it.id]);
+    for (const it of g.items) state.visible[it.id] = !allOn;
+    applyStyle();
+    renderLayerPanel();
+  };
+}
+
+function renderLayerPanelHeaders() {
+  for (const b of document.querySelectorAll("button[data-grp]")) {
+    const g = LAYER_GROUPS.find((x) => x.id === b.dataset.grp);
+    b.textContent = g.items.every((it) => state.visible[it.id]) ? "Ascunde tot" : "Arată tot";
+  }
+}
+
+// ------------------------------------------------------------------ căutare
+
+function initSearch() {
+  const input = $("#q");
+  const list = $("#results");
+  let results = [];
+  let active = 0;
+  let timer = 0;
+
+  const render = () => {
+    if (!input.value.trim()) { list.hidden = true; return; }
+    if (!results.length) {
+      list.innerHTML = `<li class="empty">Niciun rezultat pentru „${esc(input.value.trim())}”.</li>`;
+      list.hidden = false;
+      return;
+    }
+    list.innerHTML = results.map((r, i) => {
+      const t = r.coord ? { label: r.kind, cls: "t-coord" } : typeInfo(r.type);
+      const ico = t.cat ? `<img src="${iconDataURL(t.cat, 20)}" alt="">` : r.type === "hid" ? `<img src="${iconDataURL("hidranti", 20)}" alt="">` : `<i class="${t.cls}"></i>`;
+      return `<li role="option" data-i="${i}" aria-selected="${i === active}">
+        <span class="r-ico">${ico}</span>
+        <span class="r-main"><div class="r-label">${esc(r.label)}</div>${r.ctx ? `<div class="r-ctx">${esc(r.ctx)}</div>` : ""}</span>
+        <span class="r-type">${esc(t.label)}</span></li>`;
+    }).join("");
+    list.hidden = false;
+  };
+
+  const run = () => {
+    const q = input.value;
+    const c = parseCoordinates(q);
+    results = [];
+    if (c) {
+      const u = uatAt(...c.lonlat);
+      results.push({ coord: true, kind: c.kind, label: fmtLatLon(...c.lonlat), ctx: u ? `UAT ${u.name}` : "", lon: c.lonlat[0], lat: c.lonlat[1], type: "coord" });
+    }
+    results.push(...search.query(q));
+    active = 0;
+    render();
+  };
+
+  const choose = (r) => {
+    if (!r) return;
+    list.hidden = true;
+    input.blur();
+    const ll = [r.lon, r.lat];
+    if (r.bbox && r.type !== "adr") {
+      map.fitBounds([[r.bbox[0], r.bbox[1]], [r.bbox[2], r.bbox[3]]], { padding: 80, maxZoom: 17, duration: 800 });
+    } else {
+      const z = r.type?.startsWith("loc:city") ? 13 : r.type?.startsWith("loc:town") ? 14 : r.type?.startsWith("loc:") ? 15 : 17.5;
+      map.flyTo({ center: ll, zoom: z, duration: 900 });
+    }
+    setOverlay("pin", { type: "FeatureCollection", features: [{ type: "Feature", properties: {}, geometry: { type: "Point", coordinates: ll } }] });
+    if (r.type === "hid") {
+      const f = state.data.hydrants.features.find((x) => x.id === r.ref);
+      if (f) showInfo({ ...f, layer: { id: "hydrant-icon" } }, ll);
+    } else if (r.type?.startsWith("poi:")) {
+      const f = state.data.pois.features.find((x) => x.geometry.coordinates[0] === r.lon && x.geometry.coordinates[1] === r.lat);
+      if (f) showInfo({ ...f, layer: { id: "poi-major" } }, ll);
+    } else if (r.coord) {
+      showInfo(null, ll);
+    }
+  };
+
+  input.addEventListener("input", () => { clearTimeout(timer); timer = setTimeout(run, 70); });
+  input.addEventListener("focus", () => { if (input.value.trim()) render(); });
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "ArrowDown") { active = Math.min(active + 1, results.length - 1); render(); e.preventDefault(); }
+    else if (e.key === "ArrowUp") { active = Math.max(active - 1, 0); render(); e.preventDefault(); }
+    else if (e.key === "Enter") { clearTimeout(timer); if (!results.length) run(); choose(results[active]); }
+    else if (e.key === "Escape") { list.hidden = true; input.blur(); }
+  });
+  list.addEventListener("mousedown", (e) => {
+    const li = e.target.closest("li[data-i]");
+    if (li) { e.preventDefault(); choose(results[+li.dataset.i]); }
+  });
+  document.addEventListener("mousedown", (e) => { if (!e.target.closest(".search")) list.hidden = true; });
+}
+
+// ------------------------------------------------------------------ interfață generală
+
+function selectTab(name) {
+  for (const b of document.querySelectorAll(".tabs button")) b.setAttribute("aria-selected", b.dataset.tab === name);
+  for (const t of ["straturi", "analiza", "ajutor"]) $("#tab-" + t).hidden = t !== name;
+}
+
+let toastTimer = 0;
+function toast(msg) {
+  const t = $("#toast");
+  t.textContent = msg;
+  t.hidden = false;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => (t.hidden = true), 1800);
+}
+
+async function copy(text, msg = "Copiat: " + text) {
+  try {
+    await navigator.clipboard.writeText(text);
+  } catch {
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand("copy");
+    ta.remove();
+  }
+  toast(msg.length > 70 ? msg.slice(0, 70) + "…" : msg);
+}
+
+function setTheme(theme) {
+  state.theme = theme;
+  document.documentElement.dataset.theme = theme === "noapte" ? "dark" : "light";
+  $("#t-tema-l").textContent = theme === "noapte" ? "Zi" : "Noapte";
+  store.set("theme", theme);
+  try { localStorage.setItem("hb.theme", theme); } catch { /* */ }
+  applyStyle();
+  renderLayerPanel();
+}
+
+function setBasemap(b) {
+  state.basemap = b;
+  $("#t-harta").setAttribute("aria-pressed", b === "harta");
+  $("#t-satelit").setAttribute("aria-pressed", b === "satelit");
+  applyStyle();
+}
+
+function exportImage() {
+  map.once("render", () => {
+    const url = map.getCanvas().toDataURL("image/png");
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `harta-botosani-${new Date().toISOString().slice(0, 16).replace(/[T:]/g, "-")}.png`;
+    a.click();
+  });
+  map.triggerRepaint();
+}
+
+function initUI() {
+  $("#t-tema-l").textContent = state.theme === "noapte" ? "Zi" : "Noapte";
+  for (const b of document.querySelectorAll(".tabs button")) b.addEventListener("click", () => selectTab(b.dataset.tab));
+  $("#t-analiza").addEventListener("click", () => setMode(state.mode === "pick" ? null : "pick"));
+  $("#t-masoara").addEventListener("click", () => (state.mode === "measure" ? finishMeasure() : setMode("measure")));
+  $("#t-harta").addEventListener("click", () => setBasemap("harta"));
+  $("#t-satelit").addEventListener("click", () => setBasemap("satelit"));
+  $("#t-tema").addEventListener("click", () => setTheme(state.theme === "zi" ? "noapte" : "zi"));
+  $("#t-export").addEventListener("click", exportImage);
+  $("#t-full").addEventListener("click", () => {
+    if (document.fullscreenElement) document.exitFullscreen();
+    else document.documentElement.requestFullscreen?.().catch(() => {});
+  });
+  $("#modebar").addEventListener("click", (e) => {
+    const b = e.target.closest("button");
+    if (!b) return;
+    if (b.dataset.copy) copy(b.dataset.copy);
+    const act = b.dataset.act;
+    if (act === "cancel") { setMode(null); setOverlay("measure", FC()); $("#modebar").hidden = true; }
+    if (act === "undo") { state.measure.pop(); drawMeasure(); }
+    if (act === "finish") finishMeasure();
+    if (act === "clearmeasure") { $("#modebar").hidden = true; setOverlay("measure", FC()); }
+  });
+  document.addEventListener("mousedown", (e) => { if (!e.target.closest("#ctx")) closeContextMenu(); });
+
+  document.addEventListener("keydown", (e) => {
+    const typing = e.target.matches("input, textarea, select");
+    if (e.key === "Escape") {
+      closeContextMenu();
+      if (state.mode === "measure") finishMeasure();
+      else if (state.mode) setMode(null);
+      else if (!$("#info").hidden) closeInfo();
+      return;
+    }
+    if (typing || e.ctrlKey || e.metaKey || e.altKey) return;
+    const k = e.key.toLowerCase();
+    if (e.key === "/") { e.preventDefault(); $("#q").focus(); $("#q").select(); }
+    else if (k === "m") (state.mode === "measure" ? finishMeasure() : setMode("measure"));
+    else if (k === "a") setMode(state.mode === "pick" ? null : "pick");
+    else if (k === "s") setBasemap(state.basemap === "harta" ? "satelit" : "harta");
+    else if (k === "n") setTheme(state.theme === "zi" ? "noapte" : "zi");
+  });
+}
+
+init().catch((e) => {
+  console.error(e);
+  const l = $("#loading");
+  if (l) { l.classList.add("err"); l.textContent = "Harta nu a putut fi încărcată. Reîncarcă pagina; dacă problema continuă, verifică conexiunea."; }
+});

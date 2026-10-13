@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # Construiește harta județului Botoșani din datele OpenStreetMap.
-# Rezultatul complet (aplicație + date + tile-uri) ajunge în dist/.
+# Rezultatul (tile-uri vectoriale + fișiere de date) ajunge în dist-data/.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 WORK="$ROOT/work"
-DIST="$ROOT/dist"
+DIST="${DIST:-$ROOT/dist-data}"
 PBF_URL="${PBF_URL:-https://download.geofabrik.de/europe/romania-latest.osm.pbf}"
 
 mkdir -p "$WORK"
@@ -48,10 +48,8 @@ tippecanoe -e "$DIST/tiles" --force --no-tile-compression \
   --name="Botoșani" --attribution="© OpenStreetMap contributors" \
   "${LAYER_ARGS[@]}"
 
-echo "== Aplicația"
-cp -r "$ROOT/web/." "$DIST/"
+echo "== Date pentru aplicație"
 mkdir -p "$DIST/data"
 cp out/*.geojson out/search.json out/stats.json "$DIST/data/"
-touch "$DIST/.nojekyll"
-du -sh "$DIST" "$DIST/tiles"
-find "$DIST/tiles" -name '*.pbf' | wc -l
+du -sh "$DIST"
+echo "Tile-uri: $(find "$DIST/tiles" -name '*.pbf' | wc -l)"
