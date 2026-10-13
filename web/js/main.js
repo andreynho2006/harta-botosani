@@ -3,6 +3,8 @@ import { POI, LAYER_GROUPS, LABELS, START_VIEW, itemLabel } from "./config.js";
 import { buildStyle, PALETTES } from "./style.js";
 import { buildIcons, iconDataURL } from "./icons.js";
 import { SearchIndex, typeInfo, norm } from "./search.js";
+import { ensureLogin, decryptJSON, logout } from "./auth.js";
+import { renderAdmin } from "./admin.js";
 import {
   distance, bearing, direction, circle, fmtDistance, fmtLatLon, fmtStereo, fmtDMS,
   parseCoordinates, makeUatLookup,
@@ -57,17 +59,67 @@ const HYD_LABEL_KEYS = ["nr", "numar", "nrhidrant", "cod", "id", "indicativ", "d
 function prepareHydrants(fc) {
   const keys = fc.features.length ? Object.keys(fc.features[0].properties) : [];
   const labelKey = keys.find((k) => HYD_LABEL_KEYS.includes(norm(k).replace(/[^a-z0-9]/g, "")));
+  const stareKey = keys.find((k) => ["stare", "starehidrant", "status", "functional"].includes(norm(k).replace(/[^a-z0-9]/g, "")));
   for (const f of fc.features) {
     const v = labelKey ? f.properties[labelKey] : null;
     f.properties._label = v != null && v !== "" ? String(v) : String(f.id + 1);
+    if (!f.properties._stare) {
+      const sv = norm(stareKey ? f.properties[stareKey] : "");
+      f.properties._stare = /nefunc|defect|inactiv|nu func/.test(sv) ? "defect" : /func|activ|ok|bun/.test(sv) ? "ok" : "necunoscut";
+    }
   }
   return fc;
 }
 
+let session = null;
+
+async function loadHydrants() {
+  try {
+    const r = await fetch("data/hidranti.enc", { cache: "no-cache" });
+    if (!r.ok) return FC();
+    return await decryptJSON(session.key, await r.json());
+  } catch (e) {
+    console.warn("Nu pot decripta hidranții", e);
+    return FC();
+  }
+}
+
+function hydrantSearchRows() {
+  return state.data.hydrants.features.map((f) => {
+    const p = f.properties;
+    const reper = p.Reper || p.reper || p.nume || p.Denumire || "";
+    const ctx = [p.Localitate || p.Localitatea, p["Stradă"] || p.Strada, p._uat].filter(Boolean)
+      .filter((v, i, a) => a.indexOf(v) === i).join(", ");
+    return [`Hidrant ${p._label}${reper ? " – " + reper : ""}`, "hid", ...f.geometry.coordinates, ctx, null, f.id];
+  });
+}
+
+function updateDataInfo() {
+  const date = stats?.generated ? new Date(stats.generated).toLocaleDateString("ro-RO", { day: "numeric", month: "long", year: "numeric" }) : "–";
+  const nh = state.data.hydrants.features.length;
+  $("#data-info").textContent = `Date OSM din ${date} · ${nh ? nh.toLocaleString("ro-RO") + " hidranți" : "fără listă de hidranți"}`;
+}
+
+/** Înlocuiește hidranții afișați (folosit de panoul de administrare la import). */
+function replaceHydrants(fc) {
+  state.data.hydrants = prepareHydrants(fc);
+  map?.getSource("hydrants")?.setData(state.data.hydrants);
+  search.items = search.items.filter((it) => it.type !== "hid");
+  search.add(hydrantSearchRows());
+  updateDataInfo();
+  renderLayerPanel();
+}
+
 async function init() {
+  session = await ensureLogin();
+  $("#who").innerHTML = `<span>${esc(session.name)}${session.role === "admin" ? " · admin" : ""}</span>
+    <button id="logout" type="button">Ieșire</button>`;
+  $("#logout").addEventListener("click", logout);
+  if (session.role === "admin") $("#tb-admin").hidden = false;
+
   const [pois, hydrants, admin, searchRows, st] = await Promise.all([
     loadJSON("data/pois.geojson", FC()),
-    loadJSON("data/hidranti.geojson", FC()),
+    loadHydrants(),
     loadJSON("data/admin.geojson", FC()),
     loadJSON("data/search.json", []),
     loadJSON("data/stats.json", null),
@@ -78,18 +130,17 @@ async function init() {
   stats = st;
   uatAt = makeUatLookup(admin);
   search.add(searchRows);
-  search.add(state.data.hydrants.features.map((f) => [
-    "Hidrant " + f.properties._label, "hid", ...f.geometry.coordinates, f.properties._uat || "", null, f.id]));
-
-  const date = stats?.generated ? new Date(stats.generated).toLocaleDateString("ro-RO", { day: "numeric", month: "long", year: "numeric" }) : "–";
-  const nh = state.data.hydrants.features.length;
-  $("#data-info").textContent = `Date OSM din ${date} · ${nh ? nh.toLocaleString("ro-RO") + " hidranți" : "fără listă de hidranți"}`;
+  search.add(hydrantSearchRows());
+  updateDataInfo();
 
   renderLayerPanel();
   renderAnalysis();
   initMap();
   initSearch();
   initUI();
+  if (session.role === "admin") {
+    renderAdmin($("#tab-admin"), { session, state, uatAt, onHydrants: replaceHydrants, toast, copy });
+  }
 }
 
 // ------------------------------------------------------------------ hartă
@@ -209,9 +260,14 @@ function describe(f) {
   const add = (k, v, cls) => { if (v !== undefined && v !== null && v !== "") rows.push([k, v, cls]); };
 
   if (id.startsWith("hydrant")) {
-    for (const [k, v] of Object.entries(p)) if (!k.startsWith("_")) add(k, v);
+    for (const [k, v] of Object.entries(p)) {
+      if (k.startsWith("_") || k === "Nr") continue;
+      if (typeof v === "string" && /^https?:\/\//.test(v)) add(k, `<a href="${esc(v)}" target="_blank" rel="noopener">Deschide</a>`, "html");
+      else add(k, v, k === "Stare" && p._stare === "defect" ? "warn" : undefined);
+    }
     add("UAT", p._uat);
-    return { title: `Hidrant ${p._label}`, kind: "Hidrant ISU", icon: iconDataURL("hidranti", 26), rows };
+    const st = { ok: "funcțional", defect: "NEFUNCȚIONAL", necunoscut: "stare nespecificată" }[p._stare] || "";
+    return { title: `Hidrant ${p._label}`, kind: `Hidrant ISU · ${st}`, icon: iconDataURL(p._stare === "defect" ? "hidranti-off" : "hidranti", 26), rows };
   }
   if (id.startsWith("poi")) {
     const c = POI[p.cat];
@@ -317,7 +373,7 @@ function closeInfo() {
 // ------------------------------------------------------------------ analiza unui punct
 
 const NEAR_GROUPS = [
-  { key: "hid", title: "Hidranți ISU", n: 5, color: "#c8102e" },
+  { key: "hid", title: "Hidranți ISU utilizabili", n: 5, color: "#c8102e" },
   { key: "pompieri", title: "Subunități ISU", n: 2, color: "#8e1018" },
   { key: "spital", title: "Spitale", n: 2, color: "#b0174a" },
   { key: "ambulanta", title: "Ambulanță", n: 1 },
@@ -349,7 +405,7 @@ function analyzePoint(ll, radius = state.analysis?.radius || null) {
   const groups = [];
   const lines = [];
   for (const g of NEAR_GROUPS) {
-    const feats = g.key === "hid" ? state.data.hydrants.features
+    const feats = g.key === "hid" ? state.data.hydrants.features.filter((f) => f.properties._stare !== "defect")
       : state.data.pois.features.filter((f) => f.properties.cat === g.key);
     if (!feats.length) { groups.push({ ...g, items: [] }); continue; }
     const items = nearest(ll, feats, g.n);
@@ -362,7 +418,8 @@ function analyzePoint(ll, radius = state.analysis?.radius || null) {
       }
     }
   }
-  state.analysis = { ll, uat: uat?.name || null, place: nearestPlace(ll), groups, lines, radius, inRadius: null };
+  const defectNear = state.data.hydrants.features.filter((f) => f.properties._stare === "defect" && distance(ll, f.geometry.coordinates) <= 500).length;
+  state.analysis = { ll, uat: uat?.name || null, place: nearestPlace(ll), groups, lines, radius, inRadius: null, defectNear };
   setOverlay("pin", { type: "FeatureCollection", features: [{ type: "Feature", properties: {}, geometry: { type: "Point", coordinates: ll } }] });
   map.setFilter("uat-hover", ["==", ["get", "name"], uat?.name || ""]);
   state.hoverUat = uat?.name || "";
@@ -428,7 +485,11 @@ function countInRadius(ll, radius) {
   for (const f of state.data.pois.features) {
     if (distance(ll, f.geometry.coordinates) <= radius) res.pois[f.properties.cat] = (res.pois[f.properties.cat] || 0) + 1;
   }
-  for (const f of state.data.hydrants.features) if (distance(ll, f.geometry.coordinates) <= radius) res.hydrants++;
+  res.hydrantsOff = 0;
+  for (const f of state.data.hydrants.features) {
+    if (distance(ll, f.geometry.coordinates) > radius) continue;
+    if (f.properties._stare === "defect") res.hydrantsOff++; else res.hydrants++;
+  }
   return res;
 }
 
@@ -454,7 +515,8 @@ function renderAnalysis() {
       return "";
     }
     const icon = g.key === "hid" ? iconDataURL("hidranti", 20) : iconDataURL(g.key, 20);
-    return `<h3>${g.title}</h3><ul class="near">${g.items.map(({ f, d }) => {
+    const extra = g.key === "hid" && a.defectNear ? `<p class="warnp" style="margin:2px 6px 4px">${a.defectNear} ${a.defectNear === 1 ? "hidrant nefuncțional" : "hidranți nefuncționali"} pe o rază de 500 m (excluși din listă).</p>` : "";
+    return `<h3>${g.title}</h3>${extra}<ul class="near">${g.items.map(({ f, d }) => {
       const p = f.properties;
       const name = g.key === "hid" ? `Hidrant ${p._label}` : (p.name || POI[g.key].label);
       const sub = g.key === "hid" ? hydrantSummary(p) : (p.addr || p.uat || "");
@@ -477,7 +539,8 @@ function renderAnalysis() {
       ${r.partial ? `<dt>Clădiri</dt><dd>–</dd>` : `<dt><b>Clădiri în rază</b></dt><dd>${r.totalB}</dd>
       ${order.filter((k) => b[k]).map((k) => `<dt>${LABELS.building[k]}</dt><dd>${b[k]}</dd>`).join("")}
       ${b.bloc && r.blocLevels ? `<dt>Nivele însumate (blocuri)</dt><dd>${r.blocLevels}</dd>` : ""}`}
-      <dt><b>Hidranți ISU în rază</b></dt><dd>${r.hydrants}</dd>
+      <dt><b>Hidranți ISU utilizabili în rază</b></dt><dd>${r.hydrants}</dd>
+      ${r.hydrantsOff ? `<dt>Hidranți nefuncționali în rază</dt><dd>${r.hydrantsOff}</dd>` : ""}
       ${poiRows}
     </dl>
     ${r.partial ? `<p class="muted">Raza e prea mare ca să număr clădirile. Alege o rază mai mică.</p>` :
@@ -520,6 +583,9 @@ function renderAnalysis() {
 }
 
 function hydrantSummary(p) {
+  const tip = [p["Poziție"], p.Tip && "tip " + p.Tip].filter(Boolean).join(" ");
+  const parts = [p._stare === "necunoscut" ? "stare nespecificată" : null, tip, p.Reper, p.Localitate].filter(Boolean);
+  if (parts.length) return parts.join(" · ");
   return Object.entries(p).filter(([k, v]) => !k.startsWith("_") && v !== "" && !/^(x|y|lat|lon|latitudine|longitudine|nr|cod|id)$/i.test(k))
     .slice(0, 3).map(([, v]) => v).join(" · ");
 }
@@ -675,6 +741,7 @@ function swatch(item) {
   const [kind, key] = item.id.split(":");
   if (kind === "poi") return `<img src="${iconDataURL(key, 20)}" alt="">`;
   if (item.id === "hidranti") return `<img src="${iconDataURL("hidranti", 20)}" alt="">`;
+  if (item.id === "hidranti_defecti") return `<img src="${iconDataURL("hidranti-off", 20)}" alt="">`;
   if (kind === "road") {
     const dash = key === "track" ? `background:repeating-linear-gradient(90deg,${p.road.track} 0 5px,transparent 5px 8px)` : `background:${p.road[key]}`;
     const h = { dn: 6, dj: 5, dc: 4, local: 4, street: 3, service: 2, track: 3 }[key];
@@ -698,7 +765,8 @@ function swatch(item) {
 function itemCount(item) {
   const [kind, key] = item.id.split(":");
   if (kind === "poi") return state.data.pois.features.filter((f) => f.properties.cat === key).length;
-  if (item.id === "hidranti") return state.data.hydrants.features.length;
+  if (item.id === "hidranti") return state.data.hydrants.features.filter((f) => f.properties._stare !== "defect").length;
+  if (item.id === "hidranti_defecti") return state.data.hydrants.features.filter((f) => f.properties._stare === "defect").length;
   if (kind === "bld") return stats?.counts?.["cladire_" + key] ?? null;
   return null;
 }
@@ -827,7 +895,7 @@ function initSearch() {
 
 function selectTab(name) {
   for (const b of document.querySelectorAll(".tabs button")) b.setAttribute("aria-selected", b.dataset.tab === name);
-  for (const t of ["straturi", "analiza", "ajutor"]) $("#tab-" + t).hidden = t !== name;
+  for (const t of ["straturi", "analiza", "ajutor", "admin"]) $("#tab-" + t).hidden = t !== name;
 }
 
 let toastTimer = 0;

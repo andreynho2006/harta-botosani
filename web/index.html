@@ -20,6 +20,22 @@
   <script type="module" src="js/main.js"></script>
 </head>
 <body>
+<div class="login" id="login" hidden>
+  <div class="lg-card">
+    <div class="lg-brand"><div class="plate" aria-hidden="true">BT</div>
+      <div><h1>Harta Botoșani</h1><p>Hartă operativă a județului</p></div></div>
+    <form autocomplete="on">
+      <label for="lg-user">Utilizator</label>
+      <input id="lg-user" name="username" autocomplete="username" autocapitalize="none" spellcheck="false" required>
+      <label for="lg-pass">Parolă</label>
+      <input id="lg-pass" name="password" type="password" autocomplete="current-password" required>
+      <label class="lg-check"><input type="checkbox" id="lg-remember"> Ține-mă minte pe acest calculator</label>
+      <p class="lg-err" hidden role="alert">Utilizator sau parolă greșită.</p>
+      <button type="submit" class="btn primary lg-btn">Intră</button>
+    </form>
+    <p class="lg-foot">Acces doar pentru utilizatorii autorizați. Datele sensibile sunt criptate și se deschid numai cu parola ta.</p>
+  </div>
+</div>
 <div class="app">
   <aside class="side">
     <header class="brand">
@@ -29,6 +45,7 @@
         <p id="data-info">Se încarcă datele…</p>
       </div>
     </header>
+    <div class="who" id="who"></div>
 
     <div class="search" role="search">
       <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>
@@ -42,10 +59,12 @@
       <button role="tab" id="tb-straturi" data-tab="straturi" aria-selected="true">Straturi</button>
       <button role="tab" id="tb-analiza" data-tab="analiza" aria-selected="false">Analiză punct</button>
       <button role="tab" id="tb-ajutor" data-tab="ajutor" aria-selected="false">Ajutor</button>
+      <button role="tab" id="tb-admin" data-tab="admin" aria-selected="false" hidden>Administrare</button>
     </nav>
 
     <section class="panel" id="tab-straturi" role="tabpanel"></section>
     <section class="panel" id="tab-analiza" role="tabpanel" hidden></section>
+    <section class="panel" id="tab-admin" role="tabpanel" hidden></section>
     <section class="panel" id="tab-ajutor" role="tabpanel" hidden>
       <div class="help">
         <h3>Căutare</h3>

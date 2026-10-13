@@ -31,9 +31,6 @@ echo "== Împart pe straturi"
 rm -rf layers out
 python3 "$ROOT/pipeline/process.py" botosani.geojsonseq admin.geojson "$WORK"
 
-echo "== Hidranți"
-python3 "$ROOT/pipeline/hydrants.py" "$ROOT/data/hidranti" out/hidranti.geojson admin.geojson
-
 echo "== Tile-uri vectoriale"
 rm -rf "$DIST"
 mkdir -p "$DIST"
@@ -50,6 +47,6 @@ tippecanoe -e "$DIST/tiles" --force --no-tile-compression \
 
 echo "== Date pentru aplicație"
 mkdir -p "$DIST/data"
-cp out/*.geojson out/search.json out/stats.json "$DIST/data/"
+cp out/pois.geojson out/admin.geojson out/search.json out/stats.json "$DIST/data/"
 du -sh "$DIST"
 echo "Tile-uri: $(find "$DIST/tiles" -name '*.pbf' | wc -l)"

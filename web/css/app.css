@@ -87,8 +87,8 @@ button { cursor: pointer; }
 .results .r-ico i.t-coord { background: var(--focus); width: 12px; height: 12px; box-shadow: 0 0 0 3px color-mix(in srgb, var(--focus) 25%, transparent); }
 .results .empty { padding: 10px; color: var(--ink-3); cursor: default; display: block; }
 
-.tabs { display: flex; gap: 2px; padding: 0 18px; border-bottom: 1px solid var(--line); }
-.tabs button { border: 0; background: none; padding: 9px 10px 10px; font-weight: 560; color: var(--ink-3); border-bottom: 2px solid transparent; margin-bottom: -1px; }
+.tabs { display: flex; gap: 0; padding: 0 12px; border-bottom: 1px solid var(--line); }
+.tabs button { border: 0; background: none; padding: 9px 7px 10px; font-weight: 560; font-size: 13.5px; white-space: nowrap; color: var(--ink-3); border-bottom: 2px solid transparent; margin-bottom: -1px; }
 .tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); }
 .tabs .badge { display: inline-block; min-width: 8px; height: 8px; border-radius: 50%; background: var(--accent); margin-left: 6px; vertical-align: 1px; }
 
@@ -154,6 +154,57 @@ button { cursor: pointer; }
 .help code { font: 12.5px var(--mono); background: var(--panel-2); border: 1px solid var(--line); padding: 1px 5px; border-radius: 4px; color: var(--ink); }
 .keys { display: grid; grid-template-columns: auto 1fr; gap: 6px 12px; align-items: center; }
 .keys kbd { font: 12px var(--mono); border: 1px solid var(--line-2); border-bottom-width: 2px; border-radius: 4px; padding: 1px 7px; background: var(--panel); color: var(--ink); justify-self: start; }
+
+/* utilizator conectat */
+.who { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: -4px 18px 10px; padding: 6px 10px;
+  background: var(--panel-2); border: 1px solid var(--line); border-radius: 7px; font-size: 12.5px; color: var(--ink-2); }
+.who:empty { display: none; }
+.who button { border: 0; background: none; color: var(--ink-2); font-weight: 600; font-size: 12.5px; padding: 2px 4px; border-radius: 4px; }
+.who button:hover { color: var(--accent); }
+
+/* administrare */
+.adm { padding: 6px 8px; }
+.adm h3 { margin: 14px 0 8px; font-size: 11.5px; text-transform: uppercase; letter-spacing: .07em; color: var(--ink-2); font-weight: 650; }
+.adm h3:first-child { margin-top: 4px; }
+.adm h4 { margin: 0 0 4px; font-size: 13.5px; }
+.ulist { list-style: none; margin: 0; padding: 0; border: 1px solid var(--line); border-radius: 8px; }
+.ulist li { display: flex; gap: 10px; justify-content: space-between; align-items: flex-start; padding: 9px 10px; }
+.ulist li + li { border-top: 1px solid var(--line); }
+.u-main { min-width: 0; display: grid; gap: 2px; }
+.u-main span { font-size: 12.5px; color: var(--ink-3); }
+.u-main .pw { color: var(--ink); background: var(--accent-soft); padding: 4px 6px; border-radius: 5px; margin-top: 4px; }
+.u-main code { font: 13px var(--mono); }
+.u-act { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; flex: none; }
+.lnk { border: 0; background: none; color: var(--focus); font-size: 12.5px; font-weight: 600; padding: 2px 4px; border-radius: 4px; }
+.lnk:hover { background: var(--panel-2); }
+.lnk.danger { color: var(--accent); }
+.uform { display: grid; gap: 8px; margin-top: 14px; padding: 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel-2); }
+.uform label { display: grid; gap: 4px; font-size: 12.5px; color: var(--ink-2); }
+.uform input, .uform select { height: 34px; padding: 0 10px; border: 1px solid var(--line-2); border-radius: 6px; background: var(--panel); }
+.uform .btn { justify-self: start; }
+.save { margin-top: 12px; padding: 12px; border-radius: 8px; border: 1px solid var(--accent); background: var(--accent-soft); font-size: 13px; }
+.save p { margin: 0 0 10px; }
+.warnp { color: var(--warn); font-size: 13px; }
+.btn.file { cursor: pointer; }
+
+/* autentificare */
+.login { position: fixed; inset: 0; z-index: 50; display: grid; place-items: center; padding: 24px;
+  background: radial-gradient(circle at 20% 15%, color-mix(in srgb, var(--accent) 10%, transparent), transparent 45%), var(--bg); }
+.lg-card { width: 100%; max-width: 380px; background: var(--panel); border: 1px solid var(--line); border-radius: 14px;
+  box-shadow: var(--shadow); padding: 26px 26px 20px; }
+.lg-brand { display: flex; gap: 12px; align-items: center; margin-bottom: 22px; }
+.lg-brand h1 { margin: 0; font-size: 19px; letter-spacing: -0.01em; }
+.lg-brand p { margin: 2px 0 0; font-size: 13px; color: var(--ink-3); }
+.login form { display: grid; gap: 6px; }
+.login label { font-size: 12.5px; font-weight: 600; color: var(--ink-2); margin-top: 6px; }
+.login input:not([type=checkbox]) { height: 42px; padding: 0 12px; border: 1px solid var(--line-2); border-radius: 8px; background: var(--panel-2); outline: none; }
+.login input:focus { border-color: var(--focus); background: var(--panel); box-shadow: 0 0 0 3px color-mix(in srgb, var(--focus) 18%, transparent); }
+.login .lg-check { display: flex; align-items: center; gap: 8px; font-weight: 400; margin-top: 10px; cursor: pointer; }
+.login .lg-check input { accent-color: var(--accent); width: 15px; height: 15px; margin: 0; }
+.lg-err { margin: 6px 0 0; color: var(--accent); font-size: 13px; font-weight: 600; }
+.lg-btn { height: 42px; justify-content: center; margin-top: 12px; font-size: 14px; }
+.lg-btn:disabled { opacity: .7; cursor: wait; }
+.lg-foot { margin: 18px 0 0; font-size: 12px; color: var(--ink-3); line-height: 1.45; }
 
 /* ---------------------------------------------------------------- harta */
 .mapwrap { position: relative; min-width: 0; }

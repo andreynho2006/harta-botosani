@@ -116,6 +116,12 @@ export function buildIcons() {
   icons["hydrant-isu"] = {
     image: badge("#c8102e", GLYPHS.hidrant, { size: 24, shape: "square" }), options: { pixelRatio: PR },
   };
+  icons["hydrant-isu-off"] = {
+    image: badge("#6b7079", GLYPHS.hidrant, { size: 24, shape: "square" }), options: { pixelRatio: PR },
+  };
+  icons["hydrant-isu-unk"] = {
+    image: badge("#d08a16", GLYPHS.hidrant, { size: 24, shape: "square" }), options: { pixelRatio: PR },
+  };
   icons["pin"] = { image: pin("#c8102e"), options: { pixelRatio: PR } };
   icons["shield-dn"] = shield("#c93a31", "#ffffff");
   icons["shield-dj"] = shield("#f0a23a", "#8a5410");
@@ -130,6 +136,7 @@ export function iconDataURL(cat, size = 20) {
   if (urlCache.has(ck)) return urlCache.get(ck);
   const def = POI[cat];
   const img = cat === "hidranti" ? badge("#c8102e", GLYPHS.hidrant, { size, shape: "square" })
+    : cat === "hidranti-off" ? badge("#6b7079", GLYPHS.hidrant, { size, shape: "square" })
     : badge(def.color, GLYPHS[cat] || GLYPHS.medical, { size });
   const c = document.createElement("canvas");
   c.width = img.width;

@@ -80,6 +80,12 @@ export function buildingFilter(state) {
   const kinds = Object.keys(state.visible).filter((k) => k.startsWith("bld:") && state.visible[k]).map((k) => k.slice(4));
   return ["in", ["get", "kind"], ["literal", kinds]];
 }
+export function hydrantFilter(state) {
+  const st = [];
+  if (state.visible.hidranti) st.push("ok", "necunoscut");
+  if (state.visible.hidranti_defecti) st.push("defect");
+  return ["in", ["get", "_stare"], ["literal", st]];
+}
 export function poiFilter(state, major) {
   const cats = Object.keys(POI).filter((c) => POI[c].major === major && state.visible["poi:" + c]);
   return ["in", ["get", "cat"], ["literal", cats]];
@@ -249,11 +255,12 @@ export function buildStyle(state) {
           "text-size": 11.5, "text-anchor": "left", "text-offset": [1.25, 0], "text-optional": true, "text-max-width": 14 },
         paint: { "text-color": text, "text-halo-color": halo, "text-halo-width": 1.6 } },
 
-      { id: "hydrant-dot", type: "circle", source: "hydrants", maxzoom: 14, layout: { visibility: vis(v.hidranti) },
-        paint: { "circle-radius": ["interpolate", ["linear"], ["zoom"], 8, 1.8, 13, 4.5], "circle-color": "#c8102e",
+      { id: "hydrant-dot", type: "circle", source: "hydrants", maxzoom: 14, filter: hydrantFilter(state),
+        paint: { "circle-radius": ["interpolate", ["linear"], ["zoom"], 8, 1.8, 13, 4.5],
+                 "circle-color": ["match", ["get", "_stare"], "defect", "#6b7079", "necunoscut", "#d08a16", "#c8102e"],
                  "circle-stroke-color": "#ffffff", "circle-stroke-width": ["interpolate", ["linear"], ["zoom"], 8, 0.5, 13, 1.5] } },
-      { id: "hydrant-icon", type: "symbol", source: "hydrants", minzoom: 14, layout: {
-          visibility: vis(v.hidranti), "icon-image": "hydrant-isu", "icon-allow-overlap": true, "icon-ignore-placement": true,
+      { id: "hydrant-icon", type: "symbol", source: "hydrants", minzoom: 14, filter: hydrantFilter(state), layout: {
+          "icon-image": ["match", ["get", "_stare"], "defect", "hydrant-isu-off", "necunoscut", "hydrant-isu-unk", "hydrant-isu"], "icon-allow-overlap": true, "icon-ignore-placement": true,
           "icon-size": ["interpolate", ["linear"], ["zoom"], 14, 0.8, 17, 1.05],
           "text-field": ["step", ["zoom"], "", 16, ["coalesce", ["get", "_label"], ""]], "text-font": FONT_M,
           "text-size": 11, "text-anchor": "top", "text-offset": [0, 1.1], "text-optional": true },

@@ -1,6 +1,6 @@
 name: Site
 
-# Pune împreună aplicația (web/) și datele (ramura date) pe ramura site, de unde se publică.
+# Pune împreună aplicația (web/) și datele (ramura date) pe ramura site, publicată cu GitHub Pages.
 on:
   workflow_dispatch:
   push:
@@ -32,6 +32,7 @@ jobs:
           mkdir -p site
           cp -r web/. site/
           cp -r /tmp/date/tiles /tmp/date/data site/
+          rm -f site/data/hidranti.geojson   # hidranții se publică doar criptați (web/data/hidranti.enc)
           printf '/tiles/*\n  Cache-Control: public, max-age=86400\n/vendor/*\n  Cache-Control: public, max-age=604800\n/fonts/*\n  Cache-Control: public, max-age=604800\n' > site/_headers
           touch site/.nojekyll
 

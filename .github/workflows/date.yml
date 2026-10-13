@@ -1,12 +1,12 @@
 name: Date hartă
 
 # Descarcă OpenStreetMap, decupează județul, adaugă hidranții și construiește tile-urile.
-# Rulează lunar, la orice modificare a scripturilor sau a listei de hidranți, sau manual.
+# Rulează lunar, la orice modificare a scripturilor, sau manual.
 on:
   workflow_dispatch:
   push:
     branches: [main]
-    paths: ["pipeline/**", "data/**", ".github/workflows/date.yml"]
+    paths: ["pipeline/**", ".github/workflows/date.yml"]
   schedule:
     - cron: "17 2 1 * *"   # pe 1 ale lunii, 05:17 ora României
 
@@ -28,7 +28,7 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq osmium-tool build-essential libsqlite3-dev zlib1g-dev
-          pip install --quiet shapely pyproj openpyxl
+          pip install --quiet shapely
 
       - name: Tippecanoe (din cache)
         id: tip-cache

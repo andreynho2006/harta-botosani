@@ -46,6 +46,7 @@ export const BUILDING = {
 export const LAYER_GROUPS = [
   { id: "interventie", label: "Intervenție", items: [
     { id: "hidranti", label: "Hidranți ISU", kind: "hydrant", on: true },
+    { id: "hidranti_defecti", label: "Hidranți nefuncționali", kind: "hydrant", on: true },
     { id: "poi:pompieri", on: true }, { id: "poi:ambulanta", on: true }, { id: "poi:spital", on: true },
     { id: "poi:politie", on: true }, { id: "poi:jandarmerie", on: true }, { id: "poi:frontiera", on: true },
     { id: "poi:hidrant_osm", on: false }, { id: "poi:sursa_apa", on: true }, { id: "poi:medical", on: false },
