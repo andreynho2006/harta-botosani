@@ -287,3 +287,119 @@ button { cursor: pointer; }
   .info { top: auto; bottom: 42px; width: calc(100% - 24px); max-height: 50%; }
 }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+
+/* ================================================================ telefon / ecran mic
+   Harta pe tot ecranul; căutarea sus; instrumentele într-o coloană în dreapta;
+   panoul lateral devine foaie trasă de jos (strânsă / jumătate / tot ecranul). */
+.mob-only, .t-short, .sheet-grip { display: none; }
+.topbar:empty { display: none; }
+.maplibregl-ctrl-top-right { display: none; } /* butonul GPS propriu declanșează localizarea */
+.tb button[aria-pressed="true"] svg { color: inherit; }
+
+@media (max-width: 760px), (max-height: 520px) and (pointer: coarse) {
+  :root { --top: calc(env(safe-area-inset-top, 0px) + 10px); --peek: calc(61px + env(safe-area-inset-bottom, 0px)); }
+  body { font-size: 15px; overscroll-behavior: none; -webkit-tap-highlight-color: transparent; }
+  button, .li, .near li, .results li { touch-action: manipulation; }
+  .app { display: block; position: relative; height: 100%; height: 100dvh; }
+  .mapwrap { position: absolute; inset: 0; }
+  #map, .loading { inset: 0; }
+  .status, .desk-only, kbd { display: none !important; }
+  .mob-only { display: inline-block; }
+  .t-long { display: none; }
+  .t-short { display: inline; }
+
+  /* căutare sus */
+  .topbar { position: absolute; z-index: 6; top: var(--top); left: 10px; right: 10px; }
+  .topbar .search { padding: 0; }
+  .topbar .search input { height: 46px; font-size: 16px; padding: 0 14px 0 42px; border-radius: 12px;
+    background: var(--panel); border-color: var(--line); box-shadow: var(--shadow); }
+  .topbar .search .ico { left: 14px; top: 15px; }
+  .topbar .results { left: 0; right: 0; top: 52px; max-height: min(58dvh, 440px); border-radius: 12px; }
+  .results li { padding: 10px 8px; }
+
+  /* instrumente: coloană în dreapta */
+  .toolbar { top: calc(var(--top) + 56px); left: auto; right: 10px; max-width: none; flex-direction: column; gap: 8px; }
+  .tb { flex-direction: column; padding: 3px; border-radius: 12px; }
+  .tb button { width: 44px; height: 44px; padding: 0; justify-content: center; border-radius: 9px; }
+  .tb button svg { width: 21px; height: 21px; }
+  .tb .tl, #t-harta { display: none; }
+
+  /* foaia de jos */
+  .side { position: absolute; z-index: 5; left: 0; right: 0; bottom: 0; height: var(--peek);
+    padding-bottom: env(safe-area-inset-bottom, 0px); border-right: 0; border-radius: 16px 16px 0 0;
+    box-shadow: 0 -4px 24px rgba(18, 24, 33, 0.18); transition: height .26s cubic-bezier(.2, .8, .2, 1); overflow: hidden; }
+  .side.dragging { transition: none; }
+  .side[data-sheet="half"] { height: 48dvh; }
+  .side[data-sheet="full"] { height: calc(100dvh - var(--top) - 64px); }
+  .sheet-grip { display: block; order: 0; flex: none; height: 18px; padding-top: 7px; cursor: grab; touch-action: none; }
+  .sheet-grip span { display: block; width: 40px; height: 5px; margin: 0 auto; border-radius: 3px; background: var(--line-2); }
+  .tabs { order: 1; flex: none; height: 43px; padding: 0 6px; touch-action: none; }
+  .tabs button { flex: 1; height: 42px; padding: 0 4px; font-size: 14.5px; }
+  .panel { order: 2; padding: 6px 8px 16px; overscroll-behavior: contain; }
+  .brand { order: 3; padding: 10px 16px 2px; border-top: 1px solid var(--line); }
+  .brand .plate { width: 34px; height: 24px; font-size: 12px; }
+  .brand h1 { font-size: 14px; }
+  .who { order: 4; margin: 6px 16px 10px; }
+  .side[data-sheet="peek"] .panel { display: none; }
+  .side:not([data-sheet="full"]) .brand, .side:not([data-sheet="full"]) .who { display: none; }
+
+  /* ținte de atingere mai mari */
+  .li { grid-template-columns: 22px 22px 1fr auto; padding: 9px 8px; }
+  .li input { width: 19px; height: 19px; }
+  .grp-h button { padding: 6px 8px; font-size: 13px; }
+  .near li { padding: 10px 6px; }
+  .chip { padding: 7px 13px; font-size: 14px; }
+  .btn { height: 40px; font-size: 14px; }
+  .row-btns { gap: 8px; }
+  .coords button { width: 38px; height: 34px; }
+
+  /* fișa obiectului: foaie de jos peste panou */
+  .info { z-index: 7; top: auto; left: 0; right: 0; bottom: 0; width: auto; max-height: 64dvh;
+    border-radius: 16px 16px 0 0; border-bottom: 0; padding-bottom: env(safe-area-inset-bottom, 0px);
+    overscroll-behavior: contain; }
+  .info-h { padding: 14px 10px 10px 16px; }
+  .info-h .x { width: 40px; height: 40px; font-size: 24px; }
+  .attrs { grid-template-columns: minmax(92px, auto) 1fr; font-size: 14px; }
+
+  /* meniul de apăsare lungă: listă de acțiuni jos */
+  .ctx { left: 8px !important; right: 8px; top: auto !important; bottom: calc(8px + env(safe-area-inset-bottom, 0px));
+    min-width: 0; z-index: 8; border-radius: 14px; }
+  .ctx button { padding: 12px; font-size: 15px; }
+  .ctx .hd { padding: 8px 12px 9px; }
+
+  /* bara de mod (măsurare / alegere punct) deasupra panoului */
+  .modebar { top: auto; bottom: calc(var(--peek) + 12px); left: 10px; right: 10px; transform: none;
+    flex-wrap: wrap; justify-content: flex-end; border-radius: 14px; padding: 8px 8px 8px 14px; }
+  .modebar .mb-t { margin-right: auto; }
+  .modebar { gap: 6px; }
+  .modebar strong { font-size: 15px; }
+  .modebar button { height: 36px; padding: 0 11px; font-size: 13px; }
+  .toast { bottom: calc(var(--peek) + 16px); max-width: calc(100% - 32px); text-align: center; }
+
+  /* controalele hărții deasupra panoului strâns */
+  .maplibregl-ctrl-bottom-left, .maplibregl-ctrl-bottom-right { bottom: var(--peek); }
+  .maplibregl-ctrl-zoom-in, .maplibregl-ctrl-zoom-out { display: none !important; }
+
+  /* autentificare */
+  .login { align-items: start; padding: calc(env(safe-area-inset-top, 0px) + 7vh) 16px 16px; }
+  .lg-card { padding: 22px 20px 18px; }
+  .login input:not([type=checkbox]) { height: 48px; font-size: 16px; }
+  .login .lg-check input { width: 19px; height: 19px; }
+  .lg-btn { height: 48px; font-size: 15px; }
+  .uform input, .uform select { height: 42px; font-size: 16px; }
+}
+
+/* telefon ținut orizontal: puțină înălțime, deci instrumentele trec pe un rând lângă căutare */
+@media (max-height: 520px) and (pointer: coarse) and (orientation: landscape) {
+  .topbar { right: calc(10px + 5 * 50px + 2 * 8px + 12px); }
+  .toolbar { top: var(--top); flex-direction: row; }
+  .tb { flex-direction: row; }
+  .tb button { width: 42px; height: 40px; }
+  .info { left: auto; width: min(420px, 60vw); max-height: calc(100dvh - var(--top) - 64px); border-radius: 16px 0 0 0; }
+}
+
+/* tabletă: bara laterală e îngustă, deci filele folosesc numele scurte */
+@media (max-width: 900px) {
+  .t-long { display: none; }
+  .t-short { display: inline; }
+}

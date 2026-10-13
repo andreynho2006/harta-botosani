@@ -72,6 +72,8 @@ function prepareHydrants(fc) {
 }
 
 let session = null;
+let geolocate = null;
+let lastPosition = null;
 
 async function loadHydrants() {
   try {
@@ -135,12 +137,104 @@ async function init() {
 
   renderLayerPanel();
   renderAnalysis();
+  initSheet();
   initMap();
   initSearch();
   initUI();
   if (session.role === "admin") {
     renderAdmin($("#tab-admin"), { session, state, uatAt, onHydrants: replaceHydrants, toast, copy });
   }
+}
+
+// ------------------------------------------------------------------ telefon / ecran mic
+
+const MOBILE_MQ = matchMedia("(max-width: 760px), (max-height: 520px) and (pointer: coarse)");
+const isMobile = () => MOBILE_MQ.matches;
+let sheetDragged = false;
+let suppressClickUntil = 0;
+
+function applyLayout() {
+  const search = $(".search");
+  const side = $(".side");
+  $("#q").placeholder = isMobile() ? "Caută localitate, stradă, hidrant…" : "Localitate, stradă, adresă, obiectiv, coordonate";
+  if (isMobile()) {
+    if (search.parentElement !== $("#topbar")) $("#topbar").appendChild(search);
+    if (!side.dataset.sheet) side.dataset.sheet = "peek";
+  } else {
+    if (search.parentElement !== side) side.insertBefore(search, $("#sheet-grip"));
+    delete side.dataset.sheet;
+    side.style.height = "";
+  }
+}
+
+function sheetPx(name) {
+  const side = $(".side");
+  const pad = parseFloat(getComputedStyle(side).paddingBottom) || 0;
+  const peek = $("#sheet-grip").offsetHeight + $(".tabs").offsetHeight + pad;
+  if (name === "half") return Math.round(window.innerHeight * 0.48);
+  if (name === "full") return window.innerHeight - ($("#topbar").getBoundingClientRect().bottom + 8);
+  return peek;
+}
+
+function setSheet(name) {
+  if (!isMobile()) return;
+  $(".side").dataset.sheet = name;
+  if (name !== "peek") $("#results").hidden = true;
+}
+
+/** Spațiul ocupat de panouri peste hartă, ca obiectele căutate să nu ajungă sub ele. */
+function viewPadding() {
+  if (!isMobile()) return { top: 80, bottom: 60, left: 60, right: $("#info").hidden ? 60 : 400 };
+  const info = $("#info");
+  const top = Math.round($("#topbar").getBoundingClientRect().bottom + 12);
+  const covered = Math.max(sheetPx($(".side").dataset.sheet || "peek"), info.hidden ? 0 : info.offsetHeight);
+  const bottom = Math.min(covered + 16, window.innerHeight - top - 120);
+  return { top, bottom: Math.max(bottom, 16), left: 16, right: 64 };
+}
+
+function initSheet() {
+  const side = $(".side");
+  let start = null;
+  const onDown = (e) => {
+    sheetDragged = false;
+    if (!isMobile()) return;
+    start = { y: e.clientY, h: side.getBoundingClientRect().height, t: performance.now() };
+  };
+  const onMove = (e) => {
+    if (!start) return;
+    const dy = e.clientY - start.y;
+    if (!sheetDragged && Math.abs(dy) < 8) return;
+    sheetDragged = true;
+    side.classList.add("dragging");
+    side.style.height = Math.max(sheetPx("peek"), Math.min(sheetPx("full"), start.h - dy)) + "px";
+  };
+  const onUp = (e) => {
+    if (!start) return;
+    if (sheetDragged) {
+      const dy = e.clientY - start.y;
+      const v = dy / Math.max(1, performance.now() - start.t);
+      const h = start.h - dy;
+      const H = { peek: sheetPx("peek"), half: sheetPx("half"), full: sheetPx("full") };
+      let target = Object.keys(H).reduce((a, b) => (Math.abs(H[b] - h) < Math.abs(H[a] - h) ? b : a));
+      if (v > 0.5) target = h > H.half + 40 ? "half" : "peek";
+      else if (v < -0.5) target = h < H.half - 40 ? "half" : "full";
+      side.classList.remove("dragging");
+      side.style.height = "";
+      setSheet(target);
+    }
+    start = null;
+  };
+  for (const el of [$("#sheet-grip"), $(".tabs")]) el.addEventListener("pointerdown", onDown);
+  window.addEventListener("pointermove", onMove);
+  window.addEventListener("pointerup", onUp);
+  window.addEventListener("pointercancel", onUp);
+  $("#sheet-grip").addEventListener("click", () => {
+    if (sheetDragged) return;
+    const order = { peek: "half", half: "full", full: "peek" };
+    setSheet(order[side.dataset.sheet] || "half");
+  });
+  MOBILE_MQ.addEventListener("change", () => { applyLayout(); map?.resize(); });
+  applyLayout();
 }
 
 // ------------------------------------------------------------------ hartă
@@ -176,6 +270,40 @@ function initMap() {
   });
   map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), "bottom-right");
   map.addControl(new maplibregl.ScaleControl({ unit: "metric", maxWidth: 120 }), "bottom-left");
+  geolocate = new maplibregl.GeolocateControl({
+    positionOptions: { enableHighAccuracy: true, timeout: 15000 },
+    trackUserLocation: true, showAccuracyCircle: true, fitBoundsOptions: { maxZoom: 16 },
+  });
+  map.addControl(geolocate, "top-right");
+  geolocate.on("geolocate", (e) => {
+    lastPosition = [e.coords.longitude, e.coords.latitude];
+    $("#t-loc").setAttribute("aria-pressed", "true");
+  });
+  geolocate.on("trackuserlocationend", () => $("#t-loc").setAttribute("aria-pressed", "false"));
+  geolocate.on("error", (e) => {
+    $("#t-loc").setAttribute("aria-pressed", "false");
+    toast(e.code === 1 ? "Permite accesul la locație din setările browserului." : "Nu am putut afla poziția. Încearcă din nou.");
+  });
+
+  // apăsare lungă pe ecran tactil = meniul de clic dreapta
+  let press = null;
+  const cancelPress = () => { if (press) { clearTimeout(press.timer); press = null; } };
+  map.on("touchstart", (e) => {
+    cancelPress();
+    if (e.originalEvent.touches.length !== 1) return;
+    const ev = { point: e.point, lngLat: e.lngLat, preventDefault() {} };
+    press = { x: e.point.x, y: e.point.y, timer: setTimeout(() => {
+      press = null;
+      suppressClickUntil = Date.now() + 700;
+      navigator.vibrate?.(15);
+      openContextMenu(ev);
+    }, 550) };
+  });
+  map.on("touchmove", (e) => {
+    if (press && Math.hypot(e.point.x - press.x, e.point.y - press.y) > 10) cancelPress();
+  });
+  map.on("touchend", cancelPress);
+  map.on("touchcancel", cancelPress);
 
   map.on("styleimagemissing", (e) => {
     const ic = icons[e.id];
@@ -214,7 +342,7 @@ function initMap() {
   map.on("dblclick", (e) => {
     if (state.mode === "measure") { e.preventDefault(); finishMeasure(); }
   });
-  map.on("contextmenu", (e) => openContextMenu(e));
+  map.on("contextmenu", (e) => { if (Date.now() > suppressClickUntil) openContextMenu(e); });
   map.on("movestart", closeContextMenu);
 }
 
@@ -223,6 +351,7 @@ const PICK_ORDER = ["hydrant-icon", "hydrant-dot", "poi-major", "poi-minor", "pi
   "dams", "rivers", "streams", "water", "places", "landuse"];
 
 function onMapClick(e) {
+  if (Date.now() < suppressClickUntil) return;
   closeContextMenu();
   const ll = [e.lngLat.lng, e.lngLat.lat];
   if (state.mode === "measure") return addMeasurePoint(ll);
@@ -243,6 +372,7 @@ const ICON = {
   copy: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3"/></svg>',
   target: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="2.5" fill="currentColor"/></svg>',
   ext: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></svg>',
+  gps: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M21 3L3 10.5l7.5 3 3 7.5z"/></svg>',
   info: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5v.5"/></svg>',
   ruler: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 17L17 3l4 4L7 21z"/><path d="M7 13l2 2M10 10l2 2M13 7l2 2"/></svg>',
 };
@@ -356,6 +486,8 @@ function showInfo(f, clickLL) {
       ${osm ? `<a class="btn" href="${osm}" target="_blank" rel="noopener">${ICON.ext}OSM</a>` : ""}
     </div>`;
   box.hidden = false;
+  box.scrollTop = 0;
+  setSheet("peek");
   box.onclick = (ev) => {
     const b = ev.target.closest("button");
     if (!b) return;
@@ -426,7 +558,7 @@ function analyzePoint(ll, radius = state.analysis?.radius || null) {
   drawAnalysis();
   renderAnalysis();
   selectTab("analiza");
-  $("#tb-analiza").innerHTML = 'Analiză punct<span class="badge"></span>';
+  $("#tb-analiza").innerHTML = '<span class="t-long">Analiză punct</span><span class="t-short">Analiză</span><span class="badge"></span>';
   if (radius) applyRadius(radius);
   else {
     const pts = [ll, ...lines.map((l) => l.geometry.coordinates[1])];
@@ -437,7 +569,7 @@ function analyzePoint(ll, radius = state.analysis?.radius || null) {
 function fitTo(points, maxZoom) {
   const xs = points.map((p) => p[0]), ys = points.map((p) => p[1]);
   map.fitBounds([[Math.min(...xs), Math.min(...ys)], [Math.max(...xs), Math.max(...ys)]],
-    { padding: { top: 80, bottom: 60, left: 60, right: $("#info").hidden ? 60 : 400 }, maxZoom, duration: 600 });
+    { padding: viewPadding(), maxZoom, duration: 600 });
 }
 
 function drawAnalysis() {
@@ -499,9 +631,15 @@ function renderAnalysis() {
   if (!a) {
     el.innerHTML = `<div class="an-empty"><strong>Niciun punct analizat</strong>
       Alege un punct pe hartă ca să vezi cei mai apropiați hidranți, subunitatea ISU, spitalul și poliția.
-      <br><button class="btn primary" data-act="pick">${ICON.target}Alege un punct</button>
-      <p class="muted" style="margin-top:14px">Sau: clic dreapta pe hartă → Analizează punctul</p></div>`;
-    el.onclick = (e) => { if (e.target.closest("[data-act=pick]")) setMode("pick"); };
+      <div class="row-btns" style="justify-content:center">
+        <button class="btn primary" data-act="pick">${ICON.target}Alege un punct</button>
+        <button class="btn" data-act="here">${ICON.gps}Poziția mea</button>
+      </div>
+      <p class="muted" style="margin-top:14px">Sau: clic dreapta pe hartă (pe telefon: apasă lung) → Analizează punctul</p></div>`;
+    el.onclick = (e) => {
+      if (e.target.closest("[data-act=pick]")) { setMode("pick"); setSheet("peek"); }
+      if (e.target.closest("[data-act=here]")) analyzeMyPosition();
+    };
     return;
   }
   const [lon, lat] = a.ll;
@@ -567,10 +705,10 @@ function renderAnalysis() {
     const li = e.target.closest("li[data-ll]");
     if (li) {
       const ll2 = li.dataset.ll.split(",").map(Number);
-      map.flyTo({ center: ll2, zoom: Math.max(map.getZoom(), 17), duration: 700 });
       const src = li.dataset.src === "hid" ? state.data.hydrants : state.data.pois;
       const f = src.features.find((x) => String(x.id) === li.dataset.id);
       if (f) showInfo({ ...f, layer: { id: li.dataset.src === "hid" ? "hydrant-icon" : "poi-major" } }, ll2);
+      map.flyTo({ center: ll2, zoom: Math.max(map.getZoom(), 17), duration: 700, padding: viewPadding() });
       return;
     }
     const b = e.target.closest("button");
@@ -611,13 +749,22 @@ function analysisSummary() {
   return out.join("\n");
 }
 
+function analyzeMyPosition() {
+  if (!window.isSecureContext || !navigator.geolocation) return toast("Localizarea funcționează doar pe conexiune securizată (https).");
+  toast("Se caută poziția…");
+  navigator.geolocation.getCurrentPosition(
+    (p) => { lastPosition = [p.coords.longitude, p.coords.latitude]; analyzePoint(lastPosition); },
+    (err) => toast(err.code === 1 ? "Permite accesul la locație din setările browserului." : "Nu am putut afla poziția. Încearcă din nou."),
+    { enableHighAccuracy: true, timeout: 15000, maximumAge: 30000 });
+}
+
 function clearAnalysis() {
   state.analysis = null;
   setOverlay("analysis", FC());
   setOverlay("pin", FC());
   map.setFilter("uat-hover", ["==", ["get", "name"], ""]);
   state.hoverUat = "";
-  $("#tb-analiza").textContent = "Analiză punct";
+  $("#tb-analiza").innerHTML = '<span class="t-long">Analiză punct</span><span class="t-short">Analiză</span>';
   renderAnalysis();
 }
 
@@ -631,8 +778,9 @@ function setMode(mode) {
   $("#t-masoara").setAttribute("aria-pressed", mode === "measure");
   $("#t-analiza").setAttribute("aria-pressed", mode === "pick");
   const bar = $("#modebar");
+  if (mode) setSheet("peek");
   if (mode === "pick") {
-    bar.innerHTML = `Clic pe hartă pe locul de analizat <button data-act="cancel">Anulează</button>`;
+    bar.innerHTML = `<span class="mb-t">${isMobile() ? "Atinge harta pe locul de analizat" : "Clic pe hartă pe locul de analizat"}</span> <button data-act="cancel">Anulează</button>`;
     bar.hidden = false;
   } else if (mode === "measure") {
     map.doubleClickZoom.disable();
@@ -665,9 +813,9 @@ function drawMeasure(hover) {
   if (state.mode === "measure") {
     const tot = measureTotal(line);
     bar.innerHTML = pts.length
-      ? `Distanță <strong>${fmtDistance(tot)}</strong>
-         <button data-act="undo">Șterge ultimul</button><button data-act="finish">Gata</button><button data-act="cancel">Anulează</button>`
-      : `Clic pe hartă pentru primul punct · dublu clic sau Esc pentru a termina <button data-act="cancel">Anulează</button>`;
+      ? `<span class="mb-t"><span class="desk-only">Distanță </span><strong>${fmtDistance(tot)}</strong></span>
+         <button data-act="undo">Înapoi</button><button data-act="finish">Gata</button><button data-act="cancel">Anulează</button>`
+      : `<span class="mb-t">${isMobile() ? "Atinge harta pentru primul punct" : "Clic pe hartă pentru primul punct · dublu clic sau Esc pentru a termina"}</span> <button data-act="cancel">Anulează</button>`;
     bar.hidden = false;
   }
 }
@@ -687,7 +835,7 @@ function finishMeasure(silent) {
   setTimeout(() => map.doubleClickZoom.enable(), 0);
   const bar = $("#modebar");
   if (pts.length > 1 && !silent) {
-    bar.innerHTML = `Distanță măsurată <strong>${fmtDistance(tot)}</strong>
+    bar.innerHTML = `<span class="mb-t"><span class="desk-only">Distanță măsurată </span><strong>${fmtDistance(tot)}</strong></span>
       <button data-copy="${fmtDistance(tot)}">Copiază</button><button data-act="clearmeasure">Șterge</button>`;
     bar.hidden = false;
   } else {
@@ -858,12 +1006,6 @@ function initSearch() {
     list.hidden = true;
     input.blur();
     const ll = [r.lon, r.lat];
-    if (r.bbox && r.type !== "adr") {
-      map.fitBounds([[r.bbox[0], r.bbox[1]], [r.bbox[2], r.bbox[3]]], { padding: 80, maxZoom: 17, duration: 800 });
-    } else {
-      const z = r.type?.startsWith("loc:city") ? 13 : r.type?.startsWith("loc:town") ? 14 : r.type?.startsWith("loc:") ? 15 : 17.5;
-      map.flyTo({ center: ll, zoom: z, duration: 900 });
-    }
     setOverlay("pin", { type: "FeatureCollection", features: [{ type: "Feature", properties: {}, geometry: { type: "Point", coordinates: ll } }] });
     if (r.type === "hid") {
       const f = state.data.hydrants.features.find((x) => x.id === r.ref);
@@ -873,11 +1015,21 @@ function initSearch() {
       if (f) showInfo({ ...f, layer: { id: "poi-major" } }, ll);
     } else if (r.coord) {
       showInfo(null, ll);
+    } else {
+      closeInfo();
+      setSheet("peek");
+    }
+    const padding = viewPadding();
+    if (r.bbox && r.type !== "adr") {
+      map.fitBounds([[r.bbox[0], r.bbox[1]], [r.bbox[2], r.bbox[3]]], { padding, maxZoom: 17, duration: 800 });
+    } else {
+      const z = r.type?.startsWith("loc:city") ? 13 : r.type?.startsWith("loc:town") ? 14 : r.type?.startsWith("loc:") ? 15 : 17.5;
+      map.flyTo({ center: ll, zoom: z, duration: 900, padding });
     }
   };
 
   input.addEventListener("input", () => { clearTimeout(timer); timer = setTimeout(run, 70); });
-  input.addEventListener("focus", () => { if (input.value.trim()) render(); });
+  input.addEventListener("focus", () => { setSheet("peek"); if (input.value.trim()) render(); });
   input.addEventListener("keydown", (e) => {
     if (e.key === "ArrowDown") { active = Math.min(active + 1, results.length - 1); render(); e.preventDefault(); }
     else if (e.key === "ArrowUp") { active = Math.max(active - 1, 0); render(); e.preventDefault(); }
@@ -894,6 +1046,7 @@ function initSearch() {
 // ------------------------------------------------------------------ interfață generală
 
 function selectTab(name) {
+  if (isMobile() && $(".side").dataset.sheet === "peek") setSheet("half");
   for (const b of document.querySelectorAll(".tabs button")) b.setAttribute("aria-selected", b.dataset.tab === name);
   for (const t of ["straturi", "analiza", "ajutor", "admin"]) $("#tab-" + t).hidden = t !== name;
 }
@@ -951,11 +1104,20 @@ function exportImage() {
 
 function initUI() {
   $("#t-tema-l").textContent = state.theme === "noapte" ? "Zi" : "Noapte";
-  for (const b of document.querySelectorAll(".tabs button")) b.addEventListener("click", () => selectTab(b.dataset.tab));
+  for (const b of document.querySelectorAll(".tabs button")) b.addEventListener("click", () => {
+    if (sheetDragged) { sheetDragged = false; return; }
+    // pe telefon, atingerea filei deja deschise strânge panoul
+    if (isMobile() && b.getAttribute("aria-selected") === "true" && $(".side").dataset.sheet !== "peek") return setSheet("peek");
+    selectTab(b.dataset.tab);
+  });
   $("#t-analiza").addEventListener("click", () => setMode(state.mode === "pick" ? null : "pick"));
   $("#t-masoara").addEventListener("click", () => (state.mode === "measure" ? finishMeasure() : setMode("measure")));
   $("#t-harta").addEventListener("click", () => setBasemap("harta"));
-  $("#t-satelit").addEventListener("click", () => setBasemap("satelit"));
+  $("#t-satelit").addEventListener("click", () => setBasemap(state.basemap === "satelit" ? "harta" : "satelit"));
+  $("#t-loc").addEventListener("click", () => {
+    if (!window.isSecureContext || !navigator.geolocation) return toast("Localizarea funcționează doar pe conexiune securizată (https).");
+    if (!geolocate?.trigger()) toast("Localizarea nu este disponibilă în acest browser.");
+  });
   $("#t-tema").addEventListener("click", () => setTheme(state.theme === "zi" ? "noapte" : "zi"));
   $("#t-export").addEventListener("click", exportImage);
   $("#t-full").addEventListener("click", () => {
@@ -972,7 +1134,7 @@ function initUI() {
     if (act === "finish") finishMeasure();
     if (act === "clearmeasure") { $("#modebar").hidden = true; setOverlay("measure", FC()); }
   });
-  document.addEventListener("mousedown", (e) => { if (!e.target.closest("#ctx")) closeContextMenu(); });
+  document.addEventListener("mousedown", (e) => { if (Date.now() > suppressClickUntil && !e.target.closest("#ctx")) closeContextMenu(); });
 
   document.addEventListener("keydown", (e) => {
     const typing = e.target.matches("input, textarea, select");
