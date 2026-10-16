@@ -76,12 +76,16 @@ function feature(value, budget) {
   const kmFrom = kilometer(p.kmFrom), kmTo = kilometer(p.kmTo);
   if (kmFrom !== null && kmTo !== null && kmTo < kmFrom) throw new Error('Road kilometers are reversed.');
   const lengthKm = kilometer(p.lengthKm);
+  const personnel = string(p.personnel, 300);
+  const vehicles = string(p.vehicles, 400);
   const props = {
     id: identifier(p.id), kind: p.kind, status, title: string(p.title, 200),
     road: string(p.road, 100), kmFrom, kmTo, source: string(p.source, 300),
     observedAt: p.observedAt ? timestamp(p.observedAt) : '', notes: string(p.notes, 5000),
   };
   if (lengthKm !== null) props.lengthKm = lengthKm;
+  if (personnel) props.personnel = personnel;
+  if (vehicles) props.vehicles = vehicles;
   return {
     type: 'Feature', geometry: geometry(value.geometry, budget),
     properties: props,

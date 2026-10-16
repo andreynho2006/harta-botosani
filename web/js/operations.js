@@ -42,6 +42,15 @@ const ZONE_KINDS = ["threat", "flooded", "snow", "fire", "evacuated"];
 const PLACE_KINDS = ["isolated", "power", "flooded", "snow", "evacuated"];
 const FORCE_KINDS = ["command", "isu", "police", "medical", "utility", "shelter"];
 
+const DEFAULT_AGENCY = {
+  command: "ISU / CJSU Botoșani",
+  isu: "ISU Botoșani",
+  police: "IPJ / IJJ Botoșani",
+  medical: "SAJ / SMURD Botoșani",
+  utility: "SDN / DJDP / SGA Botoșani",
+  shelter: "CLSU / Primărie",
+};
+
 export const STATUSES = {
   confirmed: "Confirmat",
   reported: "Raportat",
@@ -229,6 +238,78 @@ export function initOperations(ctx) {
   presentation.className = "ops-presentation";
   presentation.hidden = true;
   document.querySelector(".mapwrap").appendChild(presentation);
+
+  const hoverPop = document.createElement("div");
+  hoverPop.className = "ops-hover-pop";
+  hoverPop.hidden = true;
+  document.querySelector(".mapwrap").appendChild(hoverPop);
+
+  function hideHoverPop() {
+    if (!hoverPop.hidden) hoverPop.hidden = true;
+  }
+
+  function handleMapHover(event) {
+    if (!active || mode || !map?.isStyleLoaded?.()) {
+      hideHoverPop();
+      return;
+    }
+    const layers = ["ops-features-point", "ops-features-line", "ops-features-fill"].filter(layer => map.getLayer(layer));
+    if (!layers.length) {
+      hideHoverPop();
+      return;
+    }
+    const hits = map.queryRenderedFeatures([[event.point.x - 9, event.point.y - 9], [event.point.x + 9, event.point.y + 9]], { layers });
+    const hitId = hits[0]?.properties?.id;
+    const feature = hitId ? active.features.features.find(f => f.properties.id === hitId) : null;
+    if (!feature) {
+      hideHoverPop();
+      return;
+    }
+    const p = feature.properties || {};
+    const isForce = FORCE_KINDS.includes(p.kind);
+    const hasForcesInfo = isForce || Boolean(p.personnel || p.vehicles || p.source);
+    const kmTxt = p.kmFrom != null ? `km ${p.kmFrom}${p.kmTo != null ? "–" + p.kmTo : ""}` : "";
+    const lenTxt = p.lengthKm ? `${p.lengthKm} km` : "";
+    const roadLine = [p.road, kmTxt, lenTxt ? `(${lenTxt})` : ""].filter(Boolean).join(" · ");
+    const title = p.title || roadLine || KINDS[p.kind] || "Marcaj operativ";
+    const dotKind = p.status === "resolved" ? "resolved" : p.kind;
+
+    const rows = [];
+    if (hasForcesInfo) {
+      const agency = p.source || DEFAULT_AGENCY[p.kind] || "—";
+      rows.push(["Instituție", agency]);
+      if (isForce || p.personnel) rows.push(["Forțe (oameni)", p.personnel || "Nespecificat"]);
+      if (isForce || p.vehicles) rows.push(["Mijloace (mașini)", p.vehicles || "Nespecificat"]);
+    }
+    if (roadLine && roadLine !== title) rows.push(["Sector drum", roadLine]);
+    if (p.notes) rows.push(["Detalii / Măsuri", p.notes]);
+
+    hoverPop.innerHTML = `
+      <div class="ops-hpop-head">
+        <span class="ops-dot" data-kind="${esc(dotKind)}"></span>
+        <div>
+          <strong>${esc(title)}</strong>
+          <small>${esc(KINDS[p.kind] || p.kind)} · ${esc(STATUSES[p.status] || p.status)}</small>
+        </div>
+      </div>
+      ${rows.length ? `<dl class="ops-hpop-dl">${rows.map(([k, v]) => `<div><dt>${esc(k)}:</dt><dd>${esc(v)}</dd></div>`).join("")}</dl>` : ""}
+    `;
+    hoverPop.hidden = false;
+
+    const wrap = document.querySelector(".mapwrap");
+    const maxW = wrap?.clientWidth || window.innerWidth;
+    const maxH = wrap?.clientHeight || window.innerHeight;
+    const popW = hoverPop.offsetWidth || 260;
+    const popH = hoverPop.offsetHeight || 110;
+    const left = Math.min(Math.max(12, event.point.x + 14), Math.max(12, maxW - popW - 12));
+    const top = event.point.y - popH - 14 >= 12 ? event.point.y - popH - 14 : Math.min(maxH - popH - 12, event.point.y + 16);
+    hoverPop.style.left = `${left}px`;
+    hoverPop.style.top = `${top}px`;
+  }
+
+  map?.on?.("mousemove", handleMapHover);
+  map?.on?.("movestart", hideHoverPop);
+  map?.getCanvas?.()?.addEventListener?.("mouseleave", hideHoverPop);
 
   function message(text) {
     notice = text;
@@ -494,7 +575,7 @@ export function initOperations(ctx) {
       properties: {
         id: id(), kind: "blocked", status: "confirmed", title: "", road: "",
         kmFrom: null, kmTo: null, lengthKm: null,
-        source: "", observedAt: new Date().toISOString(), notes: "",
+        source: "", personnel: "", vehicles: "", observedAt: new Date().toISOString(), notes: "",
       },
     };
     editingId = null;
@@ -521,19 +602,22 @@ export function initOperations(ctx) {
 
   function prepare(geometry, kind, extra = {}) {
     const prevProps = pending?.properties || {};
+    const resolvedKind = kind || prevProps.kind || "blocked";
     pending = {
       type: "Feature",
       geometry,
       properties: {
         id: prevProps.id || id(),
-        kind: kind || prevProps.kind || "blocked",
+        kind: resolvedKind,
         status: prevProps.status || "confirmed",
         title: prevProps.title || "",
         road: extra.road ?? prevProps.road ?? "",
         kmFrom: extra.kmFrom ?? prevProps.kmFrom ?? null,
         kmTo: extra.kmTo ?? prevProps.kmTo ?? null,
         lengthKm: extra.lengthKm ?? prevProps.lengthKm ?? (geometry?.type === "LineString" ? lineLengthKm(geometry.coordinates) : null),
-        source: prevProps.source || "",
+        source: prevProps.source || DEFAULT_AGENCY[resolvedKind] || "",
+        personnel: prevProps.personnel || "",
+        vehicles: prevProps.vehicles || "",
         observedAt: prevProps.observedAt || new Date().toISOString(),
         notes: prevProps.notes || "",
       },
@@ -664,6 +748,26 @@ export function initOperations(ctx) {
     return `<datalist id="ops-uats-datalist">${uats.map(u => `<option value="${esc(u)}">UAT ${esc(u)}</option>`).join("")}</datalist>`;
   }
 
+  function agenciesDatalistHTML() {
+    const list = [
+      "ISU Botoșani",
+      "IPJ Botoșani",
+      "IJJ Botoșani",
+      "IPJ / IJJ Botoșani",
+      "STPF Botoșani (Poliția de Frontieră)",
+      "SAJ Botoșani",
+      "SMURD Botoșani",
+      "SDN Botoșani",
+      "DJDP Botoșani",
+      "SGA Botoșani (Apele Române)",
+      "Direcția Silvică Botoșani",
+      "Delgaz Grid",
+      "Nova Apaserv",
+      "CLSU / Primărie",
+    ];
+    return `<datalist id="ops-agencies-datalist">${list.map(a => `<option value="${esc(a)}"></option>`).join("")}</datalist>`;
+  }
+
   function markerHTML() {
     if (!pending) return "";
     const p = pending.properties;
@@ -680,7 +784,7 @@ export function initOperations(ctx) {
 
     return `<form id="ops-marker" class="ops-card ops-marker-form">
       <div class="ops-card-title">
-        <h3>${editingId ? "Editează marcajul operativ" : isRoad ? "⛔ Sector de drum afectat / impracticabil" : isZone ? "▱ Zonă afectată / posibil inundabilă" : "📍 Marcaj operativ"}</h3>
+        <h3>${editingId ? "Editează marcajul operativ" : isRoad ? "⛔ Sector de drum afectat / impracticabil" : isZone ? "▱ Zonă afectată / posibil inundabilă" : "📍 Marcaj operativ / Forțe în teren"}</h3>
       </div>
       <div class="ops-grid">
         <label>Categorie<select name="kind">${options(relevant, p.kind)}</select></label>
@@ -712,10 +816,14 @@ export function initOperations(ctx) {
           <p class="muted">${pending.geometry ? `✓ Sector trasat pe hartă${p.lengthKm ? ` · lungime calculată: <b>${p.lengthKm} km</b>` : ""}.` : "Introdu drumul și kilometrii (ex. DJ29, km 3 – km 6) și apasă «Trasează automat pe drum» sau direct «Adaugă marcajul»."}</p>
         </div>
       ` : ""}
-      <label>Denumire afișată pe hartă<input name="title" maxlength="200" value="${esc(p.title)}" placeholder="${isRoad ? "Se completează automat (ex. DJ29 · km 3–6)" : "Ex. Filtru IPJ / Zonă inundabilă / Sat izolat"}"></label>
+      <label>Denumire afișată pe hartă<input name="title" maxlength="200" value="${esc(p.title)}" placeholder="${isRoad ? "Se completează automat (ex. DJ29 · km 3–6)" : "Ex. Filtru IPJ / Echipaj ISU / Zonă inundabilă"}"></label>
       <div class="ops-grid">
+        <label>Instituție / Structură<input name="source" list="ops-agencies-datalist" maxlength="300" value="${esc(p.source)}" placeholder="Ex. ISU / IPJ / IJJ / SAJ / SDN"></label>
         <label>Ora informației<input name="observedAt" type="datetime-local" value="${localTime(p.observedAt)}"></label>
-        <label>Sursa / Structura<input name="source" maxlength="300" value="${esc(p.source)}" placeholder="Ex. ISU / IPJ / SDN / DJDP / SGA"></label>
+      </div>
+      <div class="ops-grid">
+        <label>Forțe (oameni / efective)<input name="personnel" maxlength="300" value="${esc(p.personnel || "")}" placeholder="Ex. 1 ofițer, 6 subofițeri / 2 agenți IPJ"></label>
+        <label>Mijloace (mașini / tehnică)<input name="vehicles" maxlength="400" value="${esc(p.vehicles || "")}" placeholder="Ex. 1 ASAS, 1 șenilată / 1 autospecială"></label>
       </div>
       <label>Detalii / Măsuri luate în teren<textarea name="notes" maxlength="5000" rows="2" placeholder="Ex. Se acționează cu autofreză SDN și filtru IPJ la intrarea pe sector">${esc(p.notes)}</textarea></label>
       <div class="ops-actions">
@@ -757,6 +865,7 @@ export function initOperations(ctx) {
       ${roadsDatalistHTML()}
       ${localitiesDatalistHTML()}
       ${uatsDatalistHTML()}
+      ${agenciesDatalistHTML()}
       <p class="ops-notice" role="status">${esc(notice)}</p>
 
       ${archiveHTML(events)}
@@ -840,10 +949,11 @@ export function initOperations(ctx) {
           const p = f.properties;
           const kmTxt = p.kmFrom != null ? `km ${p.kmFrom}${p.kmTo != null ? "–" + p.kmTo : ""}` : "";
           const lenTxt = p.lengthKm ? `${p.lengthKm} km` : "";
+          const forceMeta = [p.source, p.personnel ? `Forțe: ${p.personnel}` : "", p.vehicles ? `Mijloace: ${p.vehicles}` : ""].filter(Boolean).join(" · ");
           return `<li>
             <button class="ops-mark-main" type="button" data-mark="${esc(p.id)}">
               <b><span class="ops-dot" data-kind="${esc(p.status === "resolved" ? "resolved" : p.kind)}"></span>${esc(p.title || [p.road, kmTxt].filter(Boolean).join(" · ") || KINDS[p.kind])}</b>
-              <small>${esc(KINDS[p.kind])} · <b>${esc(STATUSES[p.status])}</b>${lenTxt ? ` · ${esc(lenTxt)}` : ""}${p.source ? ` · ${esc(p.source)}` : ""} · ${dateLabel(p.observedAt)}</small>
+              <small>${esc(KINDS[p.kind])} · <b>${esc(STATUSES[p.status])}</b>${lenTxt ? ` · ${esc(lenTxt)}` : ""}${forceMeta ? ` · ${esc(forceMeta)}` : ""} · ${dateLabel(p.observedAt)}</small>
             </button>
             <button class="ops-zoom" type="button" data-zoom-mark="${esc(p.id)}" title="Arată pe hartă">🔍</button>
             <button class="ops-remove" type="button" data-remove="${esc(p.id)}" aria-label="Elimină marcajul">×</button>
@@ -855,10 +965,11 @@ export function initOperations(ctx) {
         <h3>Zone, localități și forțe în teren <span>${otherMarks.length}</span></h3>
         <ul class="ops-marks">${otherMarks.map(f => {
           const p = f.properties;
+          const forceMeta = [p.source, p.personnel ? `Forțe: ${p.personnel}` : "", p.vehicles ? `Mijloace: ${p.vehicles}` : ""].filter(Boolean).join(" · ");
           return `<li>
             <button class="ops-mark-main" type="button" data-mark="${esc(p.id)}">
               <b><span class="ops-dot" data-kind="${esc(p.status === "resolved" ? "resolved" : p.kind)}"></span>${esc(p.title || KINDS[p.kind])}</b>
-              <small>${esc(KINDS[p.kind])} · ${esc(STATUSES[p.status])}${p.source ? ` · ${esc(p.source)}` : ""} · ${dateLabel(p.observedAt)}</small>
+              <small>${esc(KINDS[p.kind])} · ${esc(STATUSES[p.status])}${forceMeta ? ` · ${esc(forceMeta)}` : ""} · ${dateLabel(p.observedAt)}</small>
             </button>
             <button class="ops-zoom" type="button" data-zoom-mark="${esc(p.id)}" title="Arată pe hartă">🔍</button>
             <button class="ops-remove" type="button" data-remove="${esc(p.id)}" aria-label="Elimină marcajul">×</button>
@@ -1081,9 +1192,10 @@ export function initOperations(ctx) {
           <h3>🚒 Forțe și mijloace în teren (${forcesList.length})</h3>
           <ul>${forcesList.map(f => {
             const p = f.properties;
+            const meta = [p.source || DEFAULT_AGENCY[p.kind] || KINDS[p.kind], p.personnel ? `Forțe: ${p.personnel}` : "", p.vehicles ? `Mijloace: ${p.vehicles}` : ""].filter(Boolean).join(" · ");
             return `<li><button type="button" data-pres-zoom="${esc(p.id)}">
               <span class="ops-dot" data-kind="${esc(p.status === "resolved" ? "resolved" : p.kind)}"></span>
-              <div><b>${esc(p.title || KINDS[p.kind])}</b><small>${esc(KINDS[p.kind])}${p.source ? ` · ${esc(p.source)}` : ""}</small></div>
+              <div><b>${esc(p.title || KINDS[p.kind])}</b><small>${esc(meta)}</small></div>
             </button></li>`;
           }).join("")}</ul>
         </div>` : ""}
@@ -1175,7 +1287,13 @@ export function initOperations(ctx) {
       return;
     }
     if (pending && target.name === "kind") {
+      const prevKind = pending.properties.kind;
       pending.properties.kind = target.value;
+      const srcInput = panel.querySelector('#ops-marker input[name="source"]');
+      if (srcInput && (!srcInput.value.trim() || srcInput.value === DEFAULT_AGENCY[prevKind])) {
+        srcInput.value = DEFAULT_AGENCY[target.value] || "";
+        pending.properties.source = srcInput.value;
+      }
       sync();
       return;
     }
@@ -1252,6 +1370,8 @@ export function initOperations(ctx) {
         kmTo: finalKmTo,
         lengthKm,
         source: fields.get("source") || "",
+        personnel: fields.get("personnel") || "",
+        vehicles: fields.get("vehicles") || "",
         observedAt,
         notes: fields.get("notes") || "",
       });

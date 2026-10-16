@@ -340,8 +340,34 @@
               "kmFrom": 3,
               "kmTo": null,
               "source": "IPJ Botoșani",
+              "personnel": "2 agenți Poliția Rutieră, 2 jandarmi IJJ",
+              "vehicles": "1 autospecială IPJ, 1 autospecială IJJ",
               "observedAt": "2026-10-16T09:20:00.000Z",
-              "notes": "Echipaj Poliția Rutieră pentru restricționarea accesului pe sectorul închis."
+              "notes": "Echipaj mixt IPJ / IJJ pentru restricționarea accesului pe sectorul închis."
+            }
+          },
+          {
+            "type": "Feature",
+            "geometry": {
+              "type": "Point",
+              "coordinates": [
+                26.502649,
+                47.709928
+              ]
+            },
+            "properties": {
+              "id": "mark-echipaj-isu-1",
+              "kind": "isu",
+              "status": "confirmed",
+              "title": "Echipaj intervenție ISU · DJ29 km 6",
+              "road": "DJ29",
+              "kmFrom": 6,
+              "kmTo": null,
+              "source": "ISU Botoșani (Detașamentul Botoșani)",
+              "personnel": "1 ofițer, 6 subofițeri",
+              "vehicles": "1 ASAS, 1 autofreză de zăpadă, 1 șenilată UTV",
+              "observedAt": "2026-10-16T09:25:00.000Z",
+              "notes": "Se acționează pentru deblocarea persoanelor surprinse în trafic și sprijin medical de urgență."
             }
           }
         ]
