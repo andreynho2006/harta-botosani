@@ -13,7 +13,6 @@ Ieșire în directorul de lucru:
 """
 import json
 import os
-import re
 import sys
 import unicodedata
 from collections import defaultdict, Counter
@@ -105,13 +104,6 @@ def road_class(t):
     if any(r.startswith("DC") for r in refs):
         return "dc"
     return HIGHWAY_BASE[base]
-
-
-def tonnes(v):
-    if not v:
-        return None
-    m = re.match(r"\s*([\d.,]+)", str(v))
-    return m.group(1).replace(",", ".") if m else str(v)
 
 
 BUILDING_KIND = {
@@ -291,8 +283,10 @@ def main(src, admin_path, workdir):
                     "bridge": 1 if t.get("bridge") not in (None, "no") else None,
                     "tunnel": 1 if t.get("tunnel") not in (None, "no") else None,
                     "oneway": 1 if t.get("oneway") in ("yes", "1", "true") else None,
-                    "maxweight": tonnes(t.get("maxweight")), "maxheight": tonnes(t.get("maxheight")),
-                    "maxwidth": tonnes(t.get("maxwidth")), "surface": t.get("surface"),
+                    # Preserve OSM values, including units and special values.
+                    # Separate fields distinguish them from previously stripped values.
+                    "maxweight_raw": t.get("maxweight"), "maxheight_raw": t.get("maxheight"),
+                    "maxwidth_raw": t.get("maxwidth"), "surface": t.get("surface"),
                     "hw": t.get("highway"), "osm": ref,
                 }
                 emit("roads", g, props, ROAD_MINZOOM[cls])

@@ -75,21 +75,31 @@ function readSession() {
     try {
       const v = st.getItem(KEY);
       if (v) return JSON.parse(v);
-    } catch { /* fără stocare */ }
+    } catch { return null; }
   }
   return null;
 }
 
 function saveSession(s, remember) {
+  clearSessions();
   try {
     (remember ? localStorage : sessionStorage).setItem(KEY, JSON.stringify(s));
   } catch { /* fără stocare */ }
 }
 
-export function logout() {
+function clearSessions() {
   for (const st of [sessionStorage, localStorage]) {
     try { st.removeItem(KEY); } catch { /* */ }
   }
+}
+
+async function wrapperFingerprint(entry, iterations) {
+  const bytes = te.encode(JSON.stringify([iterations, entry.salt, entry.iv, entry.wk]));
+  return toB64(await subtle.digest("SHA-256", bytes));
+}
+
+export function logout() {
+  clearSessions();
   location.reload();
 }
 
@@ -105,11 +115,19 @@ export async function loadUsers() {
  */
 export async function ensureLogin() {
   const users = await loadUsers();
+  const entries = Array.isArray(users.users) ? users.users : [];
   const saved = readSession();
   if (saved) {
-    const entry = users.users.find((x) => x.u === saved.u);
-    if (entry) return { u: entry.u, name: entry.name, role: entry.role, key: fromB64(saved.k), users };
+    const entry = entries.find((x) => x.u === saved.u);
+    try {
+      if (entry && typeof saved.k === "string" &&
+          saved.f === await wrapperFingerprint(entry, users.iterations)) {
+        const raw = fromB64(saved.k);
+        if (raw.length === 32) return { u: entry.u, name: entry.name, role: entry.role, key: raw, users };
+      }
+    } catch { /* Invalid sessions require a fresh login. */ }
   }
+  clearSessions();
 
   const el = document.getElementById("login");
   el.hidden = false;
@@ -127,16 +145,17 @@ export async function ensureLogin() {
       btn.textContent = "Se verifică…";
       const u = userIn.value.trim().toLowerCase();
       const password = form.querySelector("#lg-pass").value;
-      const entry = users.users.find((x) => x.u === u) || users.users[0];
+      const entry = entries.find((x) => x.u === u) || entries[0];
       const raw = await unlock(entry, password, users.iterations);
       btn.disabled = false;
       btn.textContent = "Intră";
-      if (!raw || entry.u !== u) {
+      if (!raw || raw.length !== 32 || entry.u !== u) {
         err.hidden = false;
         form.querySelector("#lg-pass").select();
         return;
       }
-      saveSession({ u: entry.u, k: toB64(raw) }, form.querySelector("#lg-remember").checked);
+      const f = await wrapperFingerprint(entry, users.iterations);
+      saveSession({ u: entry.u, k: toB64(raw), f }, form.querySelector("#lg-remember").checked);
       el.hidden = true;
       resolve({ u: entry.u, name: entry.name, role: entry.role, key: raw, users });
     });

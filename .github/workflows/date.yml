@@ -1,14 +1,9 @@
 name: Date hartă
 
 # Descarcă OpenStreetMap, decupează județul, adaugă hidranții și construiește tile-urile.
-# Rulează lunar, la orice modificare a scripturilor, sau manual.
+# Automatic data updates are paused. Run manually only when a map refresh is wanted.
 on:
   workflow_dispatch:
-  push:
-    branches: [main]
-    paths: ["pipeline/**", ".github/workflows/date.yml"]
-  schedule:
-    - cron: "17 2 1 * *"   # pe 1 ale lunii, 05:17 ora României
 
 permissions:
   contents: write

@@ -87,7 +87,7 @@ export function hydrantFilter(state) {
   return ["in", ["get", "_stare"], ["literal", st]];
 }
 export function poiFilter(state, major) {
-  const cats = Object.keys(POI).filter((c) => POI[c].major === major && state.visible["poi:" + c]);
+  const cats = Object.keys(POI).filter((c) => c !== "hidrant_osm" && POI[c].major === major && state.visible["poi:" + c]);
   return ["in", ["get", "cat"], ["literal", cats]];
 }
 

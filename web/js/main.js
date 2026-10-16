@@ -5,6 +5,8 @@ import { buildIcons, iconDataURL } from "./icons.js";
 import { SearchIndex, typeInfo, norm } from "./search.js";
 import { ensureLogin, decryptJSON, logout } from "./auth.js";
 import { renderAdmin } from "./admin.js";
+import { formatRestriction } from "./restrictions.js";
+import { openCommuneMap, isCommuneMapOpen } from "./commune.js";
 import {
   distance, bearing, direction, circle, fmtDistance, fmtLatLon, fmtStereo, fmtDMS,
   parseCoordinates, makeUatLookup,
@@ -26,7 +28,7 @@ for (const g of LAYER_GROUPS) for (const it of g.items) defaults[it.id] = it.on;
 const state = {
   theme: document.documentElement.dataset.theme === "dark" ? "noapte" : "zi",
   basemap: "harta",
-  visible: { ...defaults, ...store.get("visible", {}) },
+  visible: { ...defaults },
   data: { pois: FC(), hydrants: FC(), admin: FC() },
   overlays: { sel: FC(), analysis: FC(), measure: FC(), pin: FC() },
   hoverUat: "",
@@ -126,12 +128,12 @@ async function init() {
     loadJSON("data/search.json", []),
     loadJSON("data/stats.json", null),
   ]);
-  state.data.pois = pois;
+  state.data.pois = { ...pois, features: pois.features.filter((f) => f.properties.cat !== "hidrant_osm") };
   state.data.hydrants = prepareHydrants(hydrants);
   state.data.admin = admin;
   stats = st;
   uatAt = makeUatLookup(admin);
-  search.add(searchRows);
+  search.add(searchRows.filter((row) => row[1] !== "poi:hidrant_osm"));
   search.add(hydrantSearchRows());
   updateDataInfo();
 
@@ -242,7 +244,6 @@ function initSheet() {
 function applyStyle() {
   if (!map) return;
   map.setStyle(buildStyle(state), { diff: true });
-  store.set("visible", state.visible);
 }
 
 function setOverlay(name, fc) {
@@ -369,6 +370,8 @@ function onMapClick(e) {
 // ------------------------------------------------------------------ fișa de informații
 
 const ICON = {
+  eye: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg>',
+  eyeOff: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3 3 18 18M10.6 5.1A12.5 12.5 0 0 1 12 5c6.5 0 10 7 10 7a19 19 0 0 1-3.1 4.1M6.2 6.2A20 20 0 0 0 2 12s3.5 7 10 7a12 12 0 0 0 5.8-1.8M9.9 9.9a3 3 0 0 0 4.2 4.2"/></svg>',
   copy: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3"/></svg>',
   target: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="2.5" fill="currentColor"/></svg>',
   ext: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></svg>',
@@ -418,9 +421,9 @@ function describe(f) {
     if (p.bridge) add("Pod", "da");
     if (p.tunnel) add("Tunel", "da");
     if (p.oneway) add("Sens unic", "da");
-    add("Tonaj maxim", p.maxweight && `${p.maxweight} t`, "warn");
-    add("Înălțime maximă", p.maxheight && `${p.maxheight} m`, "warn");
-    add("Lățime maximă", p.maxwidth && `${p.maxwidth} m`, "warn");
+    add("Tonaj maxim", formatRestriction(p, "maxweight", "t"), "warn");
+    add("Înălțime maximă", formatRestriction(p, "maxheight", "m"), "warn");
+    add("Lățime maximă", formatRestriction(p, "maxwidth", "m"), "warn");
     const title = [p.ref, p.name].filter(Boolean).join(" · ") || LABELS.road[p.cls];
     return { title, kind: LABELS.road[p.cls] + (p.bridge ? " · pod" : ""), rows, osm: p.osm };
   }
@@ -482,6 +485,7 @@ function showInfo(f, clickLL) {
     ${coordsBlock(ll)}
     <div class="info-a">
       <button class="btn primary" data-act="analyze">${ICON.target}Analizează punctul</button>
+      ${uat ? `<button class="btn commune-trigger" data-act="commune">${ICON.ext}Harta comunei · ${esc(uat.name)}</button>` : ""}
       ${extLinks(ll)}
       ${osm ? `<a class="btn" href="${osm}" target="_blank" rel="noopener">${ICON.ext}OSM</a>` : ""}
     </div>`;
@@ -494,6 +498,7 @@ function showInfo(f, clickLL) {
     if (b.dataset.copy) copy(b.dataset.copy);
     if (b.dataset.act === "close") closeInfo();
     if (b.dataset.act === "analyze") analyzePoint(ll);
+    if (b.dataset.act === "commune") openCommuneMap({ uat, state, icons });
   };
 }
 
@@ -851,9 +856,11 @@ function openContextMenu(e) {
   const ll = [e.lngLat.lng, e.lngLat.lat];
   const m = $("#ctx");
   const s = fmtStereo(...ll);
+  const uat = uatAt(...ll);
   m.innerHTML = `<div class="hd">${fmtLatLon(...ll)}</div>
     <button data-act="analyze">${ICON.target}Analizează punctul</button>
     <button data-act="info">${ICON.info}Coordonate și UAT</button>
+    ${uat ? `<button data-act="commune">${ICON.ext}Harta comunei · ${esc(uat.name)}</button>` : ""}
     <button data-act="measure">${ICON.ruler}Măsoară de aici</button>
     <hr>
     <button data-copy="${fmtLatLon(...ll)}">${ICON.copy}Copiază WGS84</button>
@@ -873,6 +880,7 @@ function openContextMenu(e) {
     if (b.dataset.copy) copy(b.dataset.copy);
     if (b.dataset.act === "analyze") analyzePoint(ll);
     if (b.dataset.act === "info") showInfo(null, ll);
+    if (b.dataset.act === "commune") openCommuneMap({ uat, state, icons });
     if (b.dataset.act === "measure") { setMode("measure"); addMeasurePoint(ll); }
     if (b.dataset.act === "gmaps") window.open(`https://www.google.com/maps/search/?api=1&query=${ll[1].toFixed(6)},${ll[0].toFixed(6)}`, "_blank", "noopener");
   };
@@ -922,9 +930,8 @@ function itemCount(item) {
 function renderLayerPanel() {
   const el = $("#tab-straturi");
   el.innerHTML = LAYER_GROUPS.map((g) => {
-    const allOn = g.items.every((it) => state.visible[it.id]);
-    return `<div class="grp">
-      <div class="grp-h"><h2>${g.label}</h2><button data-grp="${g.id}">${allOn ? "Ascunde tot" : "Arată tot"}</button></div>
+    return `<div class="grp" data-group="${g.id}">
+      <div class="grp-h"><h2>${g.label}</h2><button type="button" data-grp="${g.id}"></button></div>
       ${g.items.map((it) => {
         const n = itemCount(it);
         const on = !!state.visible[it.id];
@@ -935,6 +942,7 @@ function renderLayerPanel() {
       }).join("")}
     </div>`;
   }).join("");
+  renderLayerPanelHeaders();
   el.onchange = (e) => {
     const id = e.target.dataset.id;
     if (!id) return;
@@ -957,7 +965,12 @@ function renderLayerPanel() {
 function renderLayerPanelHeaders() {
   for (const b of document.querySelectorAll("button[data-grp]")) {
     const g = LAYER_GROUPS.find((x) => x.id === b.dataset.grp);
-    b.textContent = g.items.every((it) => state.visible[it.id]) ? "Ascunde tot" : "Arată tot";
+    const allOn = g.items.every((it) => state.visible[it.id]);
+    const label = `${allOn ? "Ascunde tot" : "Arată tot"} · ${g.label}`;
+    b.innerHTML = allOn ? ICON.eyeOff : ICON.eye;
+    b.title = label;
+    b.setAttribute("aria-label", label);
+    b.setAttribute("aria-pressed", String(allOn));
   }
 }
 
@@ -1137,6 +1150,7 @@ function initUI() {
   document.addEventListener("mousedown", (e) => { if (Date.now() > suppressClickUntil && !e.target.closest("#ctx")) closeContextMenu(); });
 
   document.addEventListener("keydown", (e) => {
+    if (isCommuneMapOpen()) return;
     const typing = e.target.matches("input, textarea, select");
     if (e.key === "Escape") {
       closeContextMenu();
