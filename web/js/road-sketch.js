@@ -14,6 +14,152 @@ const featuresOf = (features) => Array.isArray(features) ? features : features?.
 const linesOf = (geometry) => geometry?.type === 'LineString' ? [geometry.coordinates] : geometry?.type === 'MultiLineString' ? geometry.coordinates : [];
 const lerp = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
 const dist = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]);
+
+export function haversineMeters(a, b) {
+  const dLat = (b[1] - a[1]) * RAD;
+  const dLon = (b[0] - a[0]) * RAD;
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(a[1] * RAD) * Math.cos(b[1] * RAD) * Math.sin(dLon / 2) ** 2;
+  return 2 * R * Math.asin(Math.min(1, Math.sqrt(h)));
+}
+
+export function lineLengthKm(coordinates) {
+  if (!Array.isArray(coordinates) || coordinates.length < 2) return 0;
+  let meters = 0;
+  for (let i = 1; i < coordinates.length; i++) meters += haversineMeters(coordinates[i - 1], coordinates[i]);
+  return +(meters / 1000).toFixed(2);
+}
+
+export function normalizeRoadRef(value) {
+  return norm(value).replace(/[\s_-]+/g, '').toUpperCase();
+}
+
+const ROAD_ALIASES = {
+  DJ29: 'DN29',
+  DN290: 'DJ290',
+  DN291: 'DJ291',
+  DN292: 'DJ292',
+  DN293: 'DJ293',
+  DN294: 'DJ294',
+  DN296: 'DJ296',
+  DN297: 'DJ297',
+  DN298: 'DJ298',
+  DN282: 'DJ282',
+};
+
+export function roadsListOf(roadNetwork) {
+  if (Array.isArray(roadNetwork)) return roadNetwork;
+  if (Array.isArray(roadNetwork?.roads)) return roadNetwork.roads;
+  return [];
+}
+
+export function findRoadByRef(roadNetwork, query) {
+  const list = roadsListOf(roadNetwork);
+  const q = normalizeRoadRef(query);
+  if (!q || !list.length) return null;
+  const direct = list.find((r) => normalizeRoadRef(r.ref) === q);
+  if (direct) return direct;
+  const alias = ROAD_ALIASES[q];
+  if (alias) {
+    const aliased = list.find((r) => normalizeRoadRef(r.ref) === alias);
+    if (aliased) return { ...aliased, requestedRef: q };
+  }
+  const prefix = list.find((r) => normalizeRoadRef(r.ref).startsWith(q));
+  return prefix ? { ...prefix, requestedRef: q } : null;
+}
+
+export function slicePolylineByKm(coordinates, kmFrom, kmTo) {
+  if (!Array.isArray(coordinates) || coordinates.length < 2) return null;
+  const startKm = Number(kmFrom);
+  const endKm = kmTo === '' || kmTo === null || kmTo === undefined ? startKm : Number(kmTo);
+  if (!Number.isFinite(startKm) || !Number.isFinite(endKm) || startKm < 0 || endKm < 0) return null;
+
+  const cumMeters = [0];
+  for (let i = 1; i < coordinates.length; i++) {
+    cumMeters.push(cumMeters[i - 1] + haversineMeters(coordinates[i - 1], coordinates[i]));
+  }
+  const totalMeters = cumMeters.at(-1);
+  if (totalMeters <= 0) return null;
+  const totalKm = totalMeters / 1000;
+
+  let aKm = Math.min(startKm, endKm);
+  let bKm = Math.max(startKm, endKm);
+  if (aKm > totalKm) aKm = Math.max(0, totalKm - 0.1);
+  if (bKm > totalKm) bKm = totalKm;
+  if (Math.abs(bKm - aKm) < 1e-4) {
+    aKm = Math.max(0, aKm - 0.05);
+    bKm = Math.min(totalKm, bKm + 0.05);
+    if (bKm <= aKm) bKm = Math.min(totalKm, aKm + 0.05);
+  }
+
+  const fromMeters = aKm * 1000;
+  const toMeters = bKm * 1000;
+
+  const pointAtMeters = (target) => {
+    if (target <= 0) return { coord: [...coordinates[0]], segIndex: 0 };
+    if (target >= totalMeters) return { coord: [...coordinates.at(-1)], segIndex: coordinates.length - 2 };
+    for (let i = 1; i < cumMeters.length; i++) {
+      if (cumMeters[i] >= target) {
+        const segLen = cumMeters[i] - cumMeters[i - 1];
+        const t = segLen > 0 ? (target - cumMeters[i - 1]) / segLen : 0;
+        const c = lerp(coordinates[i - 1], coordinates[i], t);
+        return { coord: [+c[0].toFixed(6), +c[1].toFixed(6)], segIndex: i - 1 };
+      }
+    }
+    return { coord: [...coordinates.at(-1)], segIndex: coordinates.length - 2 };
+  };
+
+  const startPt = pointAtMeters(fromMeters);
+  const endPt = pointAtMeters(toMeters);
+  const sliced = [startPt.coord];
+  for (let i = startPt.segIndex + 1; i <= endPt.segIndex; i++) {
+    const pt = coordinates[i];
+    const prev = sliced.at(-1);
+    if (pt[0] !== prev[0] || pt[1] !== prev[1]) sliced.push([...pt]);
+  }
+  const last = sliced.at(-1);
+  if (endPt.coord[0] !== last[0] || endPt.coord[1] !== last[1]) {
+    sliced.push(endPt.coord);
+  }
+  if (sliced.length === 1) {
+    sliced.push([...coordinates.at(-1)]);
+  }
+  if (startKm > endKm) sliced.reverse();
+
+  return {
+    geometry: { type: 'LineString', coordinates: sliced },
+    kmFrom: +aKm.toFixed(2),
+    kmTo: +bKm.toFixed(2),
+    lengthKm: +(bKm - aKm).toFixed(2),
+    totalKm: +totalKm.toFixed(2),
+  };
+}
+
+export function sliceRoadByKm(roadOrNetwork, arg2, arg3, arg4) {
+  const road = roadOrNetwork?.coordinates ? roadOrNetwork : findRoadByRef(roadOrNetwork, arg2);
+  const kmFrom = roadOrNetwork?.coordinates ? arg2 : arg3;
+  const kmTo = roadOrNetwork?.coordinates ? arg3 : arg4;
+  if (!road?.coordinates) return null;
+  const res = slicePolylineByKm(road.coordinates, kmFrom, kmTo);
+  if (!res) return null;
+  return { ...res, road: road.requestedRef || road.ref };
+}
+
+export function sliceRoadByPlaces(roadOrNetwork, arg2, arg3, arg4) {
+  const road = roadOrNetwork?.coordinates ? roadOrNetwork : findRoadByRef(roadOrNetwork, arg2);
+  const fromPlace = roadOrNetwork?.coordinates ? arg2 : arg3;
+  const toPlace = roadOrNetwork?.coordinates ? arg3 : arg4;
+  if (!road?.coordinates || !Array.isArray(road.places)) return null;
+  const nFrom = norm(fromPlace);
+  const nTo = norm(toPlace);
+  if (!nFrom || !nTo) return null;
+  const p1 = road.places.find((p) => norm(p.name) === nFrom) || road.places.find((p) => norm(p.name).includes(nFrom));
+  const p2 = road.places.find((p) => norm(p.name) === nTo) || road.places.find((p) => norm(p.name).includes(nTo));
+  if (!p1 || !p2) return null;
+  const res = sliceRoadByKm(road, Math.min(p1.km, p2.km), Math.max(p1.km, p2.km));
+  if (!res) return null;
+  return { ...res, fromPlace: p1.name, toPlace: p2.name };
+}
+
 function project(point, a, b) {
   const dx = b[0] - a[0], dy = b[1] - a[1], length2 = dx * dx + dy * dy;
   const t = length2 ? Math.max(0, Math.min(1, ((point[0] - a[0]) * dx + (point[1] - a[1]) * dy) / length2)) : 0;
@@ -24,6 +170,37 @@ function plane(origin) {
   const xscale = R * RAD * Math.cos(origin[1] * RAD), yscale = R * RAD;
   return { to: (p) => [(p[0] - origin[0]) * xscale, (p[1] - origin[1]) * yscale],
     from: (p) => [p[0] / xscale + origin[0], p[1] / yscale + origin[1]] };
+}
+
+export function projectPointOnRoad(road, point) {
+  const coords = road?.coordinates;
+  if (!Array.isArray(coords) || coords.length < 2 || !Array.isArray(point)) return null;
+  const proj = plane(point);
+  let best = null;
+  let traversed = 0;
+  for (let i = 1; i < coords.length; i++) {
+    const segMeters = haversineMeters(coords[i - 1], coords[i]);
+    const hit = project([0, 0], proj.to(coords[i - 1]), proj.to(coords[i]));
+    if (!best || hit.distance < best.distanceMeters) {
+      best = {
+        coordinate: proj.from(hit.coordinate).map((v) => +v.toFixed(6)),
+        km: +((traversed + hit.t * segMeters) / 1000).toFixed(2),
+        distanceMeters: hit.distance,
+      };
+    }
+    traversed += segMeters;
+  }
+  return best;
+}
+
+export function roadNetworkToFeatures(roadNetwork, visible = null) {
+  return roadsListOf(roadNetwork)
+    .filter((r) => !visible || visible['road:' + r.cls] !== false)
+    .map((r) => ({
+      type: 'Feature',
+      properties: { ref: r.ref, cls: r.cls, osm: 'net:' + r.ref },
+      geometry: { type: 'LineString', coordinates: r.coordinates },
+    }));
 }
 
 export function snapToRoad(point, roadFeatures, maxDistanceMeters = 80) {

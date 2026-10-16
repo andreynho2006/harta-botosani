@@ -1,6 +1,16 @@
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import test from 'node:test';
-import { snapToRoad, buildRoadSegment } from '../web/js/road-sketch.js';
+import {
+  snapToRoad,
+  buildRoadSegment,
+  findRoadByRef,
+  sliceRoadByKm,
+  sliceRoadByPlaces,
+  projectPointOnRoad,
+  roadNetworkToFeatures,
+  lineLengthKm,
+} from '../web/js/road-sketch.js';
 
 const A = [26, 47], B = [26.01, 47], C = [26.01, 47.01];
 const road = (coordinates, properties = { osm: 'w1', ref: 'DJ 208', name: 'Main Road', cls: 'dj' }) => ({
@@ -132,3 +142,38 @@ test('MultiLineString and FeatureCollection inputs are supported', () => {
   assert.equal(buildRoadSegment(null, null, roads), null);
   assert.equal(snapToRoad(A, []), null);
 });
+
+test('sliceRoadByKm and sliceRoadByPlaces trace DJ29 km 3-6 and locality segments on Botoșani road network', () => {
+  const roadsData = JSON.parse(fs.readFileSync(new URL('../web/data/roads.json', import.meta.url), 'utf8'));
+  assert.ok(roadsData.roads.length >= 200);
+
+  // DJ29 aliases to DN29 and slices km 3 to km 6 accurately
+  const dj29 = findRoadByRef(roadsData, 'DJ 29');
+  assert.ok(dj29);
+  const seg = sliceRoadByKm(roadsData, 'DJ29', 3, 6);
+  assert.ok(seg);
+  assert.equal(seg.kmFrom, 3);
+  assert.equal(seg.kmTo, 6);
+  assert.equal(seg.lengthKm, 3);
+  assert.equal(seg.geometry.type, 'LineString');
+  assert.ok(seg.geometry.coordinates.length >= 2);
+  assert.ok(Math.abs(lineLengthKm(seg.geometry.coordinates) - 3) < 0.05);
+
+  // Slicing between two localities along the road
+  const byPlace = sliceRoadByPlaces(roadsData, 'DN29', dj29.places[0].name, dj29.places[2].name);
+  assert.ok(byPlace);
+  assert.ok(byPlace.lengthKm > 1);
+  assert.equal(byPlace.geometry.type, 'LineString');
+
+  // Projecting endpoint back onto the road yields its km position
+  const pStart = projectPointOnRoad(dj29, seg.geometry.coordinates[0]);
+  const pEnd = projectPointOnRoad(dj29, seg.geometry.coordinates.at(-1));
+  assert.ok(Math.abs(pStart.km - 3) < 0.1);
+  assert.ok(Math.abs(pEnd.km - 6) < 0.1);
+
+  // roadNetworkToFeatures produces valid LineString features
+  const feats = roadNetworkToFeatures(roadsData);
+  assert.equal(feats.length, roadsData.roads.length);
+  assert.equal(feats[0].geometry.type, 'LineString');
+});
+

@@ -1,5 +1,5 @@
 /* global maplibregl */
-import { POI, LAYER_GROUPS, LABELS, START_VIEW, itemLabel } from "./config.js";
+import { POI, LAYER_GROUPS, LAYER_PRESETS, LABELS, START_VIEW, itemLabel } from "./config.js";
 import { buildStyle, PALETTES } from "./style.js";
 import { buildIcons, iconDataURL } from "./icons.js";
 import { SearchIndex, typeInfo, norm } from "./search.js";
@@ -30,7 +30,7 @@ const state = {
   theme: document.documentElement.dataset.theme === "dark" ? "noapte" : "zi",
   basemap: "harta",
   visible: { ...defaults },
-  data: { pois: FC(), hydrants: FC(), admin: FC() },
+  data: { pois: FC(), hydrants: FC(), admin: FC(), roads: { roads: [] }, localities: [], initialEvents: null },
   overlays: { sel: FC(), analysis: FC(), measure: FC(), pin: FC() },
   hoverUat: "",
   mode: null, // null | "measure" | "pick"
@@ -123,16 +123,23 @@ async function init() {
   $("#logout").addEventListener("click", logout);
   if (session.role === "admin") $("#tb-admin").hidden = false;
 
-  const [pois, hydrants, admin, searchRows, st] = await Promise.all([
+  const [pois, hydrants, admin, searchRows, st, roadsData, initialEvents] = await Promise.all([
     loadJSON("data/pois.geojson", FC()),
     loadHydrants(),
     loadJSON("data/admin.geojson", FC()),
     loadJSON("data/search.json", []),
     loadJSON("data/stats.json", null),
+    loadJSON("data/roads.json", { roads: [] }),
+    loadJSON("data/situatii.json", null),
   ]);
   state.data.pois = { ...pois, features: pois.features.filter((f) => f.properties.cat !== "hidrant_osm") };
   state.data.hydrants = prepareHydrants(hydrants);
   state.data.admin = admin;
+  state.data.roads = Array.isArray(roadsData?.roads) ? roadsData : { roads: [] };
+  state.data.initialEvents = initialEvents?.format === "harta-botosani-events" ? initialEvents : null;
+  state.data.localities = (Array.isArray(searchRows) ? searchRows : [])
+    .filter((row) => typeof row[1] === "string" && row[1].startsWith("loc:") && row[1] !== "loc:locality")
+    .map((row) => ({ name: row[0], kind: row[1].slice(4), lon: row[2], lat: row[3], ctx: row[4] || "" }));
   stats = st;
   uatAt = makeUatLookup(admin);
   search.add(searchRows.filter((row) => row[1] !== "poi:hidrant_osm"));
@@ -144,6 +151,7 @@ async function init() {
   initSheet();
   initMap();
   operations = initOperations({ map, state, uatAt, toast, selectTab, setSheet, applyStyle, renderLayerPanel,
+    applyPreset: typeof applyPreset === "function" ? applyPreset : null,
     stopOtherTools: () => { setMode(null); closeInfo(); closeContextMenu(); } });
   initSearch();
   initUI();
@@ -479,6 +487,7 @@ function showInfo(f, clickLL) {
   const uat = uatAt(...ll);
   if (f && !d.rows.some(([k]) => k === "UAT") && uat) d.rows.push(["UAT", uat.name]);
   const osm = osmLink(d.osm);
+  const isPlace = f?.layer?.id === "places" && f?.properties?.name;
   box.innerHTML = `
     <div class="info-h">
       ${d.icon ? `<img src="${d.icon}" alt="">` : ""}
@@ -490,7 +499,8 @@ function showInfo(f, clickLL) {
     ${coordsBlock(ll)}
     <div class="info-a">
       <button class="btn primary" data-act="analyze">${ICON.target}Analizează punctul</button>
-      ${uat ? `<button class="btn commune-trigger" data-act="commune">${ICON.ext}Harta comunei · ${esc(uat.name)}</button>` : ""}
+      ${isPlace ? `<button class="btn" data-act="focus-place">${ICON.ext}Focalizează satul · ${esc(f.properties.name)}</button>` : ""}
+      ${uat ? `<button class="btn commune-trigger" data-act="commune">${ICON.ext}Focalizează UAT · ${esc(uat.name)}</button>` : ""}
       ${extLinks(ll)}
       ${osm ? `<a class="btn" href="${osm}" target="_blank" rel="noopener">${ICON.ext}OSM</a>` : ""}
     </div>`;
@@ -503,6 +513,9 @@ function showInfo(f, clickLL) {
     if (b.dataset.copy) copy(b.dataset.copy);
     if (b.dataset.act === "close") closeInfo();
     if (b.dataset.act === "analyze") analyzePoint(ll);
+    if (b.dataset.act === "focus-place" && isPlace) {
+      state.focusPlace?.({ name: f.properties.name, lon: ll[0], lat: ll[1], uat: uat?.name });
+    }
     if (b.dataset.act === "commune") openCommuneMap({ uat, state, icons });
   };
 }
@@ -863,10 +876,13 @@ function openContextMenu(e) {
   const m = $("#ctx");
   const s = fmtStereo(...ll);
   const uat = uatAt(...ll);
+  const nearP = nearestPlace(ll);
+  const nearPlace = nearP && nearP.d <= 1200 ? nearP.it : null;
   m.innerHTML = `<div class="hd">${fmtLatLon(...ll)}</div>
     <button data-act="analyze">${ICON.target}Analizează punctul</button>
     <button data-act="info">${ICON.info}Coordonate și UAT</button>
-    ${uat ? `<button data-act="commune">${ICON.ext}Harta comunei · ${esc(uat.name)}</button>` : ""}
+    ${nearPlace ? `<button data-act="focus-place">${ICON.ext}Focalizează satul · ${esc(nearPlace.label)}</button>` : ""}
+    ${uat ? `<button data-act="commune">${ICON.ext}Focalizează UAT · ${esc(uat.name)}</button>` : ""}
     <button data-act="measure">${ICON.ruler}Măsoară de aici</button>
     <hr>
     <button data-copy="${fmtLatLon(...ll)}">${ICON.copy}Copiază WGS84</button>
@@ -886,6 +902,9 @@ function openContextMenu(e) {
     if (b.dataset.copy) copy(b.dataset.copy);
     if (b.dataset.act === "analyze") analyzePoint(ll);
     if (b.dataset.act === "info") showInfo(null, ll);
+    if (b.dataset.act === "focus-place" && nearPlace) {
+      state.focusPlace?.({ name: nearPlace.label, lon: nearPlace.lon, lat: nearPlace.lat, uat: uat?.name });
+    }
     if (b.dataset.act === "commune") openCommuneMap({ uat, state, icons });
     if (b.dataset.act === "measure") { setMode("measure"); addMeasurePoint(ll); }
     if (b.dataset.act === "gmaps") window.open(`https://www.google.com/maps/search/?api=1&query=${ll[1].toFixed(6)},${ll[0].toFixed(6)}`, "_blank", "noopener");
@@ -933,9 +952,43 @@ function itemCount(item) {
   return null;
 }
 
+function applyPreset(presetId) {
+  const p = LAYER_PRESETS.find((x) => x.id === presetId);
+  if (!p) return;
+  const set = p.layers ? new Set(p.layers) : null;
+  for (const g of LAYER_GROUPS) {
+    for (const it of g.items) {
+      state.visible[it.id] = set ? set.has(it.id) : true;
+    }
+  }
+  applyStyle();
+  renderLayerPanel();
+}
+
+function activePresetId() {
+  const allIds = [];
+  for (const g of LAYER_GROUPS) for (const it of g.items) allIds.push(it.id);
+  for (const p of LAYER_PRESETS) {
+    if (!p.layers) {
+      if (allIds.every((id) => state.visible[id])) return p.id;
+      continue;
+    }
+    const set = new Set(p.layers);
+    if (allIds.every((id) => Boolean(state.visible[id]) === set.has(id))) return p.id;
+  }
+  return "";
+}
+
 function renderLayerPanel() {
   const el = $("#tab-straturi");
-  el.innerHTML = LAYER_GROUPS.map((g) => {
+  const curPreset = activePresetId();
+  const presetsHtml = `<div class="grp preset-grp">
+    <div class="grp-h"><h2>Profiluri CJSU (1-click)</h2></div>
+    <div class="preset-chips">${LAYER_PRESETS.map((p) =>
+      `<button type="button" class="chip" data-preset="${esc(p.id)}" aria-pressed="${curPreset === p.id}" title="${esc(p.hint || "")}">${esc(p.label)}</button>`
+    ).join("")}</div>
+  </div>`;
+  el.innerHTML = presetsHtml + LAYER_GROUPS.map((g) => {
     return `<div class="grp" data-group="${g.id}">
       <div class="grp-h"><h2>${g.label}</h2><button type="button" data-grp="${g.id}"></button></div>
       ${g.items.map((it) => {
@@ -958,6 +1011,11 @@ function renderLayerPanel() {
     renderLayerPanelHeaders();
   };
   el.onclick = (e) => {
+    const pb = e.target.closest("button[data-preset]");
+    if (pb) {
+      applyPreset(pb.dataset.preset);
+      return;
+    }
     const b = e.target.closest("button[data-grp]");
     if (!b) return;
     const g = LAYER_GROUPS.find((x) => x.id === b.dataset.grp);

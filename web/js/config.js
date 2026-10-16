@@ -43,35 +43,80 @@ export const BUILDING = {
 };
 
 // Panoul de straturi: grupuri → elemente. Fiecare element are un id unic de vizibilitate.
+// Implicit sunt pornite doar straturile de bază pentru ședințele CJSU (drumuri principale, UAT, localități, ape principale, subunități ISU).
 export const LAYER_GROUPS = [
   { id: "interventie", label: "Intervenție", items: [
-    { id: "hidranti", label: "Hidranți ISU", kind: "hydrant", on: true },
-    { id: "hidranti_defecti", label: "Hidranți nefuncționali", kind: "hydrant", on: true },
-    { id: "poi:pompieri", on: true }, { id: "poi:ambulanta", on: true }, { id: "poi:spital", on: true },
+    { id: "poi:pompieri", on: true }, { id: "poi:ambulanta", on: false }, { id: "poi:spital", on: false },
     { id: "poi:politie", on: false }, { id: "poi:jandarmerie", on: false }, { id: "poi:frontiera", on: false },
-    { id: "poi:sursa_apa", on: true }, { id: "poi:medical", on: false },
+    { id: "hidranti", label: "Hidranți ISU", kind: "hydrant", on: false },
+    { id: "hidranti_defecti", label: "Hidranți nefuncționali", kind: "hydrant", on: false },
+    { id: "poi:sursa_apa", on: false }, { id: "poi:medical", on: false },
   ]},
   { id: "institutii", label: "Instituții și obiective", items: [
     { id: "poi:primarie", on: false }, { id: "poi:scoala", on: false }, { id: "poi:gradinita", on: false },
-    { id: "poi:carburant", on: false }, { id: "poi:baraj", on: true },
+    { id: "poi:carburant", on: false }, { id: "poi:baraj", on: false },
   ]},
   { id: "drumuri", label: "Căi de comunicație", items: [
-    ...Object.keys(ROAD).map((k) => ({ id: "road:" + k, on: k !== "local" && k !== "service" })),
-    { id: "rail", label: "Căi ferate", on: true },
+    ...Object.keys(ROAD).map((k) => ({ id: "road:" + k, on: k === "dn" || k === "dj" || k === "dc" })),
+    { id: "rail", label: "Căi ferate", on: false },
     { id: "roadlabels", label: "Numere și nume de drumuri", on: true },
   ]},
   { id: "ape", label: "Hidrografie", items: [
     { id: "water", label: "Lacuri și acumulări", on: true },
     { id: "rivers", label: "Râuri și canale", on: true },
-    { id: "streams", label: "Pâraie și șanțuri", on: true },
-    { id: "dams", label: "Baraje (contur)", on: true },
+    { id: "streams", label: "Pâraie și șanțuri", on: false },
+    { id: "dams", label: "Baraje (contur)", on: false },
   ]},
-  { id: "cladiri", label: "Clădiri", items: Object.keys(BUILDING).map((k) => ({ id: "bld:" + k, on: true })) },
+  { id: "cladiri", label: "Clădiri", items: Object.keys(BUILDING).map((k) => ({ id: "bld:" + k, on: false })) },
   { id: "teritoriu", label: "Teritoriu", items: [
     { id: "places", label: "Localități (nume)", on: true },
     { id: "uat", label: "Limite UAT", on: true },
-    { id: "landuse", label: "Păduri și folosința terenului", on: true },
+    { id: "landuse", label: "Păduri și folosința terenului", on: false },
   ]},
+];
+
+export const LAYER_PRESETS = [
+  {
+    id: "baza",
+    label: "Hartă CJSU (Bază)",
+    short: "Bază CJSU",
+    layers: ["uat", "places", "road:dn", "road:dj", "road:dc", "roadlabels", "water", "rivers", "poi:pompieri"],
+  },
+  {
+    id: "snow",
+    label: "Iarnă / Înzăpezire",
+    short: "❄️ Înzăpezire",
+    layers: ["uat", "places", "road:dn", "road:dj", "road:dc", "road:street", "roadlabels", "rail",
+      "poi:pompieri", "poi:ambulanta", "poi:spital", "poi:politie", "poi:jandarmerie", "poi:frontiera"],
+  },
+  {
+    id: "flood",
+    label: "Inundații / Hidrologie",
+    short: "🌊 Inundații",
+    layers: ["uat", "places", "water", "rivers", "streams", "dams", "poi:baraj", "road:dn", "road:dj", "road:dc", "road:street", "roadlabels",
+      "bld:casa", "bld:bloc", "bld:public", "poi:pompieri", "poi:ambulanta", "poi:jandarmerie", "poi:primarie", "poi:scoala"],
+  },
+  {
+    id: "fire",
+    label: "Incendiu Major / Pădure",
+    short: "🔥 Incendiu",
+    layers: ["uat", "places", "hidranti", "hidranti_defecti", "poi:sursa_apa", "poi:pompieri", "poi:ambulanta", "poi:spital",
+      "landuse", "water", "rivers", "road:dn", "road:dj", "road:dc", "road:street", "road:track", "roadlabels",
+      "bld:bloc", "bld:public", "bld:industrial", "bld:comercial", "bld:casa"],
+  },
+  {
+    id: "storm",
+    label: "Furtună / Vijelie",
+    short: "⛈️ Furtună",
+    layers: ["uat", "places", "road:dn", "road:dj", "road:dc", "road:street", "roadlabels", "landuse", "water", "rivers",
+      "poi:pompieri", "poi:ambulanta", "poi:spital", "poi:politie", "poi:jandarmerie", "bld:bloc", "bld:public"],
+  },
+  {
+    id: "all",
+    label: "Toate straturile",
+    short: "Toate",
+    layers: LAYER_GROUPS.flatMap((g) => g.items.map((it) => it.id)),
+  },
 ];
 
 export const LABELS = {

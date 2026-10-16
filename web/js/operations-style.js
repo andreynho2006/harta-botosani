@@ -1,20 +1,29 @@
 const emptyCollection = () => ({ type: 'FeatureCollection', features: [] });
 const isGeometry = type => ['==', ['geometry-type'], type];
-const isThreat = ['==', ['get', 'kind'], 'threat'];
+const isThreat = ['in', ['get', 'kind'], ['literal', ['threat', 'evacuated']]];
 const resolved = ['==', ['get', 'status'], 'resolved'];
 const color = ['case', resolved, '#23834b', ['match', ['get', 'kind'],
   'blocked', '#080808', 'flooded', '#1677cf', 'damaged', '#e97516',
-  'snow', '#7773cf', 'threat', '#d99810', 'fire', '#d62f37',
-  'command', '#6544ad', 'shelter', '#21896b', '#c94949']];
+  'snow', '#6b4fd8', 'threat', '#d99810', 'fire', '#d62f37',
+  'evacuated', '#c92a2a', 'isolated', '#b5179e', 'power', '#d97706',
+  'command', '#6544ad', 'isu', '#c8102e', 'police', '#1d4ed8',
+  'medical', '#e03131', 'utility', '#d97706', 'shelter', '#21896b', '#c94949']];
 const width = (extra = 0) => ['interpolate', ['linear'], ['zoom'], 8, 4 + extra, 14, 9 + extra, 19, 22 + extra];
 const rounded = { 'line-cap': 'round', 'line-join': 'round' };
+
+const ALERT_COLORS = {
+  yellow: '#eab308',
+  orange: '#ea580c',
+  red: '#dc2626',
+  'ro-alert': '#dc2626',
+};
 
 /** Decorate a freshly built base style with operational incident overlays. */
 export function decorateOperationalStyle(style, state = {}) {
   const operations = state.operations ?? {};
   style.sources ??= {};
   style.layers ??= [];
-  for (const key of ['features', 'draft', 'selection', 'mask']) {
+  for (const key of ['features', 'draft', 'selection', 'mask', 'endpoints']) {
     const data = key === 'mask' && !operations.focusGeometry ? emptyCollection() : operations[key] ?? emptyCollection();
     style.sources[`ops-${key}`] = { type: 'geojson', data };
   }
@@ -35,11 +44,19 @@ export function decorateOperationalStyle(style, state = {}) {
   });
   if (operations.focusGeometry) style.layers.push(...baseSymbols);
 
+  const alertColor = ALERT_COLORS[operations.alertCode] || '#008b9e';
+  const hasAlertTint = Boolean(operations.tintAreas && ALERT_COLORS[operations.alertCode]);
+
+  style.layers.push({
+    id: 'ops-selection-fill', type: 'fill', source: 'ops-selection',
+    paint: { 'fill-color': alertColor, 'fill-opacity': hasAlertTint ? (state.theme === 'noapte' ? 0.16 : 0.13) : 0 },
+  });
+
   style.layers.push(
     { id: 'ops-selection', type: 'line', source: 'ops-selection', layout: rounded,
-      paint: { 'line-color': '#008b9e', 'line-width': 3, 'line-dasharray': [3, 2] } },
+      paint: { 'line-color': hasAlertTint ? alertColor : '#008b9e', 'line-width': 3, 'line-dasharray': [3, 2] } },
     { id: 'ops-features-fill', type: 'fill', source: 'ops-features', filter: isGeometry('Polygon'),
-      paint: { 'fill-color': color, 'fill-opacity': ['case', resolved, 0.12, 0.22] } },
+      paint: { 'fill-color': color, 'fill-opacity': ['case', resolved, 0.12, 0.24] } },
     { id: 'ops-features-boundary', type: 'line', source: 'ops-features', layout: rounded,
       filter: ['all', isGeometry('Polygon'), ['!', isThreat]],
       paint: { 'line-color': color, 'line-width': 3, 'line-opacity': ['case', resolved, 0.65, 1] } },
@@ -53,11 +70,35 @@ export function decorateOperationalStyle(style, state = {}) {
     { id: 'ops-features-point', type: 'circle', source: 'ops-features', filter: isGeometry('Point'),
       paint: { 'circle-radius': ['interpolate', ['linear'], ['zoom'], 8, 7, 14, 10, 19, 15],
         'circle-color': color, 'circle-stroke-color': '#ffffff', 'circle-stroke-width': 3 } },
+    { id: 'ops-endpoints-circle', type: 'circle', source: 'ops-endpoints',
+      paint: {
+        'circle-radius': ['interpolate', ['linear'], ['zoom'], 8, 4.5, 14, 6.5, 18, 9],
+        'circle-color': ['case', ['==', ['get', 'status'], 'resolved'], '#23834b', '#ffffff'],
+        'circle-stroke-color': ['case', ['==', ['get', 'status'], 'resolved'], '#ffffff', '#080808'],
+        'circle-stroke-width': 2.5,
+      } },
+    { id: 'ops-endpoints-label', type: 'symbol', source: 'ops-endpoints', minzoom: 11,
+      layout: {
+        'text-field': ['get', 'label'],
+        'text-font': ['Noto Sans Medium'],
+        'text-size': 11,
+        'text-anchor': 'top',
+        'text-offset': [0, 0.7],
+        'text-optional': true,
+      },
+      paint: {
+        'text-color': state.theme === 'noapte' ? '#ffffff' : '#111827',
+        'text-halo-color': state.theme === 'noapte' ? '#161a1f' : '#ffffff',
+        'text-halo-width': 1.8,
+      } },
+  );
+
+  style.layers.push(
     { id: 'ops-features-label', type: 'symbol', source: 'ops-features',
       layout: { 'text-field': ['concat', ['coalesce', ['get', 'title'], ['get', 'road'], ''], ' · ',
           ['match', ['get', 'status'], 'threat', 'Potențial', 'confirmed', 'Confirmat', 'resolved', 'Remediat', 'Raportat']],
         'text-font': ['Noto Sans Medium'], 'text-size': operations.presenting ? operations.labelSize || 18 : 14, 'text-anchor': 'bottom', 'text-offset': [0, -1.1],
-        'text-allow-overlap': true, 'text-ignore-placement': true, 'text-max-width': 20 },
+        'text-allow-overlap': true, 'text-ignore-placement': true, 'text-max-width': 22 },
       paint: { 'text-color': state.theme === 'noapte' ? '#ffffff' : '#15202a',
         'text-halo-color': state.theme === 'noapte' ? '#161a1f' : '#ffffff', 'text-halo-width': 2 } },
     { id: 'ops-draft-fill', type: 'fill', source: 'ops-draft', filter: isGeometry('Polygon'),

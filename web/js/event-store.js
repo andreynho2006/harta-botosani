@@ -1,7 +1,11 @@
 // Local, portable incident archive. No credentials or base-map data are stored.
 export const EVENT_STORAGE_KEY = 'hb.events.v1';
 export const EVENT_TYPES = Object.freeze(Object.fromEntries(['fire', 'flood', 'snow', 'storm', 'other'].map(key => [key, key])));
-export const MARK_TYPES = Object.freeze(Object.fromEntries(['blocked', 'flooded', 'damaged', 'snow', 'threat', 'fire', 'command', 'shelter'].map(key => [key, key])));
+export const MARK_TYPES = Object.freeze(Object.fromEntries([
+  'blocked', 'flooded', 'damaged', 'snow', 'threat', 'fire',
+  'evacuated', 'isolated', 'power',
+  'command', 'isu', 'police', 'medical', 'utility', 'shelter',
+].map(key => [key, key])));
 const MAX_EVENTS = 500;
 const MAX_FEATURES = 2000;
 const MAX_VERTICES = 100000;
@@ -71,13 +75,16 @@ function feature(value, budget) {
   if (!STATUSES.includes(status)) throw new Error('Unknown marker status.');
   const kmFrom = kilometer(p.kmFrom), kmTo = kilometer(p.kmTo);
   if (kmFrom !== null && kmTo !== null && kmTo < kmFrom) throw new Error('Road kilometers are reversed.');
+  const lengthKm = kilometer(p.lengthKm);
+  const props = {
+    id: identifier(p.id), kind: p.kind, status, title: string(p.title, 200),
+    road: string(p.road, 100), kmFrom, kmTo, source: string(p.source, 300),
+    observedAt: p.observedAt ? timestamp(p.observedAt) : '', notes: string(p.notes, 5000),
+  };
+  if (lengthKm !== null) props.lengthKm = lengthKm;
   return {
     type: 'Feature', geometry: geometry(value.geometry, budget),
-    properties: {
-      id: identifier(p.id), kind: p.kind, status, title: string(p.title, 200),
-      road: string(p.road, 100), kmFrom, kmTo, source: string(p.source, 300),
-      observedAt: p.observedAt ? timestamp(p.observedAt) : '', notes: string(p.notes, 5000),
-    },
+    properties: props,
   };
 }
 
@@ -89,6 +96,8 @@ export function sanitizeEvent(value, budget = { vertices: 0 }) {
   const alert = object(value.alert ?? {}, 'alert');
   const areas = value.areas ?? [];
   if (!Array.isArray(areas) || areas.length > 1000) throw new Error('Invalid selected areas.');
+  const places = value.places ?? [];
+  if (!Array.isArray(places) || places.length > 2000) throw new Error('Invalid selected places.');
   const collection = object(value.features, 'feature collection');
   if (collection.type !== 'FeatureCollection' || !Array.isArray(collection.features) || collection.features.length > MAX_FEATURES) throw new Error('Invalid or oversized feature collection.');
   const features = collection.features.map(f => feature(f, budget));
@@ -106,13 +115,17 @@ export function sanitizeEvent(value, budget = { vertices: 0 }) {
     if (!/^[a-zA-Z0-9_:-]{1,100}$/.test(key) || ['__proto__', 'constructor', 'prototype'].includes(key) || typeof enabled !== 'boolean') throw new Error('Invalid layer visibility.');
     visible[key] = enabled;
   }
-  return {
+  const sanitized = {
     id: identifier(value.id), title, type: value.type,
     createdAt: timestamp(value.createdAt), updatedAt: timestamp(value.updatedAt),
     alert: { code: string(alert.code, 80), source: string(alert.source, 300), validFrom: alert.validFrom ? timestamp(alert.validFrom) : '', validTo: alert.validTo ? timestamp(alert.validTo) : '', text: string(alert.text, 5000) },
-    notes: string(value.notes, 10000), areas: [...new Set(areas.map(a => string(a, 200)))],
+    notes: string(value.notes, 10000), areas: [...new Set(areas.map(a => string(a, 200)).filter(Boolean))],
     features: { type: 'FeatureCollection', features }, view, visible,
   };
+  if (places.length) sanitized.places = [...new Set(places.map(p => string(p, 200)).filter(Boolean))];
+  if (typeof value.isolateArea === 'boolean') sanitized.isolateArea = value.isolateArea;
+  if (typeof value.tintAreas === 'boolean') sanitized.tintAreas = value.tintAreas;
+  return sanitized;
 }
 
 export function createEvent(title, type = 'other') {
@@ -162,6 +175,14 @@ export class EventStore {
     if (index < 0) events.push(saved); else events[index] = saved;
     this._write(events);
     return saved;
+  }
+
+  remove(id) {
+    const events = this._read();
+    const filtered = events.filter(item => item.id !== id);
+    if (filtered.length === events.length) return false;
+    this._write(filtered);
+    return true;
   }
 
   exportArchive() { return { format: 'harta-botosani-events', version: 1, exportedAt: new Date().toISOString(), events: this.list() }; }

@@ -10,9 +10,10 @@ Proiect personal. Rulează în browser, pe PC sau laptop.
 - **Fișă la clic** pe orice obiect: categorie, număr drum, pod, tonaj și gabarit (unde există), nivele clădire, adresă, coordonate WGS84 / GMS / Stereo 70.
 - **Analiza unui punct** (clic dreapta): cei mai apropiați hidranți, subunitatea ISU, spitalul, ambulanța și poliția, cu distanță și direcție; clădirile și obiectivele dintr-o rază (50 m – 2 km); rezumat de copiat.
 - **Măsurare** de distanțe, fundal **hartă / satelit**, mod **zi / noapte**, export imagine.
-- **Commune map:** select a point, then choose “Harta comunei” in its details or context menu. A separate map shows the selected administrative territory, with short faded road exits and no neighboring settlement labels. The modal supports zoom, recentering, Escape, and mobile screens; it uses existing data without a map rebuild.
+- **Focalizare UAT și localități pe harta principală:** alege un punct sau o localitate și apasă „Focalizează UAT” sau „Focalizează satul” din fișa de informații ori din meniul contextual (clic dreapta). Harta principală se încadrează pe UAT-urile și satele selectate, cu opțiunea de izolare a conturului direct din bara de sus (fără fereastră modală separată).
+- **Profiluri de straturi CJSU (1-click):** implicit sunt bifate doar straturile esențiale pentru ședință (UAT, localități, DN/DJ/DC, ape, subunități ISU), cu butoane rapide pentru *Hartă CJSU (Bază)*, *❄️ Înzăpezire*, *🌊 Inundații*, *🔥 Incendiu*, *⛈️ Furtună* și *Toate*.
 
-Distanțele sunt în linie dreaptă, nu pe drum.
+Distanțele din analiza unui punct sunt în linie dreaptă, nu pe drum.
 
 ## Cum se actualizează
 
@@ -20,6 +21,7 @@ Distanțele sunt în linie dreaptă, nu pe drum.
 |---|---|---|
 | OpenStreetMap data | manual only | Automatic updates are paused; run the “Date hartă” workflow only when a refresh is wanted. |
 | Lista hidranților | aplicație → Administrare | încarci fișierul (Excel, CSV, GeoJSON, KML), descarci `hidranti.enc` și îl urci în `web/data/` |
+| Baza de date situații CJSU | aplicație → Situații | creezi/editezi situația, apeși **Salvează în JSON (`situatii.json`)** și actualizezi `web/data/situatii.json` |
 | Utilizatori | aplicație → Administrare | adaugi sau resetezi, descarci `users.json` și îl urci în `web/` |
 | Aplicația | `web/` | orice modificare se publică automat (workflow „Site”) |
 
@@ -41,15 +43,23 @@ After publishing a password reset in `web/users.json`, saved sessions require a 
 
 Run `node --test tests/*.test.mjs` and `python3 -m unittest discover -s tests -p 'test_*.py'`. These checks do not download or rebuild map data.
 
-## Operational situations (first version)
+## Situații operative CJSU
 
-Open the **Situații** tab to create an event. Select one or more communes/cities on the main map, or keep the county context. Add affected areas, operational points, or a road section by choosing two endpoints on the same visible road. Road sections follow the connected geometry in the loaded tiles; when a route cannot be established, select a shorter section or zoom in. Kilometer values are descriptive labels supplied by the operator, not automatic geolocation by official chainage.
+În fila **Situații** gestionezi evenimentele operative pentru ședințele Comitetului Județean pentru Situații de Urgență (CJSU):
 
-Blocked road sections are black with a white outline. Every annotation has a reported/potential/confirmed/resolved status, an observation time, source, and notes. Warning text, source, validity, and code are entered manually; this version does not fetch warnings or calculate flood forecasts. Operational times use Europe/Bucharest.
-
-**Salvează situația** stores the event in this browser's local archive. **Exportă situația JSON** exports the current event, including unsaved event changes once all markers are finalized. **Exportă arhiva JSON** includes saved events only. **Importă JSON** validates the complete file before merging, keeps the newer version of matching event IDs, and leaves the existing archive intact on errors. Keep exported files for backup and transfer; this is not a shared server database. The archive contains manually entered operational information, geometries, map view, and layer choices; it does not include login credentials or the ISU hydrant dataset.
-
-**Prezintă** shows the event on the main map with its title, warning, legend, and update time. Escape or **Ieși din prezentare** returns to editing. The previous commune modal remains available independently.
+1. **Marcare drumuri blocate / impracticabile cu negru (`#080808` cu halou alb și borne la capete):**
+   - **Automat după km:** introduci drumul (ex. `DJ29`, `DN29`, `DJ291`, `DJ282`, `DC10`) și kilometrii (ex. de la `km 3` la `km 6`) și apeși **Trasează automat pe hartă**. Drumul este decupat automat pe geometria reală din `web/data/roads.json` (230 de drumuri DN, DJ și DC din județ).
+   - **Automat între 2 localități:** alegi două localități de pe traseul drumului și sectorul dintre ele este trasat automat.
+   - **Cu 2 clicuri pe hartă:** alegi două puncte pe drum la orice nivel de zoom; traseul urmărește geometria drumului și calculează automat km de început, km de sfârșit și lungimea sectorului.
+2. **Zone afectate și forțe în teren:**
+   - Zone inundate, posibil inundabile / amenințate (contur punctat), incendiu de amploare, perimetru de evacuare.
+   - Sate / localități izolate, localități fără curent electric, Punct de Comandă Mobil (PCM), echipaje ISU, filtre IPJ / IJJ, echipaje SAJ / SMURD, utilaje SDN / DJDP / SGA și puncte de adăpostire / evacuare.
+   - Colorare opțională a UAT-urilor selectate în culoarea codului ANM / RO-Alert (galben, portocaliu, roșu).
+3. **Bază de date JSON (`web/data/situatii.json`) și Arhivă:**
+   - La pornire, aplicația încarcă automat evenimentele din `web/data/situatii.json` și le sincronizează cu `localStorage`.
+   - Orice modificare este salvată instant local; butonul **Salvează în JSON (`situatii.json`)** descarcă fișierul JSON actualizat cu toate evenimentele pentru arhivare sau publicare în repository.
+4. **Mod Prezentare CJSU (`Prezintă în ședință`):**
+   - Afișează harta pe tot ecranul cu antetul ședinței, codul ANM / RO-Alert, legenda operativă și un **panou de sinteză CJSU interactiv** (clic pe orice drum blocat, zonă, forță sau UAT centrează harta pe acel element), plus comenzi rapide pentru *Hartă / Satelit*, *Zi / Noapte*, *Izolează zona* și *Încadrează*.
 
 ## Structură
 

@@ -9,8 +9,8 @@
   <title>Harta Botoșani</title>
   <meta name="robots" content="noindex, nofollow">
   <link rel="stylesheet" href="vendor/maplibre-gl.css">
-  <link rel="stylesheet" href="css/app.css?v=20261016-commune">
-  <link rel="stylesheet" href="css/operations.css?v=20261016-2">
+  <link rel="stylesheet" href="css/app.css?v=20261016-cjsu">
+  <link rel="stylesheet" href="css/operations.css?v=20261016-cjsu">
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='1' y='6' width='30' height='20' rx='4' fill='%23c8102e'/%3E%3Ctext x='16' y='21.5' font-family='Arial' font-weight='700' font-size='13' fill='white' text-anchor='middle'%3EBT%3C/text%3E%3C/svg%3E">
   <script>
     try {
@@ -21,7 +21,7 @@
   </script>
   <script src="vendor/proj4.js"></script>
   <script src="vendor/maplibre-gl.js"></script>
-  <script type="module" src="js/main.js?v=20261016-operations"></script>
+  <script type="module" src="js/main.js?v=20261016-cjsu"></script>
 </head>
 <body>
 <div class="login" id="login" hidden>
@@ -74,16 +74,15 @@
     <section class="panel" id="tab-admin" role="tabpanel" hidden></section>
     <section class="panel" id="tab-ajutor" role="tabpanel" hidden>
       <div class="help">
-        <h3>Căutare</h3>
-        <p><b>Situații operative:</b> creează un eveniment din fila „Situații”, alege zona pe harta principală și adaugă marcaje. Pentru un drum, alegi începutul și sfârșitul sectorului; traseul urmărește drumul. Kilometrajul se introduce ca etichetă, fără poziționare automată. Salvează local și exportă JSON pentru păstrarea sau mutarea arhivei.</p>
-        <p>Scrie numele unei localități, străzi, adrese, instituții sau numărul unui hidrant. Funcționează și fără diacritice.</p>
-        <p>Poți căuta și coordonate, de exemplu de la un apel 112:</p>
-        <p><code>47.7412, 26.6631</code> &nbsp; <code>47°44'28"N 26°39'47"E</code> &nbsp; <code>694000 624000</code> (Stereo 70)</p>
-        <h3>Analiza unui punct</h3>
-        <p>Clic dreapta pe hartă (pe telefon: <b>apasă lung</b>) și alege <b>Analizează punctul</b>. Vezi cei mai apropiați hidranți, subunitatea ISU, spitalul și poliția, plus clădirile și obiectivele dintr-o rază aleasă.</p>
-        <p>Distanțele sunt <b>în linie dreaptă</b>, nu pe drum.</p>
-        <h3>Harta unei comune</h3>
-        <p>Alege un punct sau o localitate, apoi apasă <b>Harta comunei</b> în fișa de informații. Opțiunea apare și la clic dreapta sau apăsare lungă. Harta separată păstrează teritoriul UAT și satele din interior; exteriorul este ascuns, cu ieșirile drumurilor estompate.</p>
+        <h3>Situații operative CJSU</h3>
+        <p>În fila <b>Situații</b> creezi sau încarci evenimente operative (înzăpeziri, inundații, incendii de amploare, coduri ANM / RO-Alert) și le prezinți pe tot ecranul în ședințele CJSU.</p>
+        <p><b>Marcare drumuri cu negru:</b> scrie indicativul drumului (ex. <code>DJ29</code>, <code>DN29</code>, <code>DJ282</code>) și kilometrii (ex. de la <code>km 3</code> la <code>km 6</code>) sau alege două localități de pe traseu și apasă <b>Trasează automat pe hartă</b>. Poți marca un sector și prin 2 clicuri direct pe hartă.</p>
+        <p><b>Bază de date JSON:</b> situațiile sunt încărcate din <code>data/situatii.json</code> și salvate instant în browser; folosește <b>Salvează în JSON</b> pentru a descărca baza de date actualizată cu toate evenimentele.</p>
+        <h3>Focalizare UAT și localități (fără fereastră separată)</h3>
+        <p>Alege <b>Focalizează UAT</b> sau <b>Focalizează satul</b> din fișa de informații, din meniul de clic dreapta ori din fila „Situații”. Harta principală se încadrează direct pe comunele și satele afectate, cu opțiunea <b>Izolează conturul</b> în bara de sus.</p>
+        <h3>Căutare și analiza unui punct</h3>
+        <p>Scrie numele unei localități, străzi, instituții, numărul unui hidrant sau coordonate 112: <code>47.7412, 26.6631</code> · <code>47°44'28"N 26°39'47"E</code> · <code>694000 624000</code> (Stereo 70).</p>
+        <p>Clic dreapta pe hartă (pe telefon: <b>apasă lung</b>) și alege <b>Analizează punctul</b> pentru a vedea cei mai apropiați hidranți, subunitatea ISU, spitalul și poliția.</p>
         <h3 class="desk-only">Scurtături</h3>
         <div class="keys desk-only">
           <kbd>/</kbd><span>Caută</span>

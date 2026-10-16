@@ -89,9 +89,13 @@ export function buildCommuneStyle(uat, state) {
   return style;
 }
 
-// The main map and its camera stay untouched. Create this map only while needed.
+// Direct main-map focus replaces the separate modal when state.focusUat is wired.
 export function openCommuneMap({ uat, state, icons }) {
   if (!uat?.feature?.geometry) return;
+  if (typeof state?.focusUat === "function") {
+    state.focusUat(uat);
+    return;
+  }
   const el = getDialog();
   if (el.open) return;
   const geometry = uat.feature.geometry;

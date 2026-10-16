@@ -64,6 +64,11 @@ test('focus masks exterior labels while retaining original category filters and 
 test('stale exterior mask is cleared when focus is disabled and operational labels use bundled font', () => {
   const style = decorateOperationalStyle(baseStyle(), { operations: { mask: fc([{ geometry: boundary }]), focusGeometry: null } });
   assert.deepEqual(style.sources['ops-mask'].data, fc([]));
+  assert.deepEqual(style.sources['ops-endpoints'].data, fc([]));
   assert.deepEqual(layer(style, 'ops-features-label').layout['text-font'], ['Noto Sans Medium']);
+  assert.ok(layer(style, 'ops-endpoints-circle'));
+  assert.ok(layer(style, 'ops-endpoints-label'));
+  assert.ok(layer(style, 'ops-selection-fill'));
   assert.ok(style.layers.filter(item => item.source === 'ops-draft').every(item => item.id.startsWith('ops-draft')));
 });
+

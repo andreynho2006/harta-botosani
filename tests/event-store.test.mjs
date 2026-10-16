@@ -136,3 +136,19 @@ test('archive size and coordinate budgets prevent oversized merges', () => {
   assert.throws(() => store.save(event), /reversed/);
   assert.equal(store.list().length, 0);
 });
+
+test('remove deletes events and bundled situatii.json archive imports cleanly with CJSU fields', async () => {
+  const fs = await import('node:fs');
+  const store = new EventStore(memoryStorage());
+  const raw = fs.readFileSync(new URL('../web/data/situatii.json', import.meta.url), 'utf8');
+  const res = store.importArchive(raw);
+  assert.ok(res.imported >= 1);
+  const first = store.list()[0];
+  assert.ok(first.places.includes('Huțani'));
+  assert.equal(first.tintAreas, true);
+  assert.equal(first.features.features[0].properties.lengthKm, 3);
+  assert.equal(store.remove(first.id), true);
+  assert.equal(store.remove('non-existent'), false);
+  assert.equal(store.list().length, 0);
+});
+
