@@ -7,6 +7,7 @@ import { ensureLogin, decryptJSON, logout } from "./auth.js";
 import { renderAdmin } from "./admin.js";
 import { formatRestriction } from "./restrictions.js";
 import { openCommuneMap, isCommuneMapOpen } from "./commune.js";
+import { initOperations } from "./operations.js";
 import {
   distance, bearing, direction, circle, fmtDistance, fmtLatLon, fmtStereo, fmtDMS,
   parseCoordinates, makeUatLookup,
@@ -41,6 +42,7 @@ const search = new SearchIndex();
 let uatAt = () => null;
 let stats = null;
 let map;
+let operations = null;
 const icons = buildIcons();
 
 // ------------------------------------------------------------------ pornire
@@ -141,6 +143,8 @@ async function init() {
   renderAnalysis();
   initSheet();
   initMap();
+  operations = initOperations({ map, state, uatAt, toast, selectTab, setSheet, applyStyle, renderLayerPanel,
+    stopOtherTools: () => { setMode(null); closeInfo(); closeContextMenu(); } });
   initSearch();
   initUI();
   if (session.role === "admin") {
@@ -354,6 +358,7 @@ const PICK_ORDER = ["hydrant-icon", "hydrant-dot", "poi-major", "poi-minor", "pi
 function onMapClick(e) {
   if (Date.now() < suppressClickUntil) return;
   closeContextMenu();
+  if (operations?.handleMapClick(e)) return;
   const ll = [e.lngLat.lng, e.lngLat.lat];
   if (state.mode === "measure") return addMeasurePoint(ll);
   if (state.mode === "pick") { setMode(null); return analyzePoint(ll); }
@@ -776,6 +781,7 @@ function clearAnalysis() {
 // ------------------------------------------------------------------ măsurare
 
 function setMode(mode) {
+  operations?.cancelDrawing();
   if (state.mode === "measure" && mode !== "measure") finishMeasure(true);
   state.mode = mode;
   $("#map").classList.toggle("picking", !!mode);
@@ -1061,7 +1067,7 @@ function initSearch() {
 function selectTab(name) {
   if (isMobile() && $(".side").dataset.sheet === "peek") setSheet("half");
   for (const b of document.querySelectorAll(".tabs button")) b.setAttribute("aria-selected", b.dataset.tab === name);
-  for (const t of ["straturi", "analiza", "ajutor", "admin"]) $("#tab-" + t).hidden = t !== name;
+  for (const t of ["straturi", "situatii", "analiza", "ajutor", "admin"]) $("#tab-" + t).hidden = t !== name;
 }
 
 let toastTimer = 0;
@@ -1151,6 +1157,7 @@ function initUI() {
 
   document.addEventListener("keydown", (e) => {
     if (isCommuneMapOpen()) return;
+    if (operations?.handleKey(e)) return;
     const typing = e.target.matches("input, textarea, select");
     if (e.key === "Escape") {
       closeContextMenu();

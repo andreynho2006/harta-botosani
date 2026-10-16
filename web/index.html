@@ -10,6 +10,7 @@
   <meta name="robots" content="noindex, nofollow">
   <link rel="stylesheet" href="vendor/maplibre-gl.css">
   <link rel="stylesheet" href="css/app.css?v=20261016-commune">
+  <link rel="stylesheet" href="css/operations.css?v=20261016-2">
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='1' y='6' width='30' height='20' rx='4' fill='%23c8102e'/%3E%3Ctext x='16' y='21.5' font-family='Arial' font-weight='700' font-size='13' fill='white' text-anchor='middle'%3EBT%3C/text%3E%3C/svg%3E">
   <script>
     try {
@@ -20,7 +21,7 @@
   </script>
   <script src="vendor/proj4.js"></script>
   <script src="vendor/maplibre-gl.js"></script>
-  <script type="module" src="js/main.js?v=20261016-commune"></script>
+  <script type="module" src="js/main.js?v=20261016-operations"></script>
 </head>
 <body>
 <div class="login" id="login" hidden>
@@ -61,17 +62,20 @@
     <div class="sheet-grip" id="sheet-grip" aria-hidden="true"><span></span></div>
     <nav class="tabs" role="tablist">
       <button role="tab" id="tb-straturi" data-tab="straturi" aria-selected="true">Straturi</button>
+      <button role="tab" id="tb-situatii" data-tab="situatii" aria-selected="false">Situații</button>
       <button role="tab" id="tb-analiza" data-tab="analiza" aria-selected="false"><span class="t-long">Analiză punct</span><span class="t-short">Analiză</span></button>
       <button role="tab" id="tb-ajutor" data-tab="ajutor" aria-selected="false">Ajutor</button>
       <button role="tab" id="tb-admin" data-tab="admin" aria-selected="false" hidden><span class="t-long">Administrare</span><span class="t-short">Admin</span></button>
     </nav>
 
     <section class="panel" id="tab-straturi" role="tabpanel"></section>
+    <section class="panel" id="tab-situatii" role="tabpanel" hidden></section>
     <section class="panel" id="tab-analiza" role="tabpanel" hidden></section>
     <section class="panel" id="tab-admin" role="tabpanel" hidden></section>
     <section class="panel" id="tab-ajutor" role="tabpanel" hidden>
       <div class="help">
         <h3>Căutare</h3>
+        <p><b>Situații operative:</b> creează un eveniment din fila „Situații”, alege zona pe harta principală și adaugă marcaje. Pentru un drum, alegi începutul și sfârșitul sectorului; traseul urmărește drumul. Kilometrajul se introduce ca etichetă, fără poziționare automată. Salvează local și exportă JSON pentru păstrarea sau mutarea arhivei.</p>
         <p>Scrie numele unei localități, străzi, adrese, instituții sau numărul unui hidrant. Funcționează și fără diacritice.</p>
         <p>Poți căuta și coordonate, de exemplu de la un apel 112:</p>
         <p><code>47.7412, 26.6631</code> &nbsp; <code>47°44'28"N 26°39'47"E</code> &nbsp; <code>694000 624000</code> (Stereo 70)</p>

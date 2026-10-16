@@ -1,0 +1,134 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import { snapToRoad, buildRoadSegment } from '../web/js/road-sketch.js';
+
+const A = [26, 47], B = [26.01, 47], C = [26.01, 47.01];
+const road = (coordinates, properties = { osm: 'w1', ref: 'DJ 208', name: 'Main Road', cls: 'dj' }) => ({
+  type: 'Feature', properties, geometry: { type: 'LineString', coordinates },
+});
+const route = (start, end, roads) => buildRoadSegment(snapToRoad(start, roads), snapToRoad(end, roads), roads);
+const close = (a, b, epsilon = 1e-7) => {
+  assert.equal(a.length, b.length);
+  for (let i = 0; i < a.length; i++) assert.ok(Math.abs(a[i] - b[i]) < epsilon, `${a} != ${b}`);
+};
+
+test('snap projects to real geometry and reports distance in meters', () => {
+  const roads = [road([A, B])];
+  const hit = snapToRoad([26.005, 47.0005], roads);
+  close(hit.coordinate, [26.005, 47]);
+  assert.ok(hit.distance > 55 && hit.distance < 56);
+  assert.deepEqual(hit.road, roads[0].properties);
+  assert.equal(snapToRoad([26.005, 47.001], roads), null);
+  assert.equal(snapToRoad([26.005, 47.0005], roads, 40), null);
+});
+
+test('same-edge selections split the graph at the selected points', () => {
+  const result = route([26.002, 47], [26.008, 47], [road([A, B])]);
+  assert.equal(result.type, 'LineString');
+  assert.equal(result.coordinates.length, 2);
+  close(result.coordinates[0], [26.002, 47]);
+  close(result.coordinates[1], [26.008, 47]);
+});
+
+test('routes follow bends across matching refs and preserve the selected direction', () => {
+  const roads = [road([A, B]), road([B, C], { osm: 'w2', ref: 'dj208', name: 'Other Label', cls: 'dj' })];
+  const result = route([26.002, 47], [26.01, 47.008], roads);
+  assert.equal(result.coordinates.length, 3);
+  close(result.coordinates[1], B);
+  const reverse = route([26.01, 47.008], [26.002, 47], roads);
+  assert.deepEqual(reverse.coordinates.map((p) => p.map((v) => +v.toFixed(8))), result.coordinates.toReversed().map((p) => p.map((v) => +v.toFixed(8))));
+});
+
+test('normalized names connect without a ref and unnamed roads require a matching osm id', () => {
+  const roads = [road([A, B], { osm: 'w1', name: 'Șoseaua  Mare' }), road([B, C], { osm: 'w2', name: 'soseaua mare' })];
+  assert.ok(route(A, C, roads));
+  const unnamed = [road([A, B], { osm: 'w8' }), road([B, C], { osm: 'w8' })];
+  assert.ok(route(A, C, unnamed));
+  assert.equal(route(A, C, [unnamed[0], road([B, C], { osm: 'w9' })]), null);
+});
+
+test('matching names cannot connect roads with conflicting or missing references', () => {
+  const first = road([A, B], { osm: 'w1', ref: 'DJ208', name: 'Main Road' });
+  for (const ref of ['DN29', '', null]) {
+    const second = road([B, C], { osm: 'w2', ref, name: 'Main Road' });
+    assert.equal(route(A, C, [first, second]), null);
+    assert.equal(route(C, A, [first, second]), null);
+  }
+});
+
+test('same-name bridges with a conflicting reference are excluded from the graph', () => {
+  const roads = [
+    road([A, [26.004, 47]], { osm: 'w1', ref: 'DJ208', name: 'Main Road' }),
+    road([[26.004, 47], [26.006, 47]], { osm: 'w2', ref: 'DN29', name: 'Main Road' }),
+    road([[26.006, 47], B], { osm: 'w3', ref: 'DJ208', name: 'Main Road' }),
+  ];
+  assert.equal(route([26.002, 47], [26.008, 47], roads), null);
+});
+
+test('same OSM identity takes precedence over missing or conflicting references', () => {
+  for (const ref of ['DN29', null]) {
+    const roads = [
+      road([A, B], { osm: 'w1', ref: 'DJ208', name: 'First Name' }),
+      road([B, C], { osm: 'w1', ref, name: 'Second Name' }),
+    ];
+    assert.ok(route(A, C, roads));
+  }
+});
+
+test('a shared normalized reference in a multiple-reference value is sufficient', () => {
+  const roads = [
+    road([A, B], { osm: 'w1', ref: 'DJ 208; DC 12' }),
+    road([B, C], { osm: 'w2', ref: 'dc12' }),
+  ];
+  assert.ok(route(A, C, roads));
+});
+
+test('clipped overlapping tile fragments connect and reversed duplicates do not alter the route', () => {
+  const roads = [road([A, [26.006, 47]]), road([[26.004, 47], B, C])];
+  const result = route([26.002, 47], [26.01, 47.008], roads);
+  assert.ok(result);
+  assert.ok(result.coordinates.some((p) => Math.abs(p[0] - B[0]) < 1e-8 && Math.abs(p[1] - B[1]) < 1e-8));
+  const duplicated = [...roads, road([[26.006, 47], A]), road([C, B, [26.004, 47]])];
+  assert.deepEqual(route([26.002, 47], [26.01, 47.008], duplicated), result);
+});
+
+test('tile endpoint quantization within three meters is joined', () => {
+  const roads = [road([A, B]), road([[26.01002, 47.00001], C])];
+  assert.ok(route([26.002, 47], [26.010005, 47.008], roads));
+});
+
+test('unconnected fragments return null and never draw a straight fallback', () => {
+  const roads = [road([A, [26.004, 47]]), road([[26.006, 47], B])];
+  assert.equal(route([26.002, 47], [26.008, 47], roads), null);
+});
+
+test('other roads cannot bridge disconnected pieces or match the second selection', () => {
+  const first = road([A, [26.004, 47]]);
+  const last = road([[26.006, 47], B]);
+  const bridge = road([[26.004, 47], [26.006, 47]], { osm: 'w9', ref: 'DN29', name: 'Other Road' });
+  assert.equal(route([26.002, 47], [26.008, 47], [first, last, bridge]), null);
+  assert.equal(route([26.002, 47], [26.005, 47], [first, last, bridge]), null);
+});
+
+test('geometric crossings without shared vertices never create junctions', () => {
+  const roads = [road([[26, 47.005], [26.02, 47.005]]), road([[26.01, 47], [26.01, 47.01]])];
+  assert.equal(route([26.002, 47.005], [26.01, 47.009], roads), null);
+  const oneVertex = [roads[0], road([[26.01, 47], [26.01, 47.005], [26.01, 47.01]])];
+  assert.equal(route([26.002, 47.005], [26.01, 47.009], oneVertex), null);
+});
+
+test('shared vertices permit junctions and Dijkstra chooses the shorter matching branch', () => {
+  const branch = [26.005, 47.005], far = [26.02, 47.015];
+  const roads = [road([A, branch, C]), road([A, far, C])];
+  const result = route(A, C, roads);
+  assert.equal(result.coordinates.length, 3);
+  close(result.coordinates[1], branch);
+});
+
+test('MultiLineString and FeatureCollection inputs are supported', () => {
+  const multi = { ...road([]), geometry: { type: 'MultiLineString', coordinates: [[A, B], [B, C]] } };
+  const roads = { type: 'FeatureCollection', features: [multi] };
+  assert.ok(route([26.002, 47], [26.01, 47.008], roads));
+  assert.equal(buildRoadSegment(null, null, roads), null);
+  assert.equal(snapToRoad(A, []), null);
+});

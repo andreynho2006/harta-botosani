@@ -41,6 +41,16 @@ After publishing a password reset in `web/users.json`, saved sessions require a 
 
 Run `node --test tests/*.test.mjs` and `python3 -m unittest discover -s tests -p 'test_*.py'`. These checks do not download or rebuild map data.
 
+## Operational situations (first version)
+
+Open the **Situații** tab to create an event. Select one or more communes/cities on the main map, or keep the county context. Add affected areas, operational points, or a road section by choosing two endpoints on the same visible road. Road sections follow the connected geometry in the loaded tiles; when a route cannot be established, select a shorter section or zoom in. Kilometer values are descriptive labels supplied by the operator, not automatic geolocation by official chainage.
+
+Blocked road sections are black with a white outline. Every annotation has a reported/potential/confirmed/resolved status, an observation time, source, and notes. Warning text, source, validity, and code are entered manually; this version does not fetch warnings or calculate flood forecasts. Operational times use Europe/Bucharest.
+
+**Salvează situația** stores the event in this browser's local archive. **Exportă situația JSON** exports the current event, including unsaved event changes once all markers are finalized. **Exportă arhiva JSON** includes saved events only. **Importă JSON** validates the complete file before merging, keeps the newer version of matching event IDs, and leaves the existing archive intact on errors. Keep exported files for backup and transfer; this is not a shared server database. The archive contains manually entered operational information, geometries, map view, and layer choices; it does not include login credentials or the ISU hydrant dataset.
+
+**Prezintă** shows the event on the main map with its title, warning, legend, and update time. Escape or **Ieși din prezentare** returns to editing. The previous commune modal remains available independently.
+
 ## Structură
 
 ```

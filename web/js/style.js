@@ -1,5 +1,6 @@
 // Stilul hărții (zi / noapte) construit din datele locale.
 import { POI } from "./config.js";
+import { decorateOperationalStyle } from "./operations-style.js";
 
 const base = location.href.replace(/[#?].*$/, "").replace(/[^/]*$/, "");
 
@@ -102,7 +103,7 @@ export function buildStyle(state) {
   const text = sat ? "#ffffff" : p.text;
   const halo = sat ? "rgba(0,0,0,0.85)" : p.halo;
 
-  return {
+  return decorateOperationalStyle({
     version: 8,
     glyphs: base + "fonts/{fontstack}/{range}.pbf",
     sources: {
@@ -278,5 +279,5 @@ export function buildStyle(state) {
 
       { id: "pin", type: "symbol", source: "pin", layout: { "icon-image": "pin", "icon-anchor": "bottom", "icon-allow-overlap": true } },
     ],
-  };
+  }, state);
 }

@@ -58,7 +58,8 @@ test('startup removes OSM hydrants from POIs and search while preserving ISU hyd
     state, prepareHydrants: fc => fc, stats: null, uatAt: null, makeUatLookup: noop,
     search: { add: items => added.push(...items) }, hydrantSearchRows: () => [['ISU hydrant', 'hid']],
     updateDataInfo: noop, renderLayerPanel: noop, renderAnalysis: noop,
-    initSheet: noop, initMap: noop, initSearch: noop, initUI: noop,
+    map: {}, toast: noop, selectTab: noop, setSheet: noop, applyStyle: noop,
+    initSheet: noop, initMap: noop, initSearch: noop, initUI: noop, initOperations: noop,
   });
   await vm.runInContext(initSource + '\ninit()', context);
   assert.equal(state.data.pois.features.length, 1);

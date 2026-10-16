@@ -53,6 +53,7 @@ export function buildCommuneStyle(uat, state) {
   const localPoints = (fc) => ({ ...fc, features: fc.features.filter((f) => containsPoint(geometry, f.geometry.coordinates)) });
   const focusState = {
     ...state,
+    operations: undefined,
     hoverUat: "",
     data: { ...state.data, pois: localPoints(state.data.pois), hydrants: localPoints(state.data.hydrants),
       admin: { type: "FeatureCollection", features: [uat.feature] } },
