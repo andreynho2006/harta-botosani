@@ -26,10 +26,18 @@ const store = {
 const defaults = {};
 for (const g of LAYER_GROUPS) for (const it of g.items) defaults[it.id] = it.on;
 
+const savedVisible = store.get("visible.v2", null);
+const initialVisible = { ...defaults };
+if (savedVisible && typeof savedVisible === "object") {
+  for (const k of Object.keys(defaults)) {
+    if (typeof savedVisible[k] === "boolean") initialVisible[k] = savedVisible[k];
+  }
+}
+
 const state = {
   theme: document.documentElement.dataset.theme === "dark" ? "noapte" : "zi",
-  basemap: "harta",
-  visible: { ...defaults },
+  basemap: store.get("basemap", "harta") === "satelit" ? "satelit" : "harta",
+  visible: initialVisible,
   data: { pois: FC(), hydrants: FC(), admin: FC(), roads: { roads: [] }, localities: [], initialEvents: null },
   overlays: { sel: FC(), analysis: FC(), measure: FC(), pin: FC() },
   hoverUat: "",
@@ -961,6 +969,7 @@ function applyPreset(presetId) {
       state.visible[it.id] = set ? set.has(it.id) : true;
     }
   }
+  store.set("visible.v2", state.visible);
   applyStyle();
   renderLayerPanel();
 }
@@ -1006,6 +1015,7 @@ function renderLayerPanel() {
     const id = e.target.dataset.id;
     if (!id) return;
     state.visible[id] = e.target.checked;
+    store.set("visible.v2", state.visible);
     e.target.closest(".li").classList.toggle("off", !e.target.checked);
     applyStyle();
     renderLayerPanelHeaders();
@@ -1021,6 +1031,7 @@ function renderLayerPanel() {
     const g = LAYER_GROUPS.find((x) => x.id === b.dataset.grp);
     const allOn = g.items.every((it) => state.visible[it.id]);
     for (const it of g.items) state.visible[it.id] = !allOn;
+    store.set("visible.v2", state.visible);
     applyStyle();
     renderLayerPanel();
   };
@@ -1126,6 +1137,7 @@ function selectTab(name) {
   if (isMobile() && $(".side").dataset.sheet === "peek") setSheet("half");
   for (const b of document.querySelectorAll(".tabs button")) b.setAttribute("aria-selected", b.dataset.tab === name);
   for (const t of ["straturi", "situatii", "analiza", "ajutor", "admin"]) $("#tab-" + t).hidden = t !== name;
+  store.set("tab", name);
 }
 
 let toastTimer = 0;
@@ -1163,6 +1175,7 @@ function setTheme(theme) {
 
 function setBasemap(b) {
   state.basemap = b;
+  store.set("basemap", b);
   $("#t-harta").setAttribute("aria-pressed", b === "harta");
   $("#t-satelit").setAttribute("aria-pressed", b === "satelit");
   applyStyle();
@@ -1181,6 +1194,12 @@ function exportImage() {
 
 function initUI() {
   $("#t-tema-l").textContent = state.theme === "noapte" ? "Zi" : "Noapte";
+  $("#t-harta").setAttribute("aria-pressed", state.basemap === "harta");
+  $("#t-satelit").setAttribute("aria-pressed", state.basemap === "satelit");
+  const savedTab = store.get("tab", "straturi");
+  if (["straturi", "situatii", "analiza", "ajutor"].includes(savedTab) && savedTab !== "straturi") {
+    selectTab(savedTab);
+  }
   for (const b of document.querySelectorAll(".tabs button")) b.addEventListener("click", () => {
     if (sheetDragged) { sheetDragged = false; return; }
     // pe telefon, atingerea filei deja deschise strânge panoul

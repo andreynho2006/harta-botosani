@@ -129,7 +129,9 @@ function buildEndpointsFC(features = []) {
 export function initOperations(ctx) {
   const { map, state, uatAt, toast, selectTab, setSheet, applyStyle, renderLayerPanel, stopOtherTools, applyPreset } = ctx;
   const panel = document.querySelector("#tab-situatii");
-  const db = new EventStore(ctx.storage);
+  const storage = ctx.storage ?? globalThis.localStorage;
+  const SESSION_KEY = "hb.ops.session.v1";
+  const db = new EventStore(storage);
 
   // Merge initial seed events from data/situatii.json if available
   if (state.data.initialEvents?.events?.length) {
@@ -140,11 +142,78 @@ export function initOperations(ctx) {
   let pending = null, editingId = null, beforePresentation = null, previousOverlays = null;
   let archiveError = "", notice = "", resizeFrame = 0, archiveFilter = "", summaryCollapsed = false;
   let standaloneFocus = { areas: [], places: [], isolate: true };
+  let restoring = false;
 
   state.operations = {
     features: FC(), draft: FC(), selection: FC(), mask: FC(), endpoints: FC(),
     focusGeometry: null, alertCode: "", tintAreas: true,
   };
+
+  function persistSession() {
+    if (restoring) return;
+    try {
+      storage?.setItem(SESSION_KEY, JSON.stringify({
+        active,
+        standaloneFocus,
+        pending,
+        editingId,
+        dirty,
+      }));
+    } catch { /* ignore storage quota errors */ }
+  }
+
+  function autoSaveActiveToDb() {
+    if (restoring || !active || !String(active.title || "").trim()) return;
+    try {
+      const snap = sanitizeEvent({
+        ...active,
+        updatedAt: new Date().toISOString(),
+        view: map ? currentView() : active.view,
+        visible: { ...state.visible },
+      });
+      db.save(snap);
+      dirty = false;
+    } catch { /* keep draft in session storage until valid */ }
+  }
+
+  function restoreSession() {
+    restoring = true;
+    try {
+      const raw = storage?.getItem(SESSION_KEY);
+      if (!raw) return;
+      const saved = JSON.parse(raw);
+      if (saved?.standaloneFocus && typeof saved.standaloneFocus === "object") {
+        standaloneFocus = {
+          areas: Array.isArray(saved.standaloneFocus.areas) ? saved.standaloneFocus.areas.filter(Boolean) : [],
+          places: Array.isArray(saved.standaloneFocus.places) ? saved.standaloneFocus.places.filter(Boolean) : [],
+          isolate: typeof saved.standaloneFocus.isolate === "boolean" ? saved.standaloneFocus.isolate : true,
+        };
+      }
+      if (saved?.active && typeof saved.active === "object") {
+        try {
+          active = sanitizeEvent(saved.active);
+        } catch {
+          const fromDb = saved.active.id ? db.load(saved.active.id) : null;
+          active = fromDb || saved.active;
+        }
+        if (active) {
+          active.places = Array.isArray(active.places) ? active.places : [];
+          active.areas = Array.isArray(active.areas) ? active.areas : [];
+          active.isolateArea = active.isolateArea ?? false;
+          active.tintAreas = active.tintAreas ?? true;
+        }
+      }
+      if (saved?.pending && typeof saved.pending === "object" && saved.pending.properties) {
+        pending = saved.pending;
+        editingId = saved.editingId || null;
+      }
+      dirty = Boolean(saved?.dirty);
+    } catch (e) {
+      console.warn("Nu am putut restaura sesiunea operativă", e);
+    } finally {
+      restoring = false;
+    }
+  }
 
   const drawbar = document.createElement("div");
   drawbar.className = "ops-drawbar";
@@ -175,8 +244,10 @@ export function initOperations(ctx) {
 
   function changed() {
     dirty = true; exported = false;
+    autoSaveActiveToDb();
+    persistSession();
     const badge = panel.querySelector("#ops-save-state");
-    if (badge) badge.textContent = "Modificări nesalvate";
+    if (badge) badge.textContent = dirty ? "Salvat automat în sesiune" : "Salvat automat";
   }
 
   function currentView() {
@@ -195,6 +266,8 @@ export function initOperations(ctx) {
     active.tintAreas = true;
     standaloneFocus = { areas: [], places: [], isolate: true };
     dirty = true; exported = false;
+    autoSaveActiveToDb();
+    persistSession();
     return active;
   }
 
@@ -282,6 +355,7 @@ export function initOperations(ctx) {
     state.operations.tintAreas = active ? (active.tintAreas ?? true) : false;
 
     renderFocusBar();
+    persistSession();
 
     if (refresh) applyStyle();
     else {
@@ -353,7 +427,9 @@ export function initOperations(ctx) {
     toast(`Focalizat pe UAT ${uat.name} (direct pe harta principală)`);
   };
 
-  state.focusPlace = (placeName, ll) => {
+  state.focusPlace = (placeOrName, llArg) => {
+    const placeName = typeof placeOrName === "object" ? placeOrName?.name : placeOrName;
+    const ll = Array.isArray(llArg) ? llArg : (typeof placeOrName === "object" && Number.isFinite(placeOrName?.lon) && Number.isFinite(placeOrName?.lat) ? [placeOrName.lon, placeOrName.lat] : null);
     if (!placeName) return;
     stopOtherTools();
     if (active) {
@@ -916,6 +992,7 @@ export function initOperations(ctx) {
     try {
       if (pending || mode) return message("Finalizează adăugarea marcajului curent înainte de a salva situația.");
       active = db.save(snapshot()); dirty = false; exported = false;
+      persistSession();
       notice = "Situația a fost salvată în baza de date a aplicației.";
       render(); toast(notice);
     } catch (error) {
@@ -932,15 +1009,19 @@ export function initOperations(ctx) {
     pending = null; editingId = null; dirty = false; exported = false; notice = "";
     stopDrawing();
     for (const key of Object.keys(state.visible)) if (typeof active.visible[key] === "boolean") state.visible[key] = active.visible[key];
+    try { storage?.setItem("hb.visible.v2", JSON.stringify(state.visible)); } catch { /* */ }
     sync(true); renderLayerPanel(); render();
     if (active.view && map) map.jumpTo(active.view); else fit();
     selectTab("situatii");
   }
 
   function canReplaceDraft() {
-    if ((!dirty || exported) && !pending && !mode) return true;
-    message("Salvează situația curentă înainte de a deschide sau crea alta.");
-    return false;
+    if (pending || mode) {
+      message("Finalizează sau anulează marcajul în curs înainte de a schimba situația.");
+      return false;
+    }
+    if (active && dirty) autoSaveActiveToDb();
+    return true;
   }
 
   function exitPresentation() {
@@ -1400,7 +1481,6 @@ export function initOperations(ctx) {
     return false;
   };
 
-  window.addEventListener("beforeunload", (event) => { if ((dirty && !exported) || pending || mode) { event.preventDefault(); event.returnValue = ""; } });
   window.addEventListener("resize", () => {
     if (!document.body.classList.contains("presenting")) return;
     cancelAnimationFrame(resizeFrame);
@@ -1411,6 +1491,8 @@ export function initOperations(ctx) {
     });
   });
 
+  restoreSession();
+  sync(true);
   render();
   return { handleMapClick, handleKey, cancelDrawing, isDrawing: () => !!mode, sync, openRoadCreator };
 }
