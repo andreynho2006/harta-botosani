@@ -726,47 +726,25 @@ export function initOperations(ctx) {
   }
 
   function archiveHTML(events) {
-    const q = archiveFilter.trim().toLowerCase();
-    const filtered = !q ? events : events.filter(ev => {
-      const hay = [
-        ev.title, TYPES[ev.type], ALERTS[ev.alert?.code], ev.notes,
-        ...(ev.areas || []), ...(ev.places || []),
-        ...ev.features.features.map(f => `${f.properties.title} ${f.properties.road} ${f.properties.notes}`),
-      ].join(" ").toLowerCase();
-      return hay.includes(q);
-    });
-
-    return `<section class="ops-card">
+    return `<section class="ops-card ops-archive-bar">
       <div class="ops-card-title">
-        <h3>Bază de date situații (.json) <span>${events.length}</span></h3>
+        <h3>Situații precedente (Arhivă: ${events.length})</h3>
+        ${active ? `<button type="button" class="lnk" data-action="new">+ Situație nouă</button>` : ""}
       </div>
       ${archiveError ? `<p class="warnp">${esc(archiveError)}</p>` : ""}
-      <input type="search" id="ops-archive-search" value="${esc(archiveFilter)}" placeholder="Filtrează după drum (ex. DJ29), comună, tip eveniment…" aria-label="Filtrează arhiva de situații">
-      <label>Deschide rapid<select id="ops-archive"><option value="">Alege o situație salvată…</option>${events.map(e => `<option value="${esc(e.id)}" ${active?.id === e.id ? "selected" : ""}>${esc(e.title)} · ${dateLabel(e.updatedAt)}</option>`).join("")}</select></label>
+      <select id="ops-archive" aria-label="Alege o situație precedentă din arhivă">
+        <option value="">— Alege o situație precedentă (${events.length} salvate) —</option>
+        ${events.map(e => {
+          const roadCount = e.features.features.filter(f => f.geometry.type === "LineString").length;
+          const uats = e.areas?.length ? ` · ${e.areas.slice(0, 2).join(", ")}${e.areas.length > 2 ? "…" : ""}` : "";
+          return `<option value="${esc(e.id)}" ${active?.id === e.id ? "selected" : ""}>${esc(e.title)} (${esc(TYPES[e.type] || e.type)}${roadCount ? `, ${roadCount} drumuri` : ""}${esc(uats)} · ${dateLabel(e.updatedAt)})</option>`;
+        }).join("")}
+      </select>
       <div class="ops-actions">
-        <button class="btn" type="button" data-action="open">Deschide</button>
-        <button class="btn" type="button" data-action="archive-export">Salvează baza de date (.json)</button>
+        <button class="btn" type="button" data-action="archive-export">Salvează baza (.json)</button>
         <label class="btn file ops-import">Încarcă .json<input id="ops-import" type="file" accept=".json,application/json" hidden></label>
+        ${active ? `<button class="btn" type="button" data-delete-id="${esc(active.id)}" title="Șterge situația curentă din arhivă">Șterge</button>` : ""}
       </div>
-      ${filtered.length ? `<ul class="ops-archive-list">${filtered.slice(0, 12).map(ev => {
-        const roadCount = ev.features.features.filter(f => f.geometry.type === "LineString").length;
-        const totalMarks = ev.features.features.length;
-        const alertBadge = ev.alert?.code ? `<span class="ops-badge" data-code="${esc(ev.alert.code)}">${esc(ALERTS[ev.alert.code] || ev.alert.code)}</span>` : "";
-        return `<li class="${active?.id === ev.id ? "is-active" : ""}">
-          <div class="ops-arch-head">
-            <b>${esc(ev.title)}</b>
-            ${alertBadge}
-          </div>
-          <small>${esc(TYPES[ev.type] || ev.type)} · ${dateLabel(ev.updatedAt)} · ${roadCount} sectoare drum · ${totalMarks} marcaje${ev.areas?.length ? ` · UAT: ${esc(ev.areas.join(", "))}` : ""}</small>
-          <div class="ops-arch-btns">
-            <button type="button" class="btn" data-open-id="${esc(ev.id)}">Vizualizează</button>
-            <button type="button" class="btn" data-present-id="${esc(ev.id)}">Prezintă</button>
-            <button type="button" class="btn" data-export-id="${esc(ev.id)}">.json</button>
-            <button type="button" class="lnk danger" data-delete-id="${esc(ev.id)}" title="Șterge din arhivă">Șterge</button>
-          </div>
-        </li>`;
-      }).join("")}</ul>` : `<p class="muted">Niciun eveniment găsit în arhivă.</p>`}
-      <p class="muted">Evenimentele sunt păstrate în arhiva locală și în fișierul <code>situatii.json</code> pentru ședințele CJSU și analiză post-eveniment.</p>
     </section>`;
   }
 
@@ -780,6 +758,8 @@ export function initOperations(ctx) {
       ${localitiesDatalistHTML()}
       ${uatsDatalistHTML()}
       <p class="ops-notice" role="status">${esc(notice)}</p>
+
+      ${archiveHTML(events)}
 
       <section class="ops-card ops-quick-presets">
         <h3>Profiluri straturi pentru ședința CJSU</h3>
@@ -917,8 +897,6 @@ export function initOperations(ctx) {
         </div>
       </section>
       `}
-
-      ${archiveHTML(events)}
     </div>`;
   }
 
@@ -1171,6 +1149,19 @@ export function initOperations(ctx) {
 
   panel.onchange = async (event) => {
     const target = event.target;
+    if (target.id === "ops-archive") {
+      if (!canReplaceDraft()) { render(); return; }
+      const val = target.value;
+      if (!val) {
+        active = null; pending = null; stopDrawing(); sync(true); render();
+        return;
+      }
+      try {
+        const saved = db.load(val);
+        if (saved) setActive(saved);
+      } catch { message("Situația nu a putut fi citită din arhivă."); }
+      return;
+    }
     if (target.dataset?.toggle && active) {
       active[target.dataset.toggle] = target.checked;
       changed();
