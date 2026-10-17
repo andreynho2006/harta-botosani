@@ -8,7 +8,7 @@
       "title": "Viscol și înzăpezire · Situație CJSU (DJ29 km 3–6)",
       "type": "snow",
       "createdAt": "2026-10-16T08:00:00.000Z",
-      "updatedAt": "2026-10-16T10:00:00.000Z",
+      "updatedAt": "2026-10-16T12:15:00.000Z",
       "alert": {
         "code": "orange",
         "source": "ANM / IGSU RO-Alert",
@@ -368,6 +368,54 @@
               "vehicles": "1 ASAS, 1 autofreză de zăpadă, 1 șenilată UTV",
               "observedAt": "2026-10-16T09:25:00.000Z",
               "notes": "Se acționează pentru deblocarea persoanelor surprinse în trafic și sprijin medical de urgență."
+            }
+          },
+          {
+            "type": "Feature",
+            "geometry": {
+              "type": "Point",
+              "coordinates": [
+                26.48526,
+                47.71133
+              ]
+            },
+            "properties": {
+              "id": "mark-masini-blocate-1",
+              "kind": "stranded",
+              "status": "confirmed",
+              "title": "3 autoturisme blocate în zăpadă · DJ29 km 4.5",
+              "road": "DJ29",
+              "kmFrom": 4.5,
+              "kmTo": null,
+              "source": "ISU / IPJ Botoșani",
+              "personnel": "7 persoane (5 adulți, 2 copii)",
+              "vehicles": "3 autoturisme",
+              "observedAt": "2026-10-16T09:35:00.000Z",
+              "notes": "Se intervine cu șenilata ISU și autofreza SDN pentru degajare."
+            }
+          },
+          {
+            "type": "Feature",
+            "geometry": {
+              "type": "Point",
+              "coordinates": [
+                26.5214,
+                47.7058
+              ]
+            },
+            "properties": {
+              "id": "mark-case-inzapezite-1",
+              "kind": "houses",
+              "status": "confirmed",
+              "title": "3 gospodării înzăpezite · sat Vlădeni",
+              "road": "",
+              "kmFrom": null,
+              "kmTo": null,
+              "source": "CLSU Vlădeni / SVSU",
+              "personnel": "5 persoane vârstnice monitorizate",
+              "vehicles": "1 buldoexcavator SVSU",
+              "observedAt": "2026-10-16T09:40:00.000Z",
+              "notes": "Căi de acces troienite; SVSU Vlădeni acționează pentru deblocare."
             }
           }
         ]

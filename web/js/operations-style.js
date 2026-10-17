@@ -6,6 +6,7 @@ const color = ['case', resolved, '#23834b', ['match', ['get', 'kind'],
   'blocked', '#080808', 'flooded', '#1677cf', 'damaged', '#e97516',
   'snow', '#6b4fd8', 'threat', '#d99810', 'fire', '#d62f37',
   'evacuated', '#c92a2a', 'isolated', '#b5179e', 'power', '#d97706',
+  'stranded', '#e11d48', 'houses', '#7c3aed', 'persons', '#dc2626',
   'command', '#6544ad', 'isu', '#c8102e', 'police', '#1d4ed8',
   'medical', '#e03131', 'utility', '#d97706', 'shelter', '#21896b', '#c94949']];
 const width = (extra = 0) => ['interpolate', ['linear'], ['zoom'], 8, 4 + extra, 14, 9 + extra, 19, 22 + extra];
@@ -85,6 +86,8 @@ export function decorateOperationalStyle(style, state = {}) {
         'text-anchor': 'top',
         'text-offset': [0, 0.7],
         'text-optional': true,
+        'symbol-sort-key': 10,
+        'text-padding': 3,
       },
       paint: {
         'text-color': state.theme === 'noapte' ? '#ffffff' : '#111827',
@@ -93,14 +96,30 @@ export function decorateOperationalStyle(style, state = {}) {
       } },
   );
 
+  const labelLayout = {
+    'text-field': ['get', 'mapLabel'],
+    'text-font': ['Noto Sans Medium'],
+    'text-size': operations.presenting ? operations.labelSize || 18 : 14,
+    'text-max-width': 14,
+    'text-line-height': 1.15,
+    'text-padding': 4,
+    'symbol-sort-key': ['match', ['get', 'status'], 'confirmed', 0, 'threat', 1, 'resolved', 3, 2],
+  };
+  const labelPaint = {
+    'text-color': state.theme === 'noapte' ? '#ffffff' : '#15202a',
+    'text-halo-color': state.theme === 'noapte' ? '#161a1f' : '#ffffff',
+    'text-halo-width': 2,
+  };
+
   style.layers.push(
-    { id: 'ops-features-label', type: 'symbol', source: 'ops-features',
-      layout: { 'text-field': ['concat', ['coalesce', ['get', 'title'], ['get', 'road'], ''], ' · ',
-          ['match', ['get', 'status'], 'threat', 'Potențial', 'confirmed', 'Confirmat', 'resolved', 'Remediat', 'Raportat']],
-        'text-font': ['Noto Sans Medium'], 'text-size': operations.presenting ? operations.labelSize || 18 : 14, 'text-anchor': 'bottom', 'text-offset': [0, -1.1],
-        'text-allow-overlap': true, 'text-ignore-placement': true, 'text-max-width': 22 },
-      paint: { 'text-color': state.theme === 'noapte' ? '#ffffff' : '#15202a',
-        'text-halo-color': state.theme === 'noapte' ? '#161a1f' : '#ffffff', 'text-halo-width': 2 } },
+    { id: 'ops-features-label-line', type: 'symbol', source: 'ops-features', filter: isGeometry('LineString'),
+      layout: { ...labelLayout, 'text-field': ['get', 'mapLabelInline'], 'symbol-placement': 'line-center', 'text-offset': [0, -1.3], 'text-max-angle': 50,
+        'text-keep-upright': true } ,
+      paint: labelPaint },
+    { id: 'ops-features-label', type: 'symbol', source: 'ops-features', filter: ['!', isGeometry('LineString')],
+      layout: { ...labelLayout, 'text-variable-anchor': ['bottom', 'top', 'left', 'right', 'bottom-left', 'bottom-right'],
+        'text-radial-offset': 1.2, 'text-justify': 'auto' },
+      paint: labelPaint },
     { id: 'ops-draft-fill', type: 'fill', source: 'ops-draft', filter: isGeometry('Polygon'),
       paint: { 'fill-color': '#00bcd4', 'fill-opacity': 0.18 } },
     { id: 'ops-draft-line-halo', type: 'line', source: 'ops-draft', layout: rounded,

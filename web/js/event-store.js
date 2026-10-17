@@ -3,7 +3,7 @@ export const EVENT_STORAGE_KEY = 'hb.events.v1';
 export const EVENT_TYPES = Object.freeze(Object.fromEntries(['fire', 'flood', 'snow', 'storm', 'other'].map(key => [key, key])));
 export const MARK_TYPES = Object.freeze(Object.fromEntries([
   'blocked', 'flooded', 'damaged', 'snow', 'threat', 'fire',
-  'evacuated', 'isolated', 'power',
+  'evacuated', 'isolated', 'power', 'stranded', 'houses', 'persons',
   'command', 'isu', 'police', 'medical', 'utility', 'shelter',
 ].map(key => [key, key])));
 const MAX_EVENTS = 500;
