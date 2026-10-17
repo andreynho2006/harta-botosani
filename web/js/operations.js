@@ -1222,12 +1222,6 @@ export function initOperations(ctx) {
           <span class="ops-slide-eyebrow">ȘEDINȚĂ CJSU · ${esc(TYPES[active.type] || active.type)} · ${esc(areaText)}</span>
           <h1>${esc(active.title)}</h1>
           ${active.notes ? `<p>${esc(active.notes)}</p>` : ""}
-          ${active.alert.code || active.alert.text ? `
-            <p class="ops-alert" data-code="${esc(active.alert.code)}">
-              <b>${esc(ALERTS[active.alert.code] || active.alert.code)}</b> ${esc(active.alert.text)}
-              ${active.alert.source ? ` · ${esc(active.alert.source)}` : ""}
-              ${active.alert.validFrom || active.alert.validTo ? ` · ${dateLabel(active.alert.validFrom)} – ${dateLabel(active.alert.validTo)}` : ""}
-            </p>` : ""}
         </div>
         <div class="ops-slide-controls">
           <button class="btn" type="button" data-action="pres-toggle-summary" aria-pressed="${!summaryCollapsed}">${summaryCollapsed ? "▶ Arată banda stângă" : "◀ Ascunde banda stângă"}</button>
@@ -1238,6 +1232,12 @@ export function initOperations(ctx) {
           <button class="btn" type="button" data-action="pres-theme">${state.theme === "noapte" ? "Zi" : "Noapte"}</button>
           <button class="btn primary" type="button" data-action="exit">Ieși din prezentare</button>
         </div>
+        ${Object.values(active.alert).some(Boolean) ? `
+          <div class="ops-alert" data-code="${esc(active.alert.code)}" tabindex="0" role="note">
+            <b>${esc(ALERTS[active.alert.code] || active.alert.code)}</b> ${esc(active.alert.text)}
+            ${active.alert.source ? ` · ${esc(active.alert.source)}` : ""}
+            ${active.alert.validFrom || active.alert.validTo ? ` · ${dateLabel(active.alert.validFrom)} – ${dateLabel(active.alert.validTo)}` : ""}
+          </div>` : ""}
       </header>
 
       <div class="ops-slide-body">

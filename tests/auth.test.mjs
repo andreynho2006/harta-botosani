@@ -130,6 +130,34 @@ test('empty user lists show a login error without throwing', async () => {
   assert.equal(h.fields['button[type=submit]'].disabled, false);
 });
 
+test('a regular test user can retry a failed login and restore the correct role', async () => {
+  const password = 'test-fixture-password';
+  const regular = { u: 'test', name: 'Test user', role: 'user',
+    ...await cryptoHarness.auth.wrapFor(raw, password, iterations) };
+  const registry = { iterations, users: [entry, regular] };
+  const h = harness(registry);
+  const pending = h.auth.ensureLogin();
+  await h.ready;
+  h.fields['#lg-user'].value = ' TEST ';
+  h.fields['#lg-pass'].value = 'wrong-password';
+  await h.submit();
+  assert.equal(h.error.hidden, false);
+  assert.equal(h.login.hidden, false);
+  assert.equal(h.sessionStorage.getItem(KEY), null);
+  h.fields['#lg-pass'].value = password;
+  await h.submit();
+  const result = await pending;
+  assert.equal(result.u, 'test');
+  assert.equal(result.role, 'user');
+  assert.deepEqual(result.key, raw);
+  assert.equal(h.login.hidden, true);
+  const restored = harness(registry, h.sessionStorage.getItem(KEY));
+  const session = await restored.auth.ensureLogin();
+  assert.equal(session.u, 'test');
+  assert.equal(session.role, 'user');
+  assert.deepEqual(session.key, raw);
+});
+
 test('logout clears both stores and reloads the page', () => {
   const h = harness(users, 'session', 'remembered');
   h.auth.logout();
