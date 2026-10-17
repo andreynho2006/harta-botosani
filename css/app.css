@@ -1,0 +1,454 @@
+/* Harta Botoșani — consolă de hartă pentru pregătire și intervenții.
+   Layout: bară laterală fixă (căutare + straturi/analiză) | hartă cu bară de instrumente, fișă de informații și bară de stare. */
+:root {
+  --bg: #eef0f3;
+  --panel: #ffffff;
+  --panel-2: #f6f7f9;
+  --ink: #15181c;
+  --ink-2: #4a515b;
+  --ink-3: #7b838e;
+  --line: #dde1e6;
+  --line-2: #c9ced6;
+  --accent: #c8102e;
+  --accent-soft: #fbe9ec;
+  --accent-ink: #ffffff;
+  --focus: #1f5fbf;
+  --ok: #1f7a4d;
+  --warn: #9a6400;
+  --shadow: 0 8px 28px rgba(18, 24, 33, 0.16), 0 1px 3px rgba(18, 24, 33, 0.12);
+  --font: "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, Roboto, "Helvetica Neue", Arial, sans-serif;
+  --mono: "Cascadia Mono", Consolas, "SFMono-Regular", Menlo, "DejaVu Sans Mono", monospace;
+  --side: 320px;
+  --r: 8px;
+  color-scheme: light;
+}
+:root[data-theme="dark"] {
+  --bg: #0d1013;
+  --panel: #161a1f;
+  --panel-2: #1c2128;
+  --ink: #e7eaee;
+  --ink-2: #a9b1bb;
+  --ink-3: #78818c;
+  --line: #262c34;
+  --line-2: #343b45;
+  --accent: #ff4d5e;
+  --accent-soft: #3a1a20;
+  --accent-ink: #1a0d10;
+  --focus: #6aa8ff;
+  --ok: #4cc38a;
+  --warn: #e0a83a;
+  --shadow: 0 10px 32px rgba(0, 0, 0, 0.5), 0 1px 3px rgba(0, 0, 0, 0.4);
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body { background: var(--bg); color: var(--ink); font: 14px/1.45 var(--font); overflow: hidden; }
+button, input, select { font: inherit; color: inherit; }
+button { cursor: pointer; }
+:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+[hidden] { display: none !important; }
+.mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+
+.app { display: grid; grid-template-columns: var(--side) 1fr; height: 100%; }
+
+/* ---------------------------------------------------------------- bara laterală */
+.side { display: flex; flex-direction: column; min-height: 0; background: var(--panel); border-right: 1px solid var(--line); z-index: 3; }
+.brand { display: flex; gap: 12px; align-items: center; padding: 16px 18px 12px; }
+.plate { display: grid; place-items: center; width: 42px; height: 30px; border-radius: 5px; background: var(--accent);
+  color: #fff; font: 700 15px/1 var(--font); letter-spacing: 0.06em; box-shadow: inset 0 0 0 2px rgba(255,255,255,0.35); flex: none; }
+.brand h1 { margin: 0; font-size: 17px; font-weight: 650; letter-spacing: -0.01em; }
+.brand p { margin: 1px 0 0; font-size: 12px; color: var(--ink-3); }
+
+.search { position: relative; padding: 4px 18px 12px; }
+.search input { width: 100%; height: 42px; padding: 0 40px 0 38px; border-radius: var(--r); border: 1px solid var(--line-2);
+  background: var(--panel-2); outline: none; transition: border-color .15s, background .15s; }
+.search input:focus { border-color: var(--focus); background: var(--panel); box-shadow: 0 0 0 3px color-mix(in srgb, var(--focus) 18%, transparent); }
+.search .ico { position: absolute; left: 30px; top: 16px; width: 16px; height: 16px; color: var(--ink-3); pointer-events: none; }
+.search kbd { position: absolute; right: 28px; top: 15px; font: 11px var(--mono); color: var(--ink-3); border: 1px solid var(--line-2);
+  border-radius: 4px; padding: 1px 6px; background: var(--panel); }
+.results { position: absolute; left: 18px; right: 18px; top: 50px; margin: 0; padding: 4px; list-style: none; background: var(--panel);
+  border: 1px solid var(--line-2); border-radius: var(--r); box-shadow: var(--shadow); max-height: 60vh; overflow: auto; z-index: 10; }
+.results li { display: grid; grid-template-columns: 22px 1fr auto; gap: 10px; align-items: center; padding: 7px 8px; border-radius: 6px; cursor: pointer; }
+.results li[aria-selected="true"], .results li:hover { background: var(--panel-2); }
+.results li[aria-selected="true"] { box-shadow: inset 3px 0 0 var(--accent); }
+.results .r-main { min-width: 0; }
+.results .r-label { font-weight: 560; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.results .r-ctx { font-size: 12px; color: var(--ink-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.results .r-type { font-size: 11px; color: var(--ink-2); border: 1px solid var(--line); padding: 1px 6px; border-radius: 99px; white-space: nowrap; }
+.results .r-ico { width: 20px; height: 20px; display: grid; place-items: center; }
+.results .r-ico img { width: 20px; height: 20px; }
+.results .r-ico i { width: 9px; height: 9px; border-radius: 50%; background: var(--ink-3); }
+.results .r-ico i.t-loc { background: var(--ink); border-radius: 2px; }
+.results .r-ico i.t-str { background: #e0a43a; border-radius: 1px; height: 4px; width: 14px; }
+.results .r-ico i.t-adr { background: var(--ink-2); }
+.results .r-ico i.t-apa { background: #3f8fd0; }
+.results .r-ico i.t-hid { background: var(--accent); border-radius: 2px; }
+.results .r-ico i.t-coord { background: var(--focus); width: 12px; height: 12px; box-shadow: 0 0 0 3px color-mix(in srgb, var(--focus) 25%, transparent); }
+.results .empty { padding: 10px; color: var(--ink-3); cursor: default; display: block; }
+
+.tabs { display: flex; gap: 0; padding: 0 12px; border-bottom: 1px solid var(--line); }
+.tabs button { border: 0; background: none; padding: 9px 7px 10px; font-weight: 560; font-size: 13.5px; white-space: nowrap; color: var(--ink-3); border-bottom: 2px solid transparent; margin-bottom: -1px; }
+.tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); }
+.tabs .badge { display: inline-block; min-width: 8px; height: 8px; border-radius: 50%; background: var(--accent); margin-left: 6px; vertical-align: 1px; }
+.tabs .t-long { display: none; }
+.tabs .t-short { display: inline; }
+
+.panel { flex: 1; overflow: auto; padding: 8px 10px 24px; min-height: 0; }
+
+/* straturi */
+.grp { --group-accent: var(--ink-2); margin-bottom: 10px; padding: 0 3px 6px;
+  border: 1px solid var(--line); border-left: 3px solid color-mix(in srgb, var(--group-accent) 55%, var(--line)); border-radius: 10px;
+  background: var(--panel-2); background: color-mix(in srgb, var(--group-accent) 4%, var(--panel));
+  box-shadow: 0 2px 6px rgb(0 0 0 / 3%); }
+.grp[data-group="interventie"] { --group-accent: var(--accent); }
+.grp[data-group="institutii"] { --group-accent: #8b6bb1; }
+.grp[data-group="drumuri"] { --group-accent: #b58a35; }
+.grp[data-group="ape"] { --group-accent: #408bb9; }
+.grp[data-group="cladiri"] { --group-accent: #a27b5b; }
+.grp[data-group="teritoriu"] { --group-accent: #668e65; }
+.grp-h { display: flex; align-items: center; gap: 6px; padding: 3px 3px 3px 6px; margin-bottom: 3px;
+  border-bottom: 1px solid var(--line); }
+.grp-h h2 { flex: 1; margin: 0; font-size: 11.5px; font-weight: 650; text-transform: uppercase; letter-spacing: 0.07em; color: var(--ink-2); }
+.grp-h button { display: grid; place-items: center; flex: none; width: 32px; height: 32px; border: 0;
+  background: none; color: var(--ink-2); padding: 6px; border-radius: 7px; }
+.grp-h button svg { width: 18px; height: 18px; }
+.grp-h button:hover { color: var(--ink); background: color-mix(in srgb, var(--group-accent) 10%, var(--panel)); }
+.li { display: grid; grid-template-columns: 18px 20px minmax(0, 1fr) auto; align-items: center; gap: 6px; padding: 5px 6px; border-radius: 6px; cursor: pointer; user-select: none; }
+.li:hover { background: var(--panel-2); }
+.li input { margin: 0; accent-color: var(--accent); width: 15px; height: 15px; }
+.li .sw { width: 20px; height: 20px; display: grid; place-items: center; }
+.li .sw img { width: 20px; height: 20px; }
+.li .sw .ln { width: 20px; border-radius: 3px; }
+.li .sw .sq { width: 15px; height: 13px; border-radius: 2px; }
+.li .lbl { min-width: 0; }
+.li .cnt { font: 12px var(--mono); color: var(--ink-3); font-variant-numeric: tabular-nums; }
+.li.off .lbl, .li.off .sw { opacity: 0.45; }
+.note { font-size: 12px; color: var(--ink-3); padding: 2px 8px 6px 60px; margin: -2px 0 2px; }
+
+/* analiză */
+.an { padding: 6px 8px; }
+.an-empty { padding: 28px 18px; text-align: center; color: var(--ink-2); }
+.an-empty strong { display: block; color: var(--ink); font-size: 15px; margin-bottom: 6px; }
+.an-empty .btn { margin-top: 14px; }
+.an h3 { margin: 18px 0 6px; font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.07em; color: var(--ink-2); font-weight: 650; }
+.an h3:first-child { margin-top: 4px; }
+.where { font-size: 15px; font-weight: 600; }
+.where small { display: block; font-weight: 400; color: var(--ink-2); font-size: 13px; }
+.near { list-style: none; margin: 0; padding: 0; }
+.near li { display: grid; grid-template-columns: 22px 1fr auto; gap: 10px; align-items: center; padding: 6px 6px; border-radius: 6px; cursor: pointer; }
+.near li:hover { background: var(--panel-2); }
+.near img { width: 20px; height: 20px; }
+.near .n-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.near .n-sub { font-size: 12px; color: var(--ink-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.near .n-d { text-align: right; font: 600 13px var(--mono); font-variant-numeric: tabular-nums; }
+.near .n-d small { display: block; font-weight: 400; color: var(--ink-3); font-size: 11px; }
+.muted { color: var(--ink-3); font-size: 12.5px; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 8px; }
+.chip { border: 1px solid var(--line-2); background: var(--panel); border-radius: 99px; padding: 4px 11px; font-size: 13px; font-variant-numeric: tabular-nums; }
+.chip[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #fff; }
+.stats { display: grid; grid-template-columns: 1fr auto; gap: 3px 12px; font-size: 13px; margin: 6px 0; }
+.stats dt { color: var(--ink-2); }
+.stats dd { margin: 0; text-align: right; font: 600 13px var(--mono); }
+.row-btns { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 18px; }
+
+.btn { display: inline-flex; align-items: center; gap: 7px; height: 32px; padding: 0 12px; border-radius: 7px; border: 1px solid var(--line-2);
+  background: var(--panel); font-size: 13px; font-weight: 560; text-decoration: none; color: var(--ink); white-space: nowrap; }
+.btn:hover { background: var(--panel-2); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+:root[data-theme="dark"] .btn.primary { color: #16090b; }
+.btn svg { width: 15px; height: 15px; flex: none; }
+
+/* ajutor */
+.help { padding: 8px 10px; font-size: 13.5px; color: var(--ink-2); }
+.help h3 { color: var(--ink); font-size: 13.5px; margin: 16px 0 6px; }
+.help h3:first-child { margin-top: 4px; }
+.help p { margin: 0 0 8px; }
+.help code { font: 12.5px var(--mono); background: var(--panel-2); border: 1px solid var(--line); padding: 1px 5px; border-radius: 4px; color: var(--ink); }
+.keys { display: grid; grid-template-columns: auto 1fr; gap: 6px 12px; align-items: center; }
+.keys kbd { font: 12px var(--mono); border: 1px solid var(--line-2); border-bottom-width: 2px; border-radius: 4px; padding: 1px 7px; background: var(--panel); color: var(--ink); justify-self: start; }
+
+/* utilizator conectat */
+.who { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: -4px 18px 10px; padding: 6px 10px;
+  background: var(--panel-2); border: 1px solid var(--line); border-radius: 7px; font-size: 12.5px; color: var(--ink-2); }
+.who:empty { display: none; }
+.who button { border: 0; background: none; color: var(--ink-2); font-weight: 600; font-size: 12.5px; padding: 2px 4px; border-radius: 4px; }
+.who button:hover { color: var(--accent); }
+
+/* administrare */
+.adm { padding: 6px 8px; }
+.adm h3 { margin: 14px 0 8px; font-size: 11.5px; text-transform: uppercase; letter-spacing: .07em; color: var(--ink-2); font-weight: 650; }
+.adm h3:first-child { margin-top: 4px; }
+.adm h4 { margin: 0 0 4px; font-size: 13.5px; }
+.ulist { list-style: none; margin: 0; padding: 0; border: 1px solid var(--line); border-radius: 8px; }
+.ulist li { display: flex; gap: 10px; justify-content: space-between; align-items: flex-start; padding: 9px 10px; }
+.ulist li + li { border-top: 1px solid var(--line); }
+.u-main { min-width: 0; display: grid; gap: 2px; }
+.u-main span { font-size: 12.5px; color: var(--ink-3); }
+.u-main .pw { color: var(--ink); background: var(--accent-soft); padding: 4px 6px; border-radius: 5px; margin-top: 4px; }
+.u-main code { font: 13px var(--mono); }
+.u-act { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; flex: none; }
+.lnk { border: 0; background: none; color: var(--focus); font-size: 12.5px; font-weight: 600; padding: 2px 4px; border-radius: 4px; }
+.lnk:hover { background: var(--panel-2); }
+.lnk.danger { color: var(--accent); }
+.uform { display: grid; gap: 8px; margin-top: 14px; padding: 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel-2); }
+.uform label { display: grid; gap: 4px; font-size: 12.5px; color: var(--ink-2); }
+.uform input, .uform select { height: 34px; padding: 0 10px; border: 1px solid var(--line-2); border-radius: 6px; background: var(--panel); }
+.uform .btn { justify-self: start; }
+.save { margin-top: 12px; padding: 12px; border-radius: 8px; border: 1px solid var(--accent); background: var(--accent-soft); font-size: 13px; }
+.save p { margin: 0 0 10px; }
+.warnp { color: var(--warn); font-size: 13px; }
+.btn.file { cursor: pointer; }
+
+/* autentificare */
+.login { position: fixed; inset: 0; z-index: 50; display: grid; place-items: center; padding: 24px;
+  background: radial-gradient(circle at 20% 15%, color-mix(in srgb, var(--accent) 10%, transparent), transparent 45%), var(--bg); }
+.lg-card { width: 100%; max-width: 380px; background: var(--panel); border: 1px solid var(--line); border-radius: 14px;
+  box-shadow: var(--shadow); padding: 26px 26px 20px; }
+.lg-brand { display: flex; gap: 12px; align-items: center; margin-bottom: 22px; }
+.lg-brand h1 { margin: 0; font-size: 19px; letter-spacing: -0.01em; }
+.lg-brand p { margin: 2px 0 0; font-size: 13px; color: var(--ink-3); }
+.login form { display: grid; gap: 6px; }
+.login label { font-size: 12.5px; font-weight: 600; color: var(--ink-2); margin-top: 6px; }
+.login input:not([type=checkbox]) { height: 42px; padding: 0 12px; border: 1px solid var(--line-2); border-radius: 8px; background: var(--panel-2); outline: none; }
+.login input:focus { border-color: var(--focus); background: var(--panel); box-shadow: 0 0 0 3px color-mix(in srgb, var(--focus) 18%, transparent); }
+.login .lg-check { display: flex; align-items: center; gap: 8px; font-weight: 400; margin-top: 10px; cursor: pointer; }
+.login .lg-check input { accent-color: var(--accent); width: 15px; height: 15px; margin: 0; }
+.lg-err { margin: 6px 0 0; color: var(--accent); font-size: 13px; font-weight: 600; }
+.lg-btn { height: 42px; justify-content: center; margin-top: 12px; font-size: 14px; }
+.lg-btn:disabled { opacity: .7; cursor: wait; }
+.lg-foot { margin: 18px 0 0; font-size: 12px; color: var(--ink-3); line-height: 1.45; }
+
+/* ---------------------------------------------------------------- harta */
+.mapwrap { position: relative; min-width: 0; }
+#map { position: absolute; inset: 0 0 30px 0; }
+#map.picking .maplibregl-canvas { cursor: crosshair; }
+
+.toolbar { position: absolute; top: 12px; left: 12px; display: flex; gap: 8px; z-index: 2; flex-wrap: wrap; max-width: calc(100% - 420px); }
+.tb { display: flex; background: var(--panel); border: 1px solid var(--line); border-radius: 9px; box-shadow: var(--shadow); padding: 3px; gap: 2px; }
+.tb button { display: inline-flex; align-items: center; gap: 7px; height: 32px; padding: 0 11px; border: 0; background: none; border-radius: 6px;
+  font-size: 13px; font-weight: 560; color: var(--ink-2); white-space: nowrap; }
+.tb button:hover { background: var(--panel-2); color: var(--ink); }
+.tb button[aria-pressed="true"] { background: var(--ink); color: var(--panel); }
+.tb button svg { width: 16px; height: 16px; flex: none; }
+.tb kbd { font: 10.5px var(--mono); opacity: 0.6; }
+
+.modebar { position: absolute; top: 62px; left: 50%; transform: translateX(-50%); z-index: 3; display: flex; align-items: center; gap: 12px;
+  background: var(--ink); color: var(--panel); padding: 8px 8px 8px 14px; border-radius: 99px; box-shadow: var(--shadow); font-size: 13px; }
+.modebar strong { font: 600 14px var(--mono); }
+.modebar button { border: 0; border-radius: 99px; height: 28px; padding: 0 12px; background: color-mix(in srgb, var(--panel) 18%, transparent); color: var(--panel); font-weight: 560; font-size: 12.5px; }
+.modebar button:hover { background: color-mix(in srgb, var(--panel) 30%, transparent); }
+
+/* fișa de informații */
+.info { position: absolute; top: 12px; right: 12px; width: 360px; max-height: calc(100% - 100px); overflow: auto; z-index: 2;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow); }
+.info-h { display: flex; gap: 12px; align-items: flex-start; padding: 14px 14px 10px 16px; border-bottom: 1px solid var(--line); position: sticky; top: 0; background: var(--panel); }
+.info-h img { width: 26px; height: 26px; margin-top: 1px; }
+.info-h .t { flex: 1; min-width: 0; }
+.info-h h2 { margin: 0; font-size: 16px; font-weight: 650; line-height: 1.3; text-wrap: balance; overflow-wrap: anywhere; }
+.info-h .kind { display: inline-block; margin-top: 4px; font-size: 11.5px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--ink-2); }
+.info-h .x { border: 0; background: none; width: 30px; height: 30px; border-radius: 6px; color: var(--ink-3); font-size: 20px; line-height: 1; flex: none; }
+.info-h .x:hover { background: var(--panel-2); color: var(--ink); }
+.attrs { display: grid; grid-template-columns: minmax(96px, auto) 1fr; gap: 6px 14px; margin: 0; padding: 12px 16px; font-size: 13.5px; }
+.attrs dt { color: var(--ink-3); }
+.attrs dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+.attrs dd.warn { color: var(--warn); font-weight: 600; }
+.coords { margin: 0 12px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel-2); }
+.coords > div { display: grid; grid-template-columns: 70px 1fr auto; gap: 8px; align-items: center; padding: 7px 10px; }
+.coords > div + div { border-top: 1px solid var(--line); }
+.coords .k { font-size: 11px; font-weight: 650; letter-spacing: .05em; text-transform: uppercase; color: var(--ink-3); }
+.coords .v { font: 13px var(--mono); font-variant-numeric: tabular-nums; user-select: all; }
+.coords button { border: 0; background: none; color: var(--ink-3); width: 28px; height: 26px; border-radius: 5px; display: grid; place-items: center; }
+.coords button:hover { background: var(--panel); color: var(--ink); }
+.coords button svg { width: 15px; height: 15px; }
+.info-a { display: flex; flex-wrap: wrap; gap: 8px; padding: 0 12px 14px; }
+.commune-trigger { height: auto; min-height: 36px; white-space: normal; text-align: left; padding-block: 7px; }
+
+/* A separate map is mounted only while the native modal is open. */
+.commune-dialog { width: min(1180px, calc(100vw - 48px)); height: min(860px, calc(100dvh - 48px));
+  max-width: none; max-height: none; padding: 0; margin: auto; border: 1px solid var(--line-2);
+  border-radius: 16px; background: var(--panel); color: var(--ink); box-shadow: var(--shadow); overflow: hidden; }
+.commune-dialog[open] { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; }
+.commune-dialog::backdrop { background: rgb(10 16 24 / 48%); backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); }
+.commune-header { display: flex; align-items: center; gap: 12px; justify-content: space-between;
+  padding: 12px 16px 12px 20px; border-bottom: 1px solid var(--line); }
+.commune-header > div { min-width: 0; }
+.commune-eyebrow { font-size: 10.5px; font-weight: 600; letter-spacing: .09em; text-transform: uppercase; color: var(--ink-3); }
+.commune-header h2 { margin: 2px 0 0; font-size: 21px; font-weight: 600; letter-spacing: -.02em; line-height: 1.2; overflow-wrap: anywhere; }
+.commune-close { flex: none; width: 44px; height: 44px; padding: 0; border: 1px solid var(--line); border-radius: 10px;
+  background: var(--panel-2); color: var(--ink-2); font-size: 26px; }
+.commune-close:hover { background: var(--accent-soft); color: var(--accent); }
+.commune-map-wrap { position: relative; min-height: 0; background: var(--bg); }
+.commune-map { position: absolute; inset: 0; }
+.commune-loading { position: absolute; inset: 0; z-index: 1; margin: 0; display: grid; place-items: center;
+  padding: 24px; text-align: center; background: var(--panel-2); color: var(--ink-2); }
+.commune-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 10px 16px; border-top: 1px solid var(--line); }
+.commune-footer p { margin: 0; font-size: 12px; color: var(--ink-2); }
+.commune-fit { flex: none; min-height: 40px; }
+.commune-dialog .maplibregl-ctrl-top-right { display: block; }
+.commune-dialog .maplibregl-ctrl-bottom-left, .commune-dialog .maplibregl-ctrl-bottom-right { bottom: 0; }
+
+/* meniu contextual */
+.ctx { position: absolute; z-index: 5; min-width: 230px; padding: 5px; margin: 0; list-style: none; background: var(--panel); border: 1px solid var(--line-2);
+  border-radius: 9px; box-shadow: var(--shadow); }
+.ctx .hd { padding: 6px 10px 7px; font: 12px var(--mono); color: var(--ink-3); border-bottom: 1px solid var(--line); margin-bottom: 4px; }
+.ctx button { display: flex; width: 100%; align-items: center; gap: 10px; padding: 7px 10px; border: 0; background: none; border-radius: 6px; text-align: left; font-size: 13.5px; }
+.ctx button:hover, .ctx button:focus-visible { background: var(--panel-2); outline: none; }
+.ctx button svg { width: 16px; height: 16px; color: var(--ink-3); flex: none; }
+.ctx hr { border: 0; border-top: 1px solid var(--line); margin: 4px 0; }
+
+/* bara de stare */
+.status { position: absolute; left: 0; right: 0; bottom: 0; height: 30px; display: flex; align-items: center; gap: 18px; padding: 0 14px;
+  background: var(--panel); border-top: 1px solid var(--line); font-size: 12px; color: var(--ink-2); white-space: nowrap; overflow: hidden; }
+.status .mono { color: var(--ink); }
+.status .k { color: var(--ink-3); margin-right: 4px; }
+.status .sp { flex: 1; }
+
+.toast { position: absolute; bottom: 48px; left: 50%; transform: translateX(-50%); z-index: 6; background: var(--ink); color: var(--panel);
+  padding: 8px 14px; border-radius: 8px; font-size: 13px; box-shadow: var(--shadow); }
+
+.loading { position: absolute; inset: 0 0 30px 0; display: grid; place-items: center; z-index: 4; background: var(--bg); color: var(--ink-2); }
+.loading.err { color: var(--accent); padding: 24px; text-align: center; }
+
+/* controale MapLibre în tema aplicației */
+.maplibregl-ctrl-group { background: var(--panel) !important; border: 1px solid var(--line); box-shadow: var(--shadow) !important; border-radius: 9px !important; }
+.maplibregl-ctrl-group button + button { border-top: 1px solid var(--line) !important; }
+:root[data-theme="dark"] .maplibregl-ctrl-group button .maplibregl-ctrl-icon { filter: invert(1) hue-rotate(180deg); }
+.maplibregl-ctrl-scale { background: color-mix(in srgb, var(--panel) 85%, transparent) !important; color: var(--ink) !important; border-color: var(--ink-2) !important; font: 11px var(--font) !important; }
+.maplibregl-ctrl-attrib { background: color-mix(in srgb, var(--panel) 80%, transparent) !important; color: var(--ink-2) !important; font-size: 11px; }
+.maplibregl-ctrl-attrib a { color: var(--ink-2) !important; }
+.maplibregl-ctrl-bottom-left, .maplibregl-ctrl-bottom-right { bottom: 0; }
+
+@media (max-width: 900px) {
+  .toolbar { max-width: calc(100% - 24px); }
+  .info { top: auto; bottom: 42px; width: calc(100% - 24px); max-height: 50%; }
+}
+
+@media (max-width: 760px), (max-height: 520px) and (pointer: coarse) {
+  .commune-dialog { width: 100%; height: 100%; height: 100dvh; border: 0; border-radius: 0; }
+  .commune-header { padding: calc(8px + env(safe-area-inset-top, 0px)) 10px 8px 16px; }
+  .commune-header h2 { font-size: 19px; }
+  .commune-footer { align-items: stretch; flex-direction: column; gap: 8px;
+    padding: 10px 12px calc(10px + env(safe-area-inset-bottom, 0px)); }
+  .commune-fit { justify-content: center; min-height: 44px; }
+  .commune-dialog .maplibregl-ctrl-group button { width: 44px; height: 44px; }
+  .commune-dialog .maplibregl-ctrl-zoom-in, .commune-dialog .maplibregl-ctrl-zoom-out { display: block !important; }
+}
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+
+/* ================================================================ telefon / ecran mic
+   Harta pe tot ecranul; căutarea sus; instrumentele într-o coloană în dreapta;
+   panoul lateral devine foaie trasă de jos (strânsă / jumătate / tot ecranul). */
+.mob-only, .t-short, .sheet-grip { display: none; }
+.topbar:empty { display: none; }
+.maplibregl-ctrl-top-right { display: none; } /* butonul GPS propriu declanșează localizarea */
+.tb button[aria-pressed="true"] svg { color: inherit; }
+
+@media (max-width: 760px), (max-height: 520px) and (pointer: coarse) {
+  :root { --top: calc(env(safe-area-inset-top, 0px) + 10px); --peek: calc(61px + env(safe-area-inset-bottom, 0px)); }
+  body { font-size: 15px; overscroll-behavior: none; -webkit-tap-highlight-color: transparent; }
+  button, .li, .near li, .results li { touch-action: manipulation; }
+  .app { display: block; position: relative; height: 100%; height: 100dvh; }
+  .mapwrap { position: absolute; inset: 0; }
+  #map, .loading { inset: 0; }
+  .status, .desk-only, kbd { display: none !important; }
+  .mob-only { display: inline-block; }
+  .t-long { display: none; }
+  .t-short { display: inline; }
+
+  /* căutare sus */
+  .topbar { position: absolute; z-index: 6; top: var(--top); left: 10px; right: 10px; }
+  .topbar .search { padding: 0; }
+  .topbar .search input { height: 46px; font-size: 16px; padding: 0 14px 0 42px; border-radius: 12px;
+    background: var(--panel); border-color: var(--line); box-shadow: var(--shadow); }
+  .topbar .search .ico { left: 14px; top: 15px; }
+  .topbar .results { left: 0; right: 0; top: 52px; max-height: min(58dvh, 440px); border-radius: 12px; }
+  .results li { padding: 10px 8px; }
+
+  /* instrumente: coloană în dreapta */
+  .toolbar { top: calc(var(--top) + 56px); left: auto; right: 10px; max-width: none; flex-direction: column; gap: 8px; }
+  .tb { flex-direction: column; padding: 3px; border-radius: 12px; }
+  .tb button { width: 44px; height: 44px; padding: 0; justify-content: center; border-radius: 9px; }
+  .tb button svg { width: 21px; height: 21px; }
+  .tb .tl, #t-harta { display: none; }
+
+  /* foaia de jos */
+  .side { position: absolute; z-index: 5; left: 0; right: 0; bottom: 0; height: var(--peek);
+    padding-bottom: env(safe-area-inset-bottom, 0px); border-right: 0; border-radius: 16px 16px 0 0;
+    box-shadow: 0 -4px 24px rgba(18, 24, 33, 0.18); transition: height .26s cubic-bezier(.2, .8, .2, 1); overflow: hidden; }
+  .side.dragging { transition: none; }
+  .side[data-sheet="half"] { height: 48dvh; }
+  .side[data-sheet="full"] { height: calc(100dvh - var(--top) - 64px); }
+  .sheet-grip { display: block; order: 0; flex: none; height: 18px; padding-top: 7px; cursor: grab; touch-action: none; }
+  .sheet-grip span { display: block; width: 40px; height: 5px; margin: 0 auto; border-radius: 3px; background: var(--line-2); }
+  .tabs { order: 1; flex: none; height: 43px; padding: 0 6px; touch-action: none; }
+  .tabs button { flex: 1; height: 42px; padding: 0 4px; font-size: 14.5px; }
+  .panel { order: 2; padding: 6px 8px 16px; overscroll-behavior: contain; }
+  .brand { order: 3; padding: 10px 16px 2px; border-top: 1px solid var(--line); }
+  .brand .plate { width: 34px; height: 24px; font-size: 12px; }
+  .brand h1 { font-size: 14px; }
+  .who { order: 4; margin: 6px 16px 10px; }
+  .side[data-sheet="peek"] .panel { display: none; }
+  .side:not([data-sheet="full"]) .brand, .side:not([data-sheet="full"]) .who { display: none; }
+
+  /* ținte de atingere mai mari */
+  .li { grid-template-columns: 22px 22px minmax(0, 1fr) auto; min-height: 44px; padding: 9px 8px; }
+  .li input { width: 19px; height: 19px; }
+  .grp-h button { width: 44px; height: 44px; padding: 10px; }
+  .near li { padding: 10px 6px; }
+  .chip { padding: 7px 13px; font-size: 14px; }
+  .btn { height: 40px; font-size: 14px; }
+  .row-btns { gap: 8px; }
+  .coords button { width: 38px; height: 34px; }
+
+  /* fișa obiectului: foaie de jos peste panou */
+  .info { z-index: 7; top: auto; left: 0; right: 0; bottom: 0; width: auto; max-height: 64dvh;
+    border-radius: 16px 16px 0 0; border-bottom: 0; padding-bottom: env(safe-area-inset-bottom, 0px);
+    overscroll-behavior: contain; }
+  .info-h { padding: 14px 10px 10px 16px; }
+  .info-h .x { width: 40px; height: 40px; font-size: 24px; }
+  .attrs { grid-template-columns: minmax(92px, auto) 1fr; font-size: 14px; }
+
+  /* meniul de apăsare lungă: listă de acțiuni jos */
+  .ctx { left: 8px !important; right: 8px; top: auto !important; bottom: calc(8px + env(safe-area-inset-bottom, 0px));
+    min-width: 0; z-index: 8; border-radius: 14px; }
+  .ctx button { padding: 12px; font-size: 15px; }
+  .ctx .hd { padding: 8px 12px 9px; }
+
+  /* bara de mod (măsurare / alegere punct) deasupra panoului */
+  .modebar { top: auto; bottom: calc(var(--peek) + 12px); left: 10px; right: 10px; transform: none;
+    flex-wrap: wrap; justify-content: flex-end; border-radius: 14px; padding: 8px 8px 8px 14px; }
+  .modebar .mb-t { margin-right: auto; }
+  .modebar { gap: 6px; }
+  .modebar strong { font-size: 15px; }
+  .modebar button { height: 36px; padding: 0 11px; font-size: 13px; }
+  .toast { bottom: calc(var(--peek) + 16px); max-width: calc(100% - 32px); text-align: center; }
+
+  /* controalele hărții deasupra panoului strâns */
+  .maplibregl-ctrl-bottom-left, .maplibregl-ctrl-bottom-right { bottom: var(--peek); }
+  .maplibregl-ctrl-zoom-in, .maplibregl-ctrl-zoom-out { display: none !important; }
+
+  /* autentificare */
+  .login { align-items: start; padding: calc(env(safe-area-inset-top, 0px) + 7vh) 16px 16px; }
+  .lg-card { padding: 22px 20px 18px; }
+  .login input:not([type=checkbox]) { height: 48px; font-size: 16px; }
+  .login .lg-check input { width: 19px; height: 19px; }
+  .lg-btn { height: 48px; font-size: 15px; }
+  .uform input, .uform select { height: 42px; font-size: 16px; }
+}
+
+/* telefon ținut orizontal: puțină înălțime, deci instrumentele trec pe un rând lângă căutare */
+@media (max-height: 520px) and (pointer: coarse) and (orientation: landscape) {
+  .topbar { right: calc(10px + 5 * 50px + 2 * 8px + 12px); }
+  .toolbar { top: var(--top); flex-direction: row; }
+  .tb { flex-direction: row; }
+  .tb button { width: 42px; height: 40px; }
+  .info { left: auto; width: min(420px, 60vw); max-height: calc(100dvh - var(--top) - 64px); border-radius: 16px 0 0 0; }
+}
+
+/* tabletă: bara laterală e îngustă, deci filele folosesc numele scurte */
+@media (max-width: 900px) {
+  .t-long { display: none; }
+  .t-short { display: inline; }
+}
