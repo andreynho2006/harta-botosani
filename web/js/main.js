@@ -7,7 +7,7 @@ import { ensureLogin, decryptJSON, logout } from "./auth.js";
 import { renderAdmin } from "./admin.js";
 import { formatRestriction } from "./restrictions.js";
 import { openCommuneMap, isCommuneMapOpen } from "./commune.js";
-import { initOperations } from "./operations.js?v=20261018-mobile-cjsu";
+import { initOperations } from "./operations.js?v=20261018-mobile-cjsu-2";
 import {
   distance, bearing, direction, circle, fmtDistance, fmtLatLon, fmtStereo, fmtDMS,
   parseCoordinates, makeUatLookup,

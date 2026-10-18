@@ -346,7 +346,7 @@ button { cursor: pointer; }
 .tb button[aria-pressed="true"] svg { color: inherit; }
 
 @media (max-width: 760px), (max-height: 520px) {
-  :root { --top: calc(env(safe-area-inset-top, 0px) + 10px); --peek: calc(61px + env(safe-area-inset-bottom, 0px)); }
+  :root { --top: calc(env(safe-area-inset-top, 0px) + 10px); --peek: calc(64px + env(safe-area-inset-bottom, 0px)); }
   body { font-size: 15px; overscroll-behavior: none; -webkit-tap-highlight-color: transparent; }
   button, .li, .near li, .results li { touch-action: manipulation; }
   .app { display: block; position: relative; height: 100%; height: 100dvh; }
@@ -382,8 +382,8 @@ button { cursor: pointer; }
   .side[data-sheet="full"] { height: calc(100dvh - var(--top) - 64px); }
   .sheet-grip { display: block; order: 0; flex: none; height: 18px; padding-top: 7px; cursor: grab; touch-action: none; }
   .sheet-grip span { display: block; width: 40px; height: 5px; margin: 0 auto; border-radius: 3px; background: var(--line-2); }
-  .tabs { order: 1; flex: none; height: 43px; padding: 0 6px; touch-action: none; }
-  .tabs button { flex: 1; height: 42px; padding: 0 4px; font-size: 14.5px; }
+  .tabs { order: 1; flex: none; height: 46px; padding: 0 6px; touch-action: none; }
+  .tabs button { flex: 1; height: 44px; padding: 0 4px; font-size: 14.5px; }
   .panel { order: 2; padding: 6px 8px 16px; overscroll-behavior: contain; }
   .brand { order: 3; padding: 10px 16px 2px; border-top: 1px solid var(--line); }
   .brand .plate { width: 34px; height: 24px; font-size: 12px; }
@@ -397,17 +397,17 @@ button { cursor: pointer; }
   .li input { width: 19px; height: 19px; }
   .grp-h button { width: 44px; height: 44px; padding: 10px; }
   .near li { padding: 10px 6px; }
-  .chip { padding: 7px 13px; font-size: 14px; }
-  .btn { height: 40px; font-size: 14px; }
+  .chip { display: inline-flex; align-items: center; min-height: 44px; padding: 7px 13px; font-size: 14px; }
+  .btn { min-height: 44px; height: auto; font-size: 14px; }
   .row-btns { gap: 8px; }
-  .coords button { width: 38px; height: 34px; }
+  .coords button { min-width: 44px; min-height: 44px; }
 
   /* fișa obiectului: foaie de jos peste panou */
   .info { z-index: 7; top: auto; left: 0; right: 0; bottom: 0; width: auto; max-height: 64dvh;
     border-radius: 16px 16px 0 0; border-bottom: 0; padding-bottom: env(safe-area-inset-bottom, 0px);
     overscroll-behavior: contain; }
   .info-h { padding: 14px 10px 10px 16px; }
-  .info-h .x { width: 40px; height: 40px; font-size: 24px; }
+  .info-h .x { width: 44px; height: 44px; font-size: 24px; }
   .attrs { grid-template-columns: minmax(92px, auto) 1fr; font-size: 14px; }
 
   /* meniul de apăsare lungă: listă de acțiuni jos */
@@ -422,7 +422,7 @@ button { cursor: pointer; }
   .modebar .mb-t { margin-right: auto; }
   .modebar { gap: 6px; }
   .modebar strong { font-size: 15px; }
-  .modebar button { height: 36px; padding: 0 11px; font-size: 13px; }
+  .modebar button { min-height: 44px; padding: 0 11px; font-size: 13px; }
   .toast { bottom: calc(var(--peek) + 16px); max-width: calc(100% - 32px); text-align: center; }
 
   /* controalele hărții deasupra panoului strâns */
@@ -435,7 +435,7 @@ button { cursor: pointer; }
   .login input:not([type=checkbox]) { height: 48px; font-size: 16px; }
   .login .lg-check input { width: 19px; height: 19px; }
   .lg-btn { height: 48px; font-size: 15px; }
-  .uform input, .uform select { height: 42px; font-size: 16px; }
+  .uform input, .uform select { height: 44px; font-size: 16px; }
 
   .mobile-map-toggle { display: grid; place-items: center; position: absolute; z-index: 7;
     left: max(10px, env(safe-area-inset-left, 0px)); bottom: calc(var(--peek) + 12px);
@@ -460,7 +460,7 @@ button { cursor: pointer; }
   .topbar { right: calc(10px + 5 * 50px + 2 * 8px + 12px); }
   .toolbar { top: var(--top); flex-direction: row; }
   .tb { flex-direction: row; }
-  .tb button { width: 42px; height: 40px; }
+  .tb button { width: 44px; height: 44px; }
   .info { left: auto; width: min(420px, 60vw); max-height: calc(100dvh - var(--top) - 64px); border-radius: 16px 0 0 0; }
 }
 
