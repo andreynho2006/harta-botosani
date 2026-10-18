@@ -77,6 +77,27 @@ function sanitizeForFirestore(obj) {
   return out;
 }
 
+function prepareSituationForFirestore(sit) {
+  const clean = sanitizeForFirestore(sit);
+  if (clean && clean.features && typeof clean.features === "object") {
+    clean.features = JSON.stringify(clean.features);
+  }
+  return clean;
+}
+
+function parseSituationFromFirestore(d) {
+  if (!d) return null;
+  const out = { ...d };
+  if (typeof out.features === "string") {
+    try {
+      out.features = JSON.parse(out.features);
+    } catch (e) {
+      console.warn("Eroare la parsarea GeoJSON din Firestore:", e);
+    }
+  }
+  return out;
+}
+
 // ------------------------------------------------------------------ Subunități ISU
 
 /** Ascultă în timp real lista oficială a subunităților ISU din Firestore. */
@@ -124,7 +145,7 @@ export async function subscribeSituations(onUpdateAll) {
   return fs.onSnapshot(colRef, (snap) => {
     const events = [];
     snap.forEach((doc) => {
-      const d = doc.data();
+      const d = parseSituationFromFirestore(doc.data());
       if (d && d.id) events.push(d);
     });
     onUpdateAll(events);
@@ -140,7 +161,7 @@ export async function saveSituationCloud(situation) {
   if (!conn) return false;
   const { db, fs } = conn;
   try {
-    const clean = sanitizeForFirestore(situation);
+    const clean = prepareSituationForFirestore(situation);
     await fs.setDoc(fs.doc(db, "situatii", String(situation.id)), clean);
     return true;
   } catch (err) {
@@ -173,7 +194,7 @@ export async function fetchSituationsCloud() {
     const snap = await fs.getDocs(fs.collection(db, "situatii"));
     const events = [];
     snap.forEach((doc) => {
-      const d = doc.data();
+      const d = parseSituationFromFirestore(doc.data());
       if (d && d.id) events.push(d);
     });
     return events;
