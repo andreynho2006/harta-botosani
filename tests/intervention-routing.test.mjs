@@ -44,7 +44,7 @@ test('nearby disconnected roads and geometric crossings never invent connections
   const nearB = [B[0] + 0.00002, B[1]];
   isFailure(route(A, C, [road([A, B]), road([nearB, C])]));
   isFailure(route(A, D, [road([A, C]), road([[B[0], B[1] - 0.01], D])]));
-  const gap = [B[0], B[1] + 0.000003]; // About 33 cm from the road interior.
+  const gap = [B[0], B[1] + 0.00001]; // About 1.11 m: beyond source quantization tolerance.
   isFailure(route(A, D, [road([A, C]), road([gap, D])]));
 });
 
@@ -149,4 +149,18 @@ test('duplicate OSM ways or differently densified copies cannot be presented as 
   assert.equal(route(A, C, [road([A, C]), road([A, B, C])]).alternative, null);
   const result = route(A, C, [road([A, B, C]), road([A, B, C]), road([A, D, C])]);
   assert.deepEqual(result.alternative.geometry.coordinates, [A, D, C]);
+});
+
+
+test('quantized same-grade service/street endpoint junctions connect within 75 cm only', () => {
+  for (const offset of [0.000001, 0.000002, 0.000006]) {
+    const junction = [B[0], B[1] + offset];
+    const result = route(A, D, [road([A, C], { cls: 'dn' }), road([junction, D], { cls: 'service' })]);
+    assert.ok(result.primary, `Real endpoint rounding by ${offset} degrees should remain connected`);
+    assert.deepEqual(result.primary.geometry.coordinates, [A, junction, D]);
+  }
+  const outsideTolerance = [B[0], B[1] + 0.000008];
+  isFailure(route(A, D, [road([A, C]), road([outsideTolerance, D])]));
+  const roundedJunction = [B[0], B[1] + 0.000001];
+  isFailure(route(A, D, [road([A, C], { bridge: 1 }), road([roundedJunction, D])]));
 });

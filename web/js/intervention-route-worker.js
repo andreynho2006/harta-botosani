@@ -1,9 +1,9 @@
-import { prepareInterventionGraph, computeInterventionRoutes } from './intervention-routing.js?v=20261018-itineraries';
+import { prepareInterventionGraph, computeInterventionRoutes } from './intervention-routing.js?v=20261018-itineraries-v2';
 
 let graphPromise = null;
 function graph() {
   if (!graphPromise) graphPromise = (async () => {
-    const response = await fetch(new URL('../data/routing-roads.json?v=20261018-itineraries', import.meta.url));
+    const response = await fetch(new URL('../data/routing-roads.json?v=20261018-itineraries-v2', import.meta.url));
     if (!response.ok) throw new Error('routing-data-unavailable');
     const data = await response.json();
     if (data?.type !== 'FeatureCollection' || !Array.isArray(data.features)) throw new Error('invalid-routing-data');

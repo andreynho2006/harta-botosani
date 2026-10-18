@@ -9,10 +9,8 @@ import { spawnSync } from 'node:child_process';
 const chrome = process.env.CHROME_BIN || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 const sizes = [[1366, 768], [320, 568], [390, 844], [844, 390], [900, 480]];
 
-async function browserChecks(web) {
+async function browserChecks({ initOperations, createEvent }) {
   try {
-    const { initOperations } = await import(web + 'js/operations.js');
-    const { createEvent } = await import(web + 'js/event-store.js');
     const active = createEvent('Presentation warning regression', 'snow');
     active.notes = 'Operational summary: ' + 'Full details remain available. '.repeat(30);
     active.alert = {
@@ -33,8 +31,24 @@ async function browserChecks(web) {
       getPadding: () => ({}), getContainer: () => document.querySelector('#map'),
       fitBounds: () => fitCalls++, setPadding: () => paddingCalls++, resize: () => resizeCalls++, jumpTo: () => jumpCalls++,
     };
+    // The map is a synchronous stub, so its animation callbacks need no compositor.
+    // Execute every production callback deterministically: delayed initial fitting must
+    // finish before the toggle baseline, and any fitting scheduled by a toggle still fails.
+    const frames = new Map();
+    let frameId = 0;
+    window.requestAnimationFrame = callback => { const id = ++frameId; frames.set(id, callback); return id; };
+    window.cancelAnimationFrame = id => frames.delete(id);
     initOperations({ map, storage, state: { data: {}, visible: {}, overlays: {}, basemap: 'harta', theme: 'zi' }, toast: noop, selectTab: noop, applyStyle: noop, renderLayerPanel: noop });
-    const nextFrame = () => new Promise(resolve => { requestAnimationFrame(() => requestAnimationFrame(resolve)); setTimeout(resolve, 40); });
+    const nextFrame = async () => {
+      for (let turn = 0; frames.size; turn++) {
+        if (turn >= 100) throw new Error('Presentation scheduled an endless animation loop');
+        const current = [...frames]; frames.clear();
+        for (const [, callback] of current) callback(performance.now());
+        await Promise.resolve();
+      }
+      // Reading layout keeps visibility, scrolling and hit tests in the real browser.
+      document.body.getBoundingClientRect();
+    };
     const visible = (element) => Boolean(element && getComputedStyle(element).display !== 'none' && element.getBoundingClientRect().width && element.getBoundingClientRect().height);
     const inViewport = (element) => {
       if (!visible(element)) return false;
@@ -55,7 +69,7 @@ async function browserChecks(web) {
     const check = (name, value) => { result[name] = Boolean(value); };
     document.querySelector('[data-action="present"]').click();
     await nextFrame();
-    await nextFrame();
+    if (resizeCalls === 0 || fitCalls === 0) throw new Error('Initial presentation fitting did not finish');
     const compact = innerWidth <= 760 || innerHeight <= 520;
     check('compactClassification', document.querySelector('.ops-presentation').dataset.compact === String(compact));
     check('initialPanels', compact ? openPanels().length === 0 : visible(panel('messages')));
@@ -130,25 +144,30 @@ async function browserChecks(web) {
 test('CJSU panels collapse independently, preserve the map, and keep full warnings accessible', { skip: !existsSync(chrome) }, () => {
   const dir = mkdtempSync(join(tmpdir(), 'cjsu-presentation-'));
   const web = new URL('../web/', import.meta.url).href;
-  const child = `<!doctype html><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><script src="${web}vendor/proj4.js"></script><link rel="stylesheet" href="${web}css/app.css"><link rel="stylesheet" href="${web}css/operations.css"><div class="app"><aside class="side"><div id="tab-situatii"></div></aside><div class="mapwrap"><div id="map" style="background:#dce6df"></div></div></div><script type="module">(${browserChecks.toString()})(${JSON.stringify(web)})</script>`;
-  const harness = `<body><pre id="results"></pre><script>
+  const child = `<!doctype html><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><script src="${web}vendor/proj4.js"></script><link rel="stylesheet" href="${web}css/app.css"><link rel="stylesheet" href="${web}css/operations.css"><div class="app"><aside class="side"><div id="tab-situatii"></div></aside><div class="mapwrap"><div id="map" style="background:#dce6df"></div></div></div><script type="module">import { initOperations } from "${web}js/operations.js"; import { createEvent } from "${web}js/event-store.js"; (${browserChecks.toString()})({ initOperations, createEvent })</script>`;
+  const harness = `<body style="margin:0"><pre id="results" style="position:fixed;left:-10000px"></pre><script>
     const results = [];
-    onmessage = event => { results.push(event.data); document.querySelector('#results').textContent = JSON.stringify(results); };
-    for (const [width, height] of ${JSON.stringify(sizes)}) {
-      const frame = document.createElement('iframe'); frame.width = width; frame.height = height;
-      frame.srcdoc = ${JSON.stringify(child).replaceAll('<', '\\u003c')}; document.body.append(frame);
+    const sizes = ${JSON.stringify(sizes)};
+    let index = 0, current;
+    function next() {
+      if (index === sizes.length) return;
+      const [width, height] = sizes[index++];
+      const frame = document.createElement('iframe'); frame.width = width; frame.height = height; frame.style.cssText = 'position:fixed;inset:0;border:0';
+      frame.srcdoc = ${JSON.stringify(child).replaceAll('<', '\\u003c')}; current = frame; document.body.append(frame);
     }
+    onmessage = event => { results.push(event.data); document.querySelector('#results').textContent = JSON.stringify(results); current.remove(); next(); };
+    next();
   </script>`;
   try {
     const path = join(dir, 'test.html');
     writeFileSync(path, harness);
     if (process.env.CJSU_FIXTURE_DIR) {
-      const preview = child.replace('const nextFrame =', `document.querySelector('[data-action="present"]').click(); const previewPanel = new URLSearchParams(location.search).get('panel'); if (previewPanel) document.querySelector('[data-action="pres-toggle-' + previewPanel + '"]')?.click(); return; const nextFrame =`);
+      const preview = child.replace('const nextFrame =', `document.querySelector('[data-action="present"]').click(); for (const [, callback] of frames) callback(performance.now()); frames.clear(); const previewPanel = new URLSearchParams(location.search).get('panel'); if (previewPanel) document.querySelector('[data-action="pres-toggle-' + previewPanel + '"]')?.click(); return; const nextFrame =`);
       writeFileSync(join(process.env.CJSU_FIXTURE_DIR, 'cjsu-presentation.html'), preview);
     }
-    const run = spawnSync(chrome, ['--headless', '--enable-logging=stderr', '--disable-gpu', '--no-first-run', '--no-default-browser-check', '--allow-file-access-from-files', '--user-data-dir=' + join(dir, 'profile'), '--virtual-time-budget=10000', '--dump-dom', pathToFileURL(path).href], { encoding: 'utf8', timeout: 30000, maxBuffer: 8 * 1024 * 1024 });
+    const run = spawnSync(chrome, ['--headless', '--window-size=1440,1000', '--enable-logging=stderr', '--disable-gpu', '--no-first-run', '--no-default-browser-check', '--allow-file-access-from-files', '--user-data-dir=' + join(dir, 'profile'), '--virtual-time-budget=10000', '--dump-dom', pathToFileURL(path).href], { encoding: 'utf8', timeout: 30000, maxBuffer: 8 * 1024 * 1024 });
     assert.equal(run.status, 0, run.error?.message || run.stderr || String(run.signal));
-    const match = run.stdout.match(/<pre id="results">([\s\S]*?)<\/pre>/);
+    const match = run.stdout.match(/<pre id="results"[^>]*>([\s\S]*?)<\/pre>/);
     assert.ok(match?.[1], 'Browser did not complete the presentation checks: ' + run.stderr.slice(-4000));
     const results = JSON.parse(match[1].replaceAll('&amp;', '&').replaceAll('&lt;', '<').replaceAll('&gt;', '>'));
     assert.equal(results.length, sizes.length, 'Incomplete browser results: ' + JSON.stringify(results));

@@ -1,6 +1,6 @@
-import { getInterventionUnits } from './intervention-units.js?v=20261018-itineraries';
-import { parseCoordinateCandidates } from './subunits.js?v=20261018-itineraries';
-import { POI } from './config.js?v=20261018-itineraries';
+import { getInterventionUnits } from './intervention-units.js?v=20261018-itineraries-v2';
+import { parseCoordinateCandidates } from './subunits.js?v=20261018-itineraries-v2';
+import { POI } from './config.js?v=20261018-itineraries-v2';
 
 const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const validPoint = point => Array.isArray(point) && point.length === 2 && point.every(Number.isFinite) &&
@@ -114,7 +114,7 @@ export function createInterventionPlanner(ctx) {
     feedback = ''; lastResult = null;
     try {
       if (!worker) {
-        worker = ctx.createWorker ? ctx.createWorker() : new Worker(new URL('./intervention-route-worker.js?v=20261018-itineraries', import.meta.url), { type: 'module' });
+        worker = ctx.createWorker ? ctx.createWorker() : new Worker(new URL('./intervention-route-worker.js?v=20261018-itineraries-v2', import.meta.url), { type: 'module' });
         worker.onmessage = ({ data }) => {
           const current = request;
           if (!current || data?.id !== current.id) return;

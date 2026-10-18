@@ -6,6 +6,14 @@
 export const SUBUNITS_FORMAT = "harta-botosani-subunitati";
 export const SUBUNITS_DRAFT_KEY = "hb.subunits.draft.v1";
 
+/** Older browser/cloud copies must not replace a more recently confirmed list. */
+export function isNewerSubunitsDocument(incoming, current) {
+  const next = Date.parse(incoming?.updatedAt);
+  const previous = Date.parse(current?.updatedAt);
+  if (Number.isFinite(previous)) return Number.isFinite(next) && next >= previous;
+  return Number.isFinite(next) || !current?.subunits?.length;
+}
+
 export const SUBUNIT_TYPES = {
   inspectorat: "Inspectorat (sediu ISU)",
   detasament: "Detașament de pompieri",

@@ -1,13 +1,13 @@
-import { EventStore, createEvent, sanitizeEvent, cleanupLegacyArchive } from "./event-store.js?v=20261018-itineraries";
+import { EventStore, createEvent, sanitizeEvent, cleanupLegacyArchive } from "./event-store.js?v=20261018-itineraries-v2";
 import {
   snapToRoad, buildRoadSegment, findRoadRoute, findRoadByRef, sliceRoadByKm, sliceRoadByPlaces,
   projectPointOnRoad, roadNetworkToFeatures, roadsListOf, lineLengthKm,
 } from "./road-sketch.js";
 import { outsideMask, geometryBounds } from "./commune-geometry.js";
 import { circle } from "./geo.js";
-import { LAYER_GROUPS, LAYER_PRESETS } from "./config.js?v=20261018-itineraries";
+import { LAYER_GROUPS, LAYER_PRESETS } from "./config.js?v=20261018-itineraries-v2";
 import { localTime, isoTime, dateLabel } from "./operations-time.js";
-import { createInterventionPlanner } from "./intervention-planner.js?v=20261018-itineraries";
+import { createInterventionPlanner } from "./intervention-planner.js?v=20261018-itineraries-v2";
 
 const FC = (features = []) => ({ type: "FeatureCollection", features });
 const esc = (value) => String(value ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -339,7 +339,8 @@ export function shortLabel(text, max = MAP_LABEL_MAX) {
 function withMapLabels(features = []) {
   return features.map(f => {
     const p = f.properties || {};
-    const name = shortLabel(p.title || p.road || "");
+    const routeName = isItinerary(f) ? `${p.kind === "route_primary" ? "Bază" : "Rezervă"} · ${(p.source || "Subunitate").replace(/^Garda de intervenție /, "G. ").replace(/^Punctul de lucru /, "PL ")}` : "";
+    const name = shortLabel(routeName || p.title || p.road || "");
     const status = isItinerary(f) ? `${p.lengthKm ?? "—"} km` : STATUS_WORD[p.status] || "Raportat";
     return { ...f, properties: { ...p, mapLabel: name ? `${name}\n${status}` : status, mapLabelInline: name ? `${name} · ${status}` : status } };
   });
@@ -524,7 +525,7 @@ export function initOperations(ctx) {
             id: id(), kind, status: "reported", routeGroup: group,
             subunitId: meta.unit.id, objectiveId: String(meta.destination.id || "").slice(0, 200),
             origin: [...meta.unit.coordinate], destination: [...meta.destination.coordinate],
-            title: `${KINDS[kind]} · ${meta.destination.name}`.slice(0, 200),
+            title: `${KINDS[kind]} · ${meta.unit.name} → ${meta.destination.name}`.slice(0, 200),
             source: meta.unit.name, lengthKm: +route.distanceKm.toFixed(2),
             observedAt: new Date().toISOString(),
             notes: "Propunere pe rețeaua hărții; accesul și gabaritul autospecialei trebuie verificate în teren.",

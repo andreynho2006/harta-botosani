@@ -1,14 +1,14 @@
 /* global maplibregl */
-import { POI, LAYER_GROUPS, LAYER_PRESETS, LABELS, START_VIEW, itemLabel } from "./config.js?v=20261018-itineraries";
-import { buildStyle, PALETTES } from "./style.js?v=20261018-itineraries";
+import { POI, LAYER_GROUPS, LAYER_PRESETS, LABELS, START_VIEW, itemLabel } from "./config.js?v=20261018-itineraries-v2";
+import { buildStyle, PALETTES } from "./style.js?v=20261018-itineraries-v2";
 import { buildIcons, iconDataURL } from "./icons.js";
 import { SearchIndex, typeInfo, norm } from "./search.js";
 import { ensureLogin, decryptJSON, logout } from "./auth.js";
-import { renderAdmin } from "./admin.js?v=20261018-itineraries";
+import { renderAdmin } from "./admin.js?v=20261018-itineraries-v2";
 import { formatRestriction } from "./restrictions.js";
-import { normalizeSubunitsDoc, mergeSubunitsIntoPois, SUBUNITS_DRAFT_KEY } from "./subunits.js?v=20261018-itineraries";
+import { normalizeSubunitsDoc, mergeSubunitsIntoPois, SUBUNITS_DRAFT_KEY, isNewerSubunitsDocument } from "./subunits.js?v=20261018-itineraries-v2";
 import { openCommuneMap, isCommuneMapOpen } from "./commune.js";
-import { initOperations } from "./operations.js?v=20261018-itineraries";
+import { initOperations } from "./operations.js?v=20261018-itineraries-v2";
 import {
   saveSubunitsCloud, subscribeSubunits,
   saveSituationCloud, deleteSituationCloud, subscribeSituations, onCloudStatus,
@@ -130,9 +130,11 @@ function replaceHydrants(fc) {
 }
 
 /** Aplică lista de subunități ISU pe hartă; `draft` = păstrată local până la publicarea subunitati.json. */
-function replaceSubunits(subunits, { draft = true } = {}) {
-  state.data.subunits = subunits;
-  state.data.subunitsDraft = draft ? { ...normalizeSubunitsDoc({ subunits }), updatedAt: new Date().toISOString() } : null;
+function replaceSubunits(subunits, { draft = true, updatedAt = new Date().toISOString() } = {}) {
+  const nextDoc = normalizeSubunitsDoc({ subunits, updatedAt });
+  state.data.subunits = nextDoc.subunits;
+  state.data.subunitsUpdatedAt = nextDoc.updatedAt;
+  state.data.subunitsDraft = draft ? nextDoc : null;
   try {
     if (state.data.subunitsDraft) localStorage.setItem(SUBUNITS_DRAFT_KEY, JSON.stringify(state.data.subunitsDraft));
     else localStorage.removeItem(SUBUNITS_DRAFT_KEY);
@@ -175,13 +177,14 @@ async function init() {
     loadJSON("data/stats.json", null),
     loadJSON("data/roads.json", { roads: [] }),
     loadJSON("data/situatii.json", null),
-    loadJSON("data/subunitati.json", null),
+    loadJSON("data/subunitati.json?v=20261018-itineraries-v2", null),
   ]);
   state.data.osmPois = { ...pois, features: pois.features.filter((f) => f.properties.cat !== "hidrant_osm") };
   state.data.subunitsPublished = normalizeSubunitsDoc(subunitsDoc);
   const draft = (() => { try { return JSON.parse(localStorage.getItem(SUBUNITS_DRAFT_KEY) || "null"); } catch { return null; } })();
-  state.data.subunitsDraft = draft ? normalizeSubunitsDoc(draft) : null;
+  state.data.subunitsDraft = draft && isNewerSubunitsDocument(draft, state.data.subunitsPublished) ? normalizeSubunitsDoc(draft) : null;
   state.data.subunits = (state.data.subunitsDraft || state.data.subunitsPublished).subunits;
+  state.data.subunitsUpdatedAt = (state.data.subunitsDraft || state.data.subunitsPublished).updatedAt;
   state.data.pois = mergeSubunitsIntoPois(state.data.osmPois, state.data.subunits);
   state.data.hydrants = prepareHydrants(hydrants);
   state.data.admin = admin;
@@ -217,8 +220,8 @@ async function init() {
   try {
     if (cloud?.subscribeSubunits) {
       cloud.subscribeSubunits((cloudDoc) => {
-        if (Array.isArray(cloudDoc?.subunits) && cloudDoc.subunits.length) {
-          replaceSubunits(cloudDoc.subunits, { draft: false });
+        if (Array.isArray(cloudDoc?.subunits) && isNewerSubunitsDocument(cloudDoc, { subunits: state.data.subunits, updatedAt: state.data.subunitsUpdatedAt })) {
+          replaceSubunits(cloudDoc.subunits, { draft: false, updatedAt: cloudDoc.updatedAt });
         }
       });
     }

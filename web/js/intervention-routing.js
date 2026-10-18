@@ -1,6 +1,8 @@
 // Local road routing over provider geometry. No network calls or off-road links.
 const R = 6371008.8, RAD = Math.PI / 180;
 const GRAPH_KIND = 'hb-intervention-graph-v1';
+// z15 tile geometry rounds genuine junction coordinates by a few decimeters.
+const ENDPOINT_JOIN_METERS = 0.75;
 const CLASSES = new Set(['dn', 'dj', 'dc', 'local', 'street', 'service', 'track']);
 const HIGHWAYS = new Set(['motorway', 'motorway_link', 'trunk', 'trunk_link', 'primary', 'primary_link', 'secondary', 'secondary_link', 'tertiary', 'tertiary_link', 'unclassified', 'residential', 'living_street', 'service', 'track', 'road']);
 const NON_DRIVING = new Set(['footway', 'pedestrian', 'path', 'steps', 'cycleway', 'bridleway', 'corridor', 'construction', 'proposed']);
@@ -71,7 +73,8 @@ class Grid {
 }
 
 /** Build once from all road classes, independently of map layer visibility.
- * Only shared vertices and exact same-grade endpoint touches create junctions.
+ * Only shared vertices and same-grade endpoint touches within submeter source
+ * quantization tolerance create junctions. Interior crossings never create nodes.
  * Cross-grade junctions require BOTH provider-certified endpointJunctions.
  */
 export function prepareInterventionGraph(features) {
@@ -117,11 +120,11 @@ export function prepareInterventionGraph(features) {
   segments.forEach((segment, id) => segmentGrid.addSegment(nodes[segment.a].xy, nodes[segment.b].xy, id));
   for (const id of endpoints) {
     const node = nodes[id];
-    for (const segmentId of segmentGrid.near(node.xy, 0.05)) {
+    for (const segmentId of segmentGrid.near(node.xy, ENDPOINT_JOIN_METERS)) {
       const segment = segments[segmentId];
       if (segment.a === id || segment.b === id || !node.grades.has(segment.grade)) continue;
       const hit = projectOn(node.xy, nodes[segment.a].xy, nodes[segment.b].xy);
-      if (hit.distance <= 0.05 && hit.t > 1e-8 && hit.t < 1 - 1e-8) segment.splits.push({ t: hit.t, id });
+      if (hit.distance <= ENDPOINT_JOIN_METERS && hit.t > 1e-8 && hit.t < 1 - 1e-8) segment.splits.push({ t: hit.t, id });
     }
   }
   const edges = [], adjacency = nodes.map(() => []), edgeGrid = new Grid(), seen = new Set();

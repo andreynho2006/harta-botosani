@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
-  normalizeSubunit, normalizeSubunitsDoc, mergeSubunitsIntoPois, subunitsFromOsm, parseCoordinateCandidates, subunitsToFC,
+  normalizeSubunit, normalizeSubunitsDoc, mergeSubunitsIntoPois, subunitsFromOsm, parseCoordinateCandidates, subunitsToFC, isNewerSubunitsDocument,
 } from "../web/js/subunits.js";
 
 test("normalizeSubunit requires name and valid coordinates", () => {
@@ -47,4 +47,13 @@ test("parseCoordinateCandidates reads decimal, DMS and Stereo 70", () => {
   assert.equal(parseCoordinateCandidates("700000 650000", fake).length, 2);
   assert.deepEqual(calls, [[700000, 650000], [650000, 700000]]);
   assert.deepEqual(parseCoordinateCandidates("nimic"), []);
+});
+
+test('confirmed published coordinates are not overwritten by stale cloud or browser copies', () => {
+  const published = { updatedAt: '2026-10-18T14:00:00Z', subunits: [{ id: 'confirmed' }] };
+  assert.equal(isNewerSubunitsDocument({ updatedAt: '2026-10-17T14:00:00Z', subunits: [{ id: 'old' }] }, published), false);
+  assert.equal(isNewerSubunitsDocument({ subunits: [{ id: 'undated' }] }, published), false);
+  assert.equal(isNewerSubunitsDocument({ updatedAt: '2026-10-18T15:00:00Z', subunits: [{ id: 'new-edit' }] }, published), true);
+  assert.equal(isNewerSubunitsDocument({ updatedAt: '2026-10-18T15:00:00Z', subunits: [] }, published), true);
+  assert.equal(isNewerSubunitsDocument({ subunits: [{ id: 'initial' }] }, { subunits: [] }), true);
 });

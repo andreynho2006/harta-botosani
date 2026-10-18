@@ -1,6 +1,103 @@
 {
- "format": "harta-botosani-subunitati",
- "version": 1,
- "updatedAt": null,
- "subunits": []
+  "format": "harta-botosani-subunitati",
+  "version": 1,
+  "updatedAt": "2026-10-18T11:55:28Z",
+  "subunits": [
+    {
+      "id": "garda-botosani",
+      "name": "Garda de intervenție Botoșani",
+      "type": "garda",
+      "lat": 47.752259,
+      "lon": 26.648383,
+      "address": "",
+      "phone": "",
+      "equipment": "",
+      "staff": null,
+      "notes": "Punct de ieșire al autospecialelor; coordonate confirmate de administrator."
+    },
+    {
+      "id": "garda-trusesti",
+      "name": "Garda de intervenție Trușești",
+      "type": "garda",
+      "lat": 47.766108,
+      "lon": 27.008003,
+      "address": "",
+      "phone": "",
+      "equipment": "",
+      "staff": null,
+      "notes": "Punct de ieșire al autospecialelor; coordonate confirmate de administrator."
+    },
+    {
+      "id": "garda-stefanesti",
+      "name": "Garda de intervenție Ștefănești",
+      "type": "garda",
+      "lat": 47.7932,
+      "lon": 27.199219,
+      "address": "",
+      "phone": "",
+      "equipment": "",
+      "staff": null,
+      "notes": "Punct de ieșire al autospecialelor; coordonate confirmate de administrator."
+    },
+    {
+      "id": "punct-flamanzi",
+      "name": "Punctul de lucru Flămânzi",
+      "type": "punct",
+      "lat": 47.557823,
+      "lon": 26.910857,
+      "address": "",
+      "phone": "",
+      "equipment": "",
+      "staff": null,
+      "notes": "Punct de ieșire al autospecialelor; coordonate confirmate de administrator."
+    },
+    {
+      "id": "garda-dorohoi",
+      "name": "Garda de intervenție Dorohoi",
+      "type": "garda",
+      "lat": 47.942247,
+      "lon": 26.408306,
+      "address": "",
+      "phone": "",
+      "equipment": "",
+      "staff": null,
+      "notes": "Punct de ieșire al autospecialelor; coordonate confirmate de administrator."
+    },
+    {
+      "id": "punct-darabani",
+      "name": "Punctul de lucru Darabani",
+      "type": "punct",
+      "lat": 48.182014,
+      "lon": 26.592486,
+      "address": "",
+      "phone": "",
+      "equipment": "",
+      "staff": null,
+      "notes": "Punct de ieșire al autospecialelor; coordonate confirmate de administrator."
+    },
+    {
+      "id": "garda-saveni",
+      "name": "Garda de intervenție Săveni",
+      "type": "garda",
+      "lat": 47.953261,
+      "lon": 26.857327,
+      "address": "",
+      "phone": "",
+      "equipment": "",
+      "staff": null,
+      "notes": "Punct de ieșire al autospecialelor; coordonate confirmate de administrator."
+    },
+    {
+      "id": "punct-cotusca",
+      "name": "Punctul de lucru Coțușca",
+      "type": "punct",
+      "lat": 48.131176,
+      "lon": 26.853283,
+      "address": "",
+      "phone": "",
+      "equipment": "",
+      "staff": null,
+      "notes": "Punct de ieșire al autospecialelor; coordonate confirmate de administrator."
+    }
+  ]
 }
