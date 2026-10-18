@@ -1,6 +1,6 @@
 import { EventStore, createEvent, sanitizeEvent, cleanupLegacyArchive } from "./event-store.js?v=20261018-archive-cleanup";
 import {
-  snapToRoad, buildRoadSegment, findRoadByRef, sliceRoadByKm, sliceRoadByPlaces,
+  snapToRoad, buildRoadSegment, findRoadRoute, findRoadByRef, sliceRoadByKm, sliceRoadByPlaces,
   projectPointOnRoad, roadNetworkToFeatures, roadsListOf, lineLengthKm,
 } from "./road-sketch.js";
 import { outsideMask, geometryBounds } from "./commune-geometry.js";
@@ -975,16 +975,24 @@ export function initOperations(ctx) {
             }
           }
         }
+        const pool = [...roadPool, ...available];
         if (!geometry) {
-          geometry = buildRoadSegment(startSnap, snapped, [...roadPool, ...available]);
+          geometry = buildRoadSegment(startSnap, snapped, pool);
           if (geometry) lengthKm = lineLengthKm(geometry.coordinates);
         }
         if (!geometry) {
-          message("Nu pot uni cele două puncte pe același drum. Alege puncte pe același drum sau folosește introducerea după km.");
+          geometry = findRoadRoute(startSnap, snapped, pool);
+          if (geometry) lengthKm = lineLengthKm(geometry.coordinates);
+        }
+        if (!geometry) {
+          message("Nu pot uni cele două puncte pe rețeaua de drumuri. Alege puncte pe drumuri conectate sau folosește introducerea după km.");
           return true;
         }
+        const r1 = startSnap.road.ref || startSnap.road.name || "";
+        const r2 = snapped.road.ref || snapped.road.name || "";
+        const roadTitle = (r1 && r2 && r1 !== r2) ? `${r1} ➔ ${r2}` : (r1 || r2 || "Traseu");
         prepare(geometry, state.operations._defaultKind || "blocked", {
-          road: startSnap.road.ref || startSnap.road.name || "",
+          road: roadTitle,
           kmFrom, kmTo, lengthKm,
         });
       }

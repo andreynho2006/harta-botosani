@@ -4,6 +4,7 @@ import test from 'node:test';
 import {
   snapToRoad,
   buildRoadSegment,
+  findRoadRoute,
   findRoadByRef,
   sliceRoadByKm,
   sliceRoadByPlaces,
@@ -176,4 +177,42 @@ test('sliceRoadByKm and sliceRoadByPlaces trace DJ29 km 3-6 and locality segment
   assert.equal(feats.length, roadsData.roads.length);
   assert.equal(feats[0].geometry.type, 'LineString');
 });
+
+test('findRoadRoute connects different road classifications (DN, DJ, DC) across junctions', () => {
+  const D = [26.02, 47.01];
+  const dn = road([A, B], { osm: 'w1', ref: 'DN29', cls: 'dn', name: 'Drum Național 29' });
+  const dj = road([B, C], { osm: 'w2', ref: 'DJ207N', cls: 'dj', name: 'Drum Județean 207N' });
+  const dc = road([C, D], { osm: 'w3', ref: 'DC60A', cls: 'dc', name: 'Drum Comunal 60A' });
+  const roads = [dn, dj, dc];
+
+  const snapDN = snapToRoad([26.002, 47], roads);
+  const snapDJ = snapToRoad([26.01, 47.005], roads);
+  const snapDC = snapToRoad([26.018, 47.01], roads);
+
+  // Single-road builder intentionally returns null because classifications and refs do not match
+  assert.equal(buildRoadSegment(snapDN, snapDJ, roads), null);
+  assert.equal(buildRoadSegment(snapDN, snapDC, roads), null);
+
+  // findRoadRoute unites DN29 and DJ207N across the shared junction B
+  const routeDNDJ = findRoadRoute(snapDN, snapDJ, roads);
+  assert.ok(routeDNDJ);
+  assert.equal(routeDNDJ.type, 'LineString');
+  assert.ok(routeDNDJ.coordinates.length >= 3);
+  close(routeDNDJ.coordinates[0], [26.002, 47]);
+  close(routeDNDJ.coordinates[routeDNDJ.coordinates.length - 1], [26.01, 47.005]);
+
+  // findRoadRoute unites DN29 to DC60A across the entire chain DN -> DJ -> DC
+  const routeChain = findRoadRoute(snapDN, snapDC, roads);
+  assert.ok(routeChain);
+  assert.equal(routeChain.type, 'LineString');
+  assert.ok(routeChain.coordinates.length >= 4);
+  close(routeChain.coordinates[0], [26.002, 47]);
+  close(routeChain.coordinates[routeChain.coordinates.length - 1], [26.018, 47.01]);
+
+  // Completely disconnected roads return null
+  const farDisconnected = [dn, road([[27.5, 47.5], [27.51, 47.51]], { osm: 'w99', ref: 'DN24C', cls: 'dn' })];
+  const snapFar = snapToRoad([27.505, 47.505], farDisconnected);
+  assert.equal(findRoadRoute(snapDN, snapFar, farDisconnected), null);
+});
+
 

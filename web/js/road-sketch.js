@@ -359,3 +359,163 @@ export function buildRoadSegment(startSnap, endSnap, roadFeatures) {
   while (route.at(-1) !== start) route.push(previous.get(route.at(-1)));
   return { type: 'LineString', coordinates: route.reverse().map((id) => projection.from(nodes[id].point)) };
 }
+
+export function findRoadRoute(startSnap, endSnap, roadFeatures, options = {}) {
+  if (!startSnap?.coordinate || !endSnap?.coordinate) return null;
+  const startCoord = startSnap.coordinate;
+  const endCoord = endSnap.coordinate;
+  const maxJunctionDistance = options.maxJunctionDistance ?? 35;
+  const joinTolerance = options.joinTolerance ?? 8;
+
+  const projection = plane(startCoord);
+  const nodes = [];
+  const nodeIndex = buckets(joinTolerance);
+  const nodeFor = (point) => {
+    let closest = null;
+    for (const id of nodeIndex.near(point)) {
+      const meters = dist(nodes[id].point, point);
+      if (meters <= joinTolerance && (!closest || meters < closest.meters)) closest = { id, meters };
+    }
+    if (closest) return closest.id;
+    const id = nodes.length;
+    nodes.push({ point, directions: [] });
+    nodeIndex.add(point, id);
+    return id;
+  };
+
+  const segments = [];
+  const segmentIndex = buckets(32);
+  const seen = new Set();
+
+  for (const feature of featuresOf(roadFeatures)) {
+    for (const line of linesOf(feature.geometry)) {
+      for (let i = 1; i < line.length; i++) {
+        const aPt = projection.to(line[i - 1]);
+        const bPt = projection.to(line[i]);
+        const a = nodeFor(aPt), b = nodeFor(bPt);
+        if (a === b) continue;
+        const key = a < b ? `${a},${b}` : `${b},${a}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+
+        const p = nodes[a].point, q = nodes[b].point, length = dist(p, q);
+        const direction = [(q[0] - p[0]) / length, (q[1] - p[1]) / length];
+        nodes[a].directions.push(direction);
+        nodes[b].directions.push(direction);
+
+        const id = segments.length;
+        segments.push({ a, b, direction, length, cuts: [{ t: 0, node: a }, { t: 1, node: b }] });
+
+        const steps = Math.max(1, Math.ceil(length / 24));
+        for (let s = 0; s <= steps; s++) {
+          const pt = lerp(p, q, s / steps);
+          segmentIndex.add(pt, id);
+        }
+      }
+    }
+  }
+
+  if (!segments.length) return null;
+
+  // Intersect / connect junctions between different roads (T-junctions & crossroads)
+  const junctionEdges = [];
+  for (let id = 0; id < nodes.length; id++) {
+    const pt = nodes[id].point;
+    for (const sId of new Set(segmentIndex.near(pt))) {
+      const seg = segments[sId];
+      if (seg.a === id || seg.b === id) continue;
+      const hit = project(pt, nodes[seg.a].point, nodes[seg.b].point);
+      if (hit.distance <= maxJunctionDistance && hit.t > 0.001 && hit.t < 0.999) {
+        const cutNode = nodeFor(hit.coordinate);
+        seg.cuts.push({ t: hit.t, node: cutNode });
+        if (cutNode !== id) {
+          junctionEdges.push({ u: id, v: cutNode, w: hit.distance });
+        }
+      }
+    }
+  }
+
+  // Connect close endpoints of different roads within maxJunctionDistance
+  for (let id = 0; id < nodes.length; id++) {
+    const pt = nodes[id].point;
+    for (const otherId of nodeIndex.near(pt)) {
+      if (otherId <= id) continue;
+      const meters = dist(pt, nodes[otherId].point);
+      if (meters <= maxJunctionDistance) {
+        junctionEdges.push({ u: id, v: otherId, w: meters });
+      }
+    }
+  }
+
+  // Snap start and end to nearest road segment
+  const endpoint = (coord) => {
+    const pt = projection.to(coord);
+    let best = null;
+    for (const sId of new Set(segmentIndex.near(pt))) {
+      const seg = segments[sId];
+      const hit = project(pt, nodes[seg.a].point, nodes[seg.b].point);
+      if (!best || hit.distance < best.hit.distance) best = { seg, hit };
+    }
+    if (!best) {
+      for (const seg of segments) {
+        const hit = project(pt, nodes[seg.a].point, nodes[seg.b].point);
+        if (!best || hit.distance < best.hit.distance) best = { seg, hit };
+      }
+    }
+    if (!best || best.hit.distance > 800) return null;
+    const id = nodeFor(best.hit.coordinate);
+    best.seg.cuts.push({ t: best.hit.t, node: id });
+    return id;
+  };
+
+  const start = endpoint(startCoord);
+  const end = endpoint(endCoord);
+  if (start === null || end === null || start === end) return null;
+
+  const graph = nodes.map(() => new Map());
+  for (const seg of segments) {
+    const cuts = seg.cuts.sort((a, b) => a.t - b.t);
+    for (let i = 1; i < cuts.length; i++) {
+      const a = cuts[i - 1].node, b = cuts[i].node;
+      if (a === b) continue;
+      const meters = dist(nodes[a].point, nodes[b].point);
+      const cur = graph[a].get(b);
+      if (cur === undefined || meters < cur) {
+        graph[a].set(b, meters);
+        graph[b].set(a, meters);
+      }
+    }
+  }
+  for (const e of junctionEdges) {
+    const cur = graph[e.u].get(e.v);
+    if (cur === undefined || e.w < cur) {
+      graph[e.u].set(e.v, e.w);
+      graph[e.v].set(e.u, e.w);
+    }
+  }
+
+  const distances = new Map([[start, 0]]);
+  const previous = new Map();
+  const queue = new Heap();
+  queue.push([0, start]);
+
+  while (queue.values.length) {
+    const [meters, node] = queue.pop();
+    if (meters !== distances.get(node)) continue;
+    if (node === end) break;
+    for (const [next, length] of graph[node]) {
+      const candidate = meters + length;
+      if (candidate < (distances.get(next) ?? Infinity)) {
+        distances.set(next, candidate);
+        previous.set(next, node);
+        queue.push([candidate, next]);
+      }
+    }
+  }
+
+  if (!distances.has(end)) return null;
+  const route = [end];
+  while (route.at(-1) !== start) route.push(previous.get(route.at(-1)));
+  const coordinates = route.reverse().map((id) => projection.from(nodes[id].point));
+  return { type: 'LineString', coordinates };
+}
