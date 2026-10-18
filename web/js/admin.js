@@ -162,8 +162,10 @@ export async function parseHydrants(file, uatAt) {
 export function renderAdmin(el, ctx) {
   const { session } = ctx;
   const users = structuredClone(session.users);
+  if (!Number.isSafeInteger(users.iterations) || users.iterations <= 0) users.iterations = ITERATIONS;
   let dirtyUsers = false;
-  let newPasswords = {}; // u -> parolă afișată o singură dată
+  const newPasswords = Object.create(null); // u -> parolă afișată o singură dată
+  let busy = false;
   let pending = null;    // hidranți importați, încă nesalvați
 
   const draw = () => {
@@ -215,17 +217,40 @@ export function renderAdmin(el, ctx) {
 
   draw();
 
+  const updateUsers = async (action) => {
+    if (busy) return;
+    busy = true;
+    const disabled = new Map([...el.querySelectorAll("button, input, select")].map((control) => [control, control.disabled]));
+    for (const control of disabled.keys()) control.disabled = true;
+    el.setAttribute("aria-busy", "true");
+    try {
+      await action();
+    } catch {
+      ctx.toast("Nu am putut actualiza utilizatorii. Încearcă din nou; modificarea nu a fost salvată.");
+    } finally {
+      busy = false;
+      for (const control of el.querySelectorAll("button, input, select")) control.disabled = disabled.get(control) ?? false;
+      el.removeAttribute("aria-busy");
+    }
+  };
+
   el.onsubmit = async (e) => {
     if (e.target.id !== "adm-add") return;
     e.preventDefault();
+    if (busy) return;
     const u = el.querySelector("#adm-user").value.trim().toLowerCase();
     if (users.users.some((x) => x.u === u)) { ctx.toast("Există deja un utilizator cu acest nume."); return; }
-    const password = generatePassword();
-    users.users.push({ u, name: el.querySelector("#adm-name").value.trim(), role: el.querySelector("#adm-role").value,
-      ...(await wrapFor(session.key, password, users.iterations || ITERATIONS)) });
-    newPasswords[u] = password;
-    dirtyUsers = true;
-    draw();
+    const name = el.querySelector("#adm-name").value.trim();
+    const role = el.querySelector("#adm-role").value;
+    await updateUsers(async () => {
+      const password = generatePassword();
+      const wrapped = await wrapFor(session.key, password, users.iterations);
+      if (users.users.some((x) => x.u === u)) { ctx.toast("Există deja un utilizator cu acest nume."); return; }
+      users.users.push({ u, name, role, ...wrapped });
+      newPasswords[u] = password;
+      dirtyUsers = true;
+      draw();
+    });
   };
 
   el.onchange = async (e) => {
@@ -244,15 +269,19 @@ export function renderAdmin(el, ctx) {
 
   el.onclick = async (e) => {
     const b = e.target.closest("button");
-    if (!b) return;
+    if (!b || busy || b.disabled) return;
     if (b.dataset.copy) ctx.copy(b.dataset.copy);
     if (b.dataset.reset) {
       const x = users.users.find((y) => y.u === b.dataset.reset);
-      const password = generatePassword();
-      Object.assign(x, await wrapFor(session.key, password, users.iterations || ITERATIONS));
-      newPasswords[x.u] = password;
-      dirtyUsers = true;
-      draw();
+      if (!x) return;
+      await updateUsers(async () => {
+        const password = generatePassword();
+        const wrapped = await wrapFor(session.key, password, users.iterations);
+        Object.assign(x, wrapped);
+        newPasswords[x.u] = password;
+        dirtyUsers = true;
+        draw();
+      });
     }
     if (b.dataset.del) {
       if (b.dataset.confirm !== "1") { b.dataset.confirm = "1"; b.textContent = "Sigur? Apasă din nou"; return; }
