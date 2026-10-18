@@ -55,6 +55,7 @@ async function browserChecks(web) {
     const check = (name, value) => { result[name] = Boolean(value); };
     document.querySelector('[data-action="present"]').click();
     await nextFrame();
+    await nextFrame();
     const compact = innerWidth <= 760 || innerHeight <= 520;
     check('compactClassification', document.querySelector('.ops-presentation').dataset.compact === String(compact));
     check('initialPanels', compact ? openPanels().length === 0 : visible(panel('messages')));
