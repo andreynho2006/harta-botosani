@@ -21,6 +21,11 @@ async function browserChecks({ initOperations, createEvent }) {
       type: 'Feature', geometry: { type: 'Point', coordinates: [26.6 + i * 0.001, 47.7] },
       properties: { id: 'test-' + i, kind: ['blocked', 'flooded', 'command'][i % 3], status: 'reported', title: 'Operational incident ' + i, notes: 'Incident details', observedAt: '2026-10-17T06:00:00Z' },
     }));
+    active.features.features.push(
+      {type:'Feature', geometry:{type:'Point',coordinates:[26.65,47.75]},properties:{id:'fire-active',kind:'fire',status:'confirmed',title:'Incendiu activ'}},
+      {type:'Feature', geometry:{type:'Point',coordinates:[26.66,47.75]},properties:{id:'fire-resolved',kind:'fire',status:'resolved',title:'Incendiu stins'}},
+      {type:'Feature', geometry:{type:'Point',coordinates:[26.67,47.75]},properties:{id:'snow-resolved',kind:'snow',status:'resolved',title:'Drum deszăpezit'}}
+    );
     const memory = new Map([['hb.ops.session.v1', JSON.stringify({ active })]]);
     const storage = { getItem: key => memory.get(key) ?? null, setItem: (key, value) => memory.set(key, value) };
     const noop = () => {};
@@ -38,7 +43,8 @@ async function browserChecks({ initOperations, createEvent }) {
     let frameId = 0;
     window.requestAnimationFrame = callback => { const id = ++frameId; frames.set(id, callback); return id; };
     window.cancelAnimationFrame = id => frames.delete(id);
-    initOperations({ map, storage, state: { data: {}, visible: {}, overlays: {}, basemap: 'harta', theme: 'zi' }, toast: noop, selectTab: noop, applyStyle: noop, renderLayerPanel: noop });
+    const state = { data: {}, visible: {}, overlays: {}, basemap: 'harta', theme: 'zi' };
+    initOperations({ map, storage, state, toast: noop, selectTab: noop, applyStyle: noop, renderLayerPanel: noop });
     const nextFrame = async () => {
       for (let turn = 0; frames.size; turn++) {
         if (turn >= 100) throw new Error('Presentation scheduled an endless animation loop');
@@ -137,6 +143,22 @@ async function browserChecks({ initOperations, createEvent }) {
     document.querySelector('[data-action="present"]').click();
     if (!visible(panel('messages'))) toggle('messages').click();
     check('emptyWarningOmitted', !panel('messages').querySelector('.ops-alert'));
+    document.querySelector('.ops-pres-exit').click();
+    const typeSelect = document.querySelector('[data-field="type"]');
+    typeSelect.value = 'fire'; typeSelect.dispatchEvent(new Event('change', {bubbles:true}));
+    document.querySelector('[data-action="present"]').click();
+    await nextFrame();
+    if (!visible(panel('summary'))) toggle('summary').click();
+    check('mapMatchesFireScope', state.operations.features.features.every(f => !['snow','flooded','threat'].includes(f.properties.kind)) && state.operations.features.features.some(f=>f.properties.id==='fire-resolved'));
+    check('fireScope', panel('summary').textContent.includes('Incendiu activ') && !panel('summary').textContent.includes('înzăpezite') && !panel('summary').textContent.includes('inundate') && !panel('summary').textContent.includes('Drum deszăpezit'));
+    check('resolvedVisibleByDefault', visible(document.querySelector('#ops-risk-resolved')) && document.querySelector('#ops-risk-resolved').textContent.includes('Incendiu stins'));
+    const beforeGroupToggle = mapView();
+    document.querySelector('[data-pres-group="resolved"]').click();
+    check('resolvedCollapses', !visible(document.querySelector('#ops-risk-resolved')));
+    document.querySelector('[data-pres-group="resolved"]').click();
+    check('resolvedReopens', visible(document.querySelector('#ops-risk-resolved')) && document.querySelector('#ops-risk-resolved').textContent.includes('Incendiu stins'));
+    await nextFrame();
+    check('groupTogglePreservesMap', mapView() === beforeGroupToggle);
     parent.postMessage(result, '*');
   } catch (error) { parent.postMessage({ viewport: innerWidth + 'x' + innerHeight, error: error.stack }, '*'); }
 }
@@ -144,7 +166,7 @@ async function browserChecks({ initOperations, createEvent }) {
 test('CJSU panels collapse independently, preserve the map, and keep full warnings accessible', { skip: !existsSync(chrome) }, () => {
   const dir = mkdtempSync(join(tmpdir(), 'cjsu-presentation-'));
   const web = new URL('../web/', import.meta.url).href;
-  const child = `<!doctype html><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><script src="${web}vendor/proj4.js"></script><link rel="stylesheet" href="${web}css/app.css"><link rel="stylesheet" href="${web}css/operations.css"><div class="app"><aside class="side"><div id="tab-situatii"></div></aside><div class="mapwrap"><div id="map" style="background:#dce6df"></div></div></div><script type="module">import { initOperations } from "${web}js/operations.js"; import { createEvent } from "${web}js/event-store.js"; (${browserChecks.toString()})({ initOperations, createEvent })</script>`;
+  const child = `<!doctype html><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><script src="${web}vendor/proj4.js"></script><link rel="stylesheet" href="${web}css/app.css"><link rel="stylesheet" href="${web}css/operations.css"><link rel="stylesheet" href="${web}css/operations-cards.css"><div class="app"><aside class="side"><div id="tab-situatii"></div></aside><div class="mapwrap"><div id="map" style="background:#dce6df"></div></div></div><script type="module">import { initOperations } from "${web}js/operations.js"; import { createEvent } from "${web}js/event-store.js"; (${browserChecks.toString()})({ initOperations, createEvent })</script>`;
   const harness = `<body style="margin:0"><pre id="results" style="position:fixed;left:-10000px"></pre><script>
     const results = [];
     const sizes = ${JSON.stringify(sizes)};

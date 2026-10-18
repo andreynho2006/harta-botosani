@@ -1,3 +1,4 @@
+import { presentationFeatures, presentationRiskGroups, presentationKindLabel } from "./operations-risks.js?v=20261018-cards";
 import { EventStore, createEvent, sanitizeEvent, cleanupLegacyArchive } from "./event-store.js?v=20261018-itineraries-v2";
 import {
   snapToRoad, buildRoadSegment, findRoadRoute, findRoadByRef, sliceRoadByKm, sliceRoadByPlaces,
@@ -7,6 +8,7 @@ import { outsideMask, geometryBounds } from "./commune-geometry.js";
 import { circle } from "./geo.js";
 import { LAYER_GROUPS, LAYER_PRESETS } from "./config.js?v=20261018-itineraries-v2";
 import { localTime, isoTime, dateLabel } from "./operations-time.js";
+import { createOperationsCards } from "./operations-cards.js?v=20261018-cards";
 import { createInterventionPlanner } from "./intervention-planner.js?v=20261018-itineraries-v2";
 
 const FC = (features = []) => ({ type: "FeatureCollection", features });
@@ -372,6 +374,7 @@ function buildEndpointsFC(features = []) {
 export function initOperations(ctx) {
   const { map, state, uatAt, toast, selectTab, setSheet, applyStyle, renderLayerPanel, stopOtherTools, applyPreset, cloudDb } = ctx;
   const panel = document.querySelector("#tab-situatii");
+  const operationCards = createOperationsCards(panel);
   const storage = ctx.storage ?? globalThis.localStorage;
   const SESSION_KEY = "hb.ops.session.v1";
   const db = new EventStore(storage);
@@ -397,7 +400,8 @@ export function initOperations(ctx) {
 
   let active = null, dirty = false, exported = false, mode = null, points = [], startSnap = null, roadPool = [];
   let pending = null, editingId = null, beforePresentation = null, previousOverlays = null;
-  let archiveError = "", notice = "", resizeFrame = 0, archiveFilter = "", summaryCollapsed = false, messagesCollapsed = false, legendCollapsed = false, commandsCollapsed = true, hideResolvedInPresentation = true;
+  let archiveError = "", notice = "", resizeFrame = 0, archiveFilter = "", summaryCollapsed = false, messagesCollapsed = false, legendCollapsed = false, commandsCollapsed = true, hideResolvedInPresentation = false;
+  const presentationCollapsedGroups = new Set();
   const isCompactViewport = () => window.innerWidth <= 760 || window.innerHeight <= 520;
   let compactPresentation = isCompactViewport(), lastOpenedPanel = "messages";
   let standaloneFocus = { areas: [], places: [], isolate: true };
@@ -729,8 +733,8 @@ export function initOperations(ctx) {
     const isolate = active ? (active.isolateArea ?? true) : standaloneFocus.isolate;
     const geometry = mode === "area" || !isolate ? null : selected.geometry;
     const allFeatures = active?.features?.features || [];
-    const mapFeatures = (state.operations.presenting && hideResolvedInPresentation)
-      ? allFeatures.filter(f => f.properties?.status !== "resolved")
+    const mapFeatures = state.operations.presenting
+      ? presentationFeatures(allFeatures, active?.type, hideResolvedInPresentation)
       : allFeatures;
     const activeFeatures = FC(withMapLabels(mapFeatures));
     const draftFeatures = pending ? [pending] : points.length ? [{
@@ -781,8 +785,8 @@ export function initOperations(ctx) {
     if (!map) return;
     const selected = selectedGeometry();
     const allFeatures = active?.features?.features || [];
-    const mapFeatures = (state.operations.presenting && hideResolvedInPresentation)
-      ? allFeatures.filter(f => f.properties?.status !== "resolved")
+    const mapFeatures = state.operations.presenting
+      ? presentationFeatures(allFeatures, active?.type, hideResolvedInPresentation)
       : allFeatures;
     const geometries = [
       ...selected.features.map(f => f.geometry),
@@ -1212,7 +1216,7 @@ export function initOperations(ctx) {
         </div>
         <p class="muted" style="margin-top:8px">Marchează drumuri impracticabile (ex. <b>DJ29 km 3 – km 6</b>), zone posibil inundabile, localități izolate și forțe în teren. Situațiile precedente se găsesc la finalul panoului.</p>
       </section>` : `
-      <section class="ops-card">
+      <section class="ops-card" data-ops-card="event">
         <div class="ops-card-title">
           <h2>${esc(active.title)}</h2>
           <button type="button" class="lnk" data-action="new">Închide</button>
@@ -1245,7 +1249,7 @@ export function initOperations(ctx) {
         </form>
       </section>
 
-      <section class="ops-card">
+      <section class="ops-card" data-ops-card="add">
         <h3>Adaugă pe hartă (Drumuri, Situații, Localități, Forțe)</h3>
         <div class="ops-tools-grid">
           <button class="btn" type="button" data-action="open-itinerary">⇢ Itinerar de bază și de rezervă</button>
@@ -1268,10 +1272,10 @@ export function initOperations(ctx) {
       </section>
 
       ${itinerary.html()}
-      ${routeMarks.length ? `<section class="ops-card"><h3>Itinerare de deplasare</h3><ul class="ops-marks">${routeMarks.map(f => `<li><button class="ops-mark-main" type="button" data-zoom-mark="${esc(f.properties.id)}"><b><span class="ops-dot" data-kind="${esc(f.properties.kind)}"></span>${esc(f.properties.title)}</b><small>${esc(f.properties.source)} · ${esc(f.properties.lengthKm)} km</small></button><button class="lnk danger" type="button" data-remove="${esc(f.properties.id)}" aria-label="Elimină ${esc(KINDS[f.properties.kind])}">Elimină</button></li>`).join("")}</ul></section>` : ""}
+      ${routeMarks.length ? `<section class="ops-card" data-ops-card="routes"><h3>Itinerare de deplasare</h3><ul class="ops-marks">${routeMarks.map(f => `<li><button class="ops-mark-main" type="button" data-zoom-mark="${esc(f.properties.id)}"><b><span class="ops-dot" data-kind="${esc(f.properties.kind)}"></span>${esc(f.properties.title)}</b><small>${esc(f.properties.source)} · ${esc(f.properties.lengthKm)} km</small></button><button class="lnk danger" type="button" data-remove="${esc(f.properties.id)}" aria-label="Elimină ${esc(KINDS[f.properties.kind])}">Elimină</button></li>`).join("")}</ul></section>` : ""}
       ${markerHTML()}
 
-      <section class="ops-card">
+      <section class="ops-card" data-ops-card="roads">
         <h3>Drumuri blocate / afectate <span>${roadMarks.length}</span></h3>
         <ul class="ops-marks">${roadMarks.map(f => {
           const p = f.properties;
@@ -1291,7 +1295,7 @@ export function initOperations(ctx) {
         }).join("") || `<li class="muted">Niciun sector de drum marcat. Apasă «⛔ Drum blocat / afectat» pentru a marca un drum (ex. DJ29 km 3–6).</li>`}</ul>
       </section>
 
-      <section class="ops-card">
+      <section class="ops-card" data-ops-card="marks">
         <h3>Situații, localități și forțe în teren <span>${otherMarks.length}</span></h3>
         <ul class="ops-marks">${otherMarks.map(f => {
           const p = f.properties;
@@ -1309,7 +1313,7 @@ export function initOperations(ctx) {
         }).join("") || `<li class="muted">Nicio zonă sau forță marcată încă.</li>`}</ul>
       </section>
 
-      <section class="ops-card">
+      <section class="ops-card" data-ops-card="focus">
         <h3>Zona afectată / Focalizare pe hartă (UAT și Sate)</h3>
         <p class="muted">Poți focaliza harta pe una sau mai multe comune/orașe (UAT) sau sate afectate, ori pe tot județul.</p>
         <div class="ops-grid">
@@ -1341,7 +1345,7 @@ export function initOperations(ctx) {
       </section>
       `}
 
-      <section class="ops-card ops-quick-presets">
+      <section class="ops-card ops-quick-presets" data-ops-card="presets">
         <h3>Profiluri straturi pentru ședința CJSU</h3>
         <div class="ops-preset-chips">
           ${LAYER_PRESETS.map(pr => `<button type="button" class="chip" data-preset="${esc(pr.id)}" title="${esc(pr.label)}">${esc(pr.short)}</button>`).join("")}
@@ -1350,6 +1354,7 @@ export function initOperations(ctx) {
 
       ${archiveHTML(events)}
     </div>`;
+    operationCards.refresh({ markerId: pending?.properties?.id ?? null });
   }
 
   function tracePendingRoadFromInputs() {
@@ -1543,7 +1548,7 @@ export function initOperations(ctx) {
     presentation.dataset.commandsOpen = String(!commandsCollapsed);
     const panelToggle = (name, label, collapsed, arrow) => `<button class="ops-pres-toggle ops-pres-toggle-${name}" type="button" data-action="pres-toggle-${name}" aria-expanded="${!collapsed}" aria-controls="ops-pres-${name}" aria-label="${collapsed ? "Arată" : "Ascunde"} ${label.toLowerCase()}" title="${collapsed ? "Arată" : "Ascunde"} ${label.toLowerCase()}"><span aria-hidden="true">${arrow}</span><span class="ops-toggle-label">${label}</span></button>`;
 
-    const allFeats = active.features.features || [];
+    const allFeats = presentationFeatures(active.features.features || [], active.type);
     const nonForceFeats = allFeats.filter(f => !FORCE_KINDS.includes(f.properties.kind) && !isItinerary(f));
     const activeIncidentCount = nonForceFeats.filter(f => f.properties.status !== "resolved").length;
     const resolvedIncidentCount = nonForceFeats.filter(f => f.properties.status === "resolved").length;
@@ -1557,7 +1562,14 @@ export function initOperations(ctx) {
       }
     });
 
-    const forcesList = allFeats.filter(f => FORCE_KINDS.includes(f.properties.kind) && (!hideResolvedInPresentation || f.properties.status !== "resolved"));
+    const forcesList = allFeats.filter(f => FORCE_KINDS.includes(f.properties.kind) && f.properties.status !== "resolved");
+    const resolvedList = allFeats.filter(f => f.properties.status === "resolved");
+    const groupToggle = (key, label, count) => `<button type="button" class="ops-risk-toggle" data-pres-group="${key}" aria-expanded="${!presentationCollapsedGroups.has(key)}" aria-controls="ops-risk-${key}"><span>${esc(label)} (${count})</span><span aria-hidden="true">${presentationCollapsedGroups.has(key) ? "▸" : "▾"}</span></button>`;
+    const itemHTML = f => {
+      const p = f.properties, resolved = p.status === "resolved";
+      const len = p.lengthKm || (f.geometry.type === "LineString" ? lineLengthKm(f.geometry.coordinates) : null);
+      return `<li class="${resolved ? "is-resolved" : ""}"><button type="button" class="ops-mon-item-zoom" data-pres-zoom="${esc(p.id)}"><b>${esc(p.title || p.road || presentationKindLabel(p.kind, active.type, KINDS[p.kind]))}</b><small>${resolved ? "✓ REZOLVAT" : esc(STATUSES[p.status])}${len ? ` · ${Number(len).toFixed(1)} km` : ""}${p.notes ? ` — ${esc(p.notes)}` : ""}</small></button><button type="button" class="ops-mon-item-res ${resolved ? "active" : ""}" data-pres-resolve="${esc(p.id)}" title="${resolved ? "Reactivează situația" : "Marchează ca rezolvat"}">${resolved ? "↺" : "✓"}</button></li>`;
+    };
 
     const areaText = [
       ...(active.areas.length ? [`UAT: ${active.areas.join(", ")}`] : []),
@@ -1581,7 +1593,7 @@ export function initOperations(ctx) {
         ${hasAlert ? `<p id="ops-pres-alert" class="ops-alert" data-code="${esc(active.alert.code)}" tabindex="0" role="note"><b>${esc(ALERTS[active.alert.code] || active.alert.code)}</b> ${esc(active.alert.text)}${active.alert.source ? ` · ${esc(active.alert.source)}` : ""}${active.alert.validFrom || active.alert.validTo ? ` · ${dateLabel(active.alert.validFrom)} – ${dateLabel(active.alert.validTo)}` : ""}</p>` : ""}
       </header>
       <nav id="ops-pres-commands" class="ops-slide-controls" data-pres-panel="commands" data-pres-edge="right" ${commandsCollapsed ? "hidden" : ""} aria-label="Comenzi prezentare">
-        <button class="btn" type="button" data-action="pres-toggle-resolved" aria-pressed="${!hideResolvedInPresentation}" title="Alege dacă situațiile rezolvate dispar automat din prezentare sau apar marcate ca rezolvate">${hideResolvedInPresentation ? `Arată rezolvate (${resolvedIncidentCount})` : `Ascunde rezolvate (${resolvedIncidentCount})`}</button>
+        <button class="btn" type="button" data-action="pres-toggle-resolved" aria-pressed="${!hideResolvedInPresentation}" title="Arată sau ascunde pe hartă situațiile rezolvate; lista lor rămâne disponibilă în Monitorizare">${hideResolvedInPresentation ? `Arată rezolvate pe hartă (${resolvedList.length})` : `Ascunde rezolvate de pe hartă (${resolvedList.length})`}</button>
         <button class="btn" type="button" data-action="pres-fit">Încadrează</button>
         <button class="btn" type="button" data-action="pres-isolate">${active.isolateArea ? "Arată tot județul" : "Izolează zona"}</button>
         <button class="btn" type="button" data-action="pres-sat">${state.basemap === "satelit" ? "Hartă" : "Satelit"}</button>
@@ -1594,63 +1606,32 @@ export function initOperations(ctx) {
               <small>${activeIncidentCount} active · ${resolvedIncidentCount} rezolvate</small>
             </div>
           </div>
-          <div class="ops-sum-filter">
-            <span>${hideResolvedInPresentation ? "Situațiile rezolvate sunt ascunse automat" : "Situațiile rezolvate sunt afișate pe hartă"}</span>
-            <button type="button" class="lnk" data-action="pres-toggle-resolved">${hideResolvedInPresentation ? "Arată rezolvate" : "Ascunde rezolvate"}</button>
-          </div>
+          ${presentationRiskGroups(active.type).map(group => {
+            const features = allFeats.filter(f => group.kinds.includes(f.properties.kind) && f.properties.status !== "resolved");
+            if (!features.length) return "";
+            return `<div class="ops-sum-sec ops-risk-group">${groupToggle(group.id, group.label, features.length)}<div id="ops-risk-${group.id}" ${presentationCollapsedGroups.has(group.id) ? "hidden" : ""}><ul class="ops-mon-list">${MONITORED_CATEGORIES.filter(c => group.kinds.includes(c.kind)).map(({kind,label}) => {
+              const items = features.filter(f => f.properties.kind === kind);
+              if (!items.length) return "";
+              return `<li class="ops-mon-cat has-active"><div class="ops-mon-row"><span class="ops-mon-label"><span class="ops-dot" data-kind="${kind}"></span>${esc(presentationKindLabel(kind, active.type, label))}</span><span class="ops-mon-count is-active">${items.length}</span></div><ul class="ops-mon-items">${items.map(itemHTML).join("")}</ul></li>`;
+            }).join("")}</ul></div></div>`;
+          }).join("") || `<p class="muted">Nicio problemă activă pentru acest tip de eveniment.</p>`}
+          <div class="ops-sum-sec ops-risk-group">${groupToggle("resolved", "Situații rezolvate", resolvedList.length)}<div id="ops-risk-resolved" ${presentationCollapsedGroups.has("resolved") ? "hidden" : ""}><ul class="ops-mon-items">${resolvedList.map(itemHTML).join("") || `<li class="muted">Nicio situație rezolvată.</li>`}</ul></div></div>
 
           <div class="ops-sum-sec">
-            <ul class="ops-mon-list">
-              ${MONITORED_CATEGORIES.map(({ kind, label }) => {
-                const allForKind = allFeats.filter(f => f.properties.kind === kind);
-                const activeForKind = allForKind.filter(f => f.properties.status !== "resolved");
-                const resolvedForKind = allForKind.filter(f => f.properties.status === "resolved");
-                const visibleForKind = hideResolvedInPresentation ? activeForKind : allForKind;
-                const activeKm = ROAD_KINDS.includes(kind)
-                  ? activeForKind.reduce((acc, f) => acc + (Number(f.properties.lengthKm) || (f.geometry.type === "LineString" ? lineLengthKm(f.geometry.coordinates) : 0) || 0), 0)
-                  : 0;
-                return `<li class="ops-mon-cat ${activeForKind.length > 0 ? "has-active" : "is-zero"}">
-                  <div class="ops-mon-row">
-                    <span class="ops-mon-label"><span class="ops-dot" data-kind="${esc(kind)}"></span>${esc(label)}</span>
-                    <span class="ops-mon-badges">
-                      ${resolvedForKind.length > 0 ? `<span class="ops-mon-res" title="Situații rezolvate">✓ ${resolvedForKind.length} rez.</span>` : ""}
-                      <span class="ops-mon-count ${activeForKind.length > 0 ? "is-active" : "is-zero"}">${activeForKind.length}${activeKm > 0 ? ` · ${activeKm.toFixed(1)} km` : ""}</span>
-                    </span>
-                  </div>
-                  ${visibleForKind.length > 0 ? `<ul class="ops-mon-items">
-                    ${visibleForKind.map(f => {
-                      const p = f.properties;
-                      const isRes = p.status === "resolved";
-                      const len = p.lengthKm || (f.geometry.type === "LineString" ? lineLengthKm(f.geometry.coordinates) : null);
-                      return `<li class="${isRes ? "is-resolved" : ""}">
-                        <button type="button" class="ops-mon-item-zoom" data-pres-zoom="${esc(p.id)}">
-                          <b>${esc(p.title || p.road || KINDS[p.kind])}</b>
-                          <small>${isRes ? "✓ REZOLVAT" : esc(STATUSES[p.status])}${len ? ` · ${len} km` : ""}${p.notes ? ` — ${esc(p.notes)}` : ""}</small>
-                        </button>
-                        <button type="button" class="ops-mon-item-res ${isRes ? "active" : ""}" data-pres-resolve="${esc(p.id)}" title="${isRes ? "Reactivează situația" : "Marchează ca rezolvat (dispare din activ)"}">${isRes ? "↺" : "✓"}</button>
-                      </li>`;
-                    }).join("")}
-                  </ul>` : ""}
-                </li>`;
-              }).join("")}
-            </ul>
-          </div>
-
-          <div class="ops-sum-sec">
-            <h3>🚒 Forțe și mijloace în teren (${forcesList.length})</h3>
-            ${forcesList.length ? `<ul>${forcesList.map(f => {
+            ${groupToggle("forces", "🚒 Forțe și mijloace în teren", forcesList.length)}<div id="ops-risk-forces" ${presentationCollapsedGroups.has("forces") ? "hidden" : ""}>
+            ${forcesList.length ? `<ul class="ops-forces-list">${forcesList.map(f => {
               const p = f.properties;
               const meta = [p.source || DEFAULT_AGENCY[p.kind] || KINDS[p.kind], p.personnel ? `Forțe: ${p.personnel}` : "", p.vehicles ? `Mijloace: ${p.vehicles}` : ""].filter(Boolean).join(" · ");
               return `<li><button type="button" data-pres-zoom="${esc(p.id)}">
                 <span class="ops-dot" data-kind="${esc(p.status === "resolved" ? "resolved" : p.kind)}"></span>
                 <div><b>${esc(p.title || KINDS[p.kind])}</b><small>${esc(meta)}</small></div>
               </button></li>`;
-            }).join("")}</ul>` : `<p class="muted" style="margin:0;font-size:11.5px">Nicio forță plasată pe hartă (0).</p>`}
+            }).join("")}</ul>` : `<p class="muted" style="margin:0;font-size:11.5px">Nicio forță plasată pe hartă (0).</p>`}</div>
           </div>
       </aside>
 
       <footer id="ops-pres-legend" class="ops-slide-foot" data-pres-panel="legend" data-pres-edge="bottom" ${legendCollapsed ? "hidden" : ""} aria-label="Legenda situației">
-        <div class="ops-legend">${Object.entries(counts).map(([kind, count]) => `<span><i data-kind="${esc(kind)}"></i>${esc(kind === "resolved" ? "Rezolvat / Redeschis" : KINDS[kind])}: <b>${count}</b></span>`).join("") || `<span>Toate situațiile monitorizate: <b>0 probleme active</b></span>`}</div>
+        <div class="ops-legend">${Object.entries(counts).map(([kind, count]) => `<span><i data-kind="${esc(kind)}"></i>${esc(kind === "resolved" ? "Rezolvat / Redeschis" : presentationKindLabel(kind, active.type, KINDS[kind]))}: <b>${count}</b></span>`).join("") || `<span>Toate situațiile monitorizate: <b>0 probleme active</b></span>`}</div>
         <span>${dirty ? "Situație în lucru" : "Actualizat " + dateLabel(active.updatedAt)}</span>
       </footer>`;
     for (const el of presentation.querySelectorAll("[data-pres-panel]")) el.scrollTop = scrollPositions.get(el.id) || 0;
@@ -1688,6 +1669,7 @@ export function initOperations(ctx) {
   function present() {
     if (pending || mode || itinerary.isPicking()) return message("Finalizează marcajul sau selecția înainte de prezentare.");
     if (!active) return;
+    hideResolvedInPresentation = false;
     compactPresentation = isCompactViewport();
     messagesCollapsed = compactPresentation;
     summaryCollapsed = compactPresentation;
@@ -1738,6 +1720,7 @@ export function initOperations(ctx) {
 
   panel.onchange = async (event) => {
     const target = event.target;
+    if (operationCards.handleChange(target)) return;
     if (itinerary.handleChange(target)) return;
     if (applyMetaInput(target)) return;
     if (target.id === "ops-archive") {
@@ -1882,6 +1865,7 @@ export function initOperations(ctx) {
 
   panel.onclick = async (event) => {
     const button = event.target.closest("button"); if (!button) return;
+    if (operationCards.handleClick(button)) return;
     if (button.dataset.action === "open-itinerary" && pending) return message("Finalizează marcajul curent înainte de a calcula itinerarul.");
     if (itinerary.handleClick(button)) return;
 
@@ -2061,6 +2045,12 @@ export function initOperations(ctx) {
     if (btn.dataset.presZoom && active) {
       const f = active.features.features.find(x => x.properties.id === btn.dataset.presZoom);
       if (f) fitGeometry(f.geometry);
+      return;
+    }
+    if (btn.dataset.presGroup) {
+      const key = btn.dataset.presGroup;
+      presentationCollapsedGroups.has(key) ? presentationCollapsedGroups.delete(key) : presentationCollapsedGroups.add(key);
+      renderPresentationOverlay();
       return;
     }
     const act = btn.dataset.action;

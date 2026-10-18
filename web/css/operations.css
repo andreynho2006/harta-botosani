@@ -285,3 +285,15 @@
   .ops-sum-filter { flex-wrap: wrap; }
   .presenting .maplibregl-ctrl-bottom-left, .presenting .maplibregl-ctrl-bottom-right { bottom: calc(env(safe-area-inset-bottom, 0px) + 62px); }
 }
+
+/* Event-specific monitoring groups keep resolved incidents available independently. */
+.ops-risk-toggle { width:100%; display:flex; align-items:center; justify-content:space-between; gap:8px; min-height:44px; padding:8px; border:1px solid var(--line); border-radius:8px; background:var(--panel-2); color:var(--ink); text-align:left; font:inherit; font-weight:700; cursor:pointer; }
+.ops-risk-toggle span:first-child { min-width:0; overflow-wrap:anywhere; }
+.ops-risk-group > div { margin-top:6px; }
+.ops-risk-group [hidden] { display:none !important; }
+.ops-risk-group .ops-mon-item-zoom { min-width:0; overflow-wrap:anywhere; }
+.ops-risk-group .ops-mon-item-res { min-height:44px; min-width:44px; }
+.ops-forces-list { list-style:none; padding:0; margin:0; display:grid; gap:4px; }
+.ops-forces-list button { width:100%; min-height:44px; display:flex; gap:6px; padding:8px; border:1px solid var(--line); border-radius:7px; background:var(--panel-2); color:var(--ink); text-align:left; overflow-wrap:anywhere; cursor:pointer; }
+.ops-forces-list button div { min-width:0; display:grid; gap:2px; }
+.ops-forces-list small { color:var(--ink-3); }
