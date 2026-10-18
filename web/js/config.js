@@ -98,10 +98,10 @@ export const LAYER_PRESETS = [
   },
   {
     id: "fire",
-    label: "Incendiu Major / Pădure",
-    short: "🔥 Incendiu",
+    label: "Incendii · toate căile de comunicație",
+    short: "🔥 Incendii",
     layers: ["uat", "places", "hidranti", "hidranti_defecti", "poi:sursa_apa", "poi:pompieri", "poi:ambulanta", "poi:spital",
-      "landuse", "water", "rivers", "road:dn", "road:dj", "road:dc", "road:street", "road:track", "roadlabels",
+      "landuse", "water", "rivers", ...Object.keys(ROAD).map(key => `road:${key}`), "rail", "roadlabels",
       "bld:bloc", "bld:public", "bld:industrial", "bld:comercial", "bld:casa"],
   },
   {

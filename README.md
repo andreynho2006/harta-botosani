@@ -61,6 +61,16 @@ Run `node --test tests/*.test.mjs` and `python3 -m unittest discover -s tests -p
 4. **Mod Prezentare CJSU (`Prezintă în ședință`):**
    - Afișează harta pe tot ecranul cu antetul ședinței, codul ANM / RO-Alert, legenda operativă și un **panou de sinteză CJSU interactiv** (clic pe orice drum blocat, zonă, forță sau UAT centrează harta pe acel element), plus comenzi rapide pentru *Hartă / Satelit*, *Zi / Noapte*, *Izolează zona* și *Încadrează*.
 
+## Itinerare de intervenție
+
+În **Situații → Adaugă pe hartă → Itinerar de bază și de rezervă**, alegi subunitatea și obiectivul din listă sau marchezi intrarea în obiectiv pe hartă. Cele opt puncte de plecare sunt grupate pe detașamente și stație; o plecare poate fi folosită numai după completarea coordonatelor în lista oficială din Administrare. Punctele OSM neconfirmate nu sunt folosite automat.
+
+Calculul folosește toate cele șapte categorii de drumuri, independent de straturile vizibile și poziția hărții. Rețeaua din `web/data/routing-roads.json` conține 15.916 drumuri reconstruite din snapshotul existent din 13.10.2026; harta de bază nu a fost actualizată. Datele se încarcă la primul calcul, într-un Web Worker. Traseul de bază este turcoaz, iar rezerva este portocalie și întreruptă. O rezervă este oferită numai când există un traseu suficient de diferit; sectoarele marcate blocate și nerezolvate sunt excluse. Ambele trasee se păstrează în situație și în exportul JSON.
+
+Traseele sunt propuneri de planificare: snapshotul nu conține toate sensurile, restricțiile de viraj sau de acces/gabarit, iar conexiunile până la drum nu sunt inventate. Verifică accesul efectiv pentru autospecială.
+
+Reconstrucția offline, fără descărcări OSM: instalează `mapbox-vector-tile==2.2.0`, apoi rulează `python pipeline/build-routing-snapshot.py <director-tiles> web/data/routing-roads.json --zoom 15`. Testele suplimentare ale constructorului sunt în `tests/test_routing_snapshot.py`.
+
 ## Structură
 
 ```

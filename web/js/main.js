@@ -1,14 +1,14 @@
 /* global maplibregl */
-import { POI, LAYER_GROUPS, LAYER_PRESETS, LABELS, START_VIEW, itemLabel } from "./config.js";
-import { buildStyle, PALETTES } from "./style.js";
+import { POI, LAYER_GROUPS, LAYER_PRESETS, LABELS, START_VIEW, itemLabel } from "./config.js?v=20261018-itineraries";
+import { buildStyle, PALETTES } from "./style.js?v=20261018-itineraries";
 import { buildIcons, iconDataURL } from "./icons.js";
 import { SearchIndex, typeInfo, norm } from "./search.js";
 import { ensureLogin, decryptJSON, logout } from "./auth.js";
-import { renderAdmin } from "./admin.js";
+import { renderAdmin } from "./admin.js?v=20261018-itineraries";
 import { formatRestriction } from "./restrictions.js";
-import { normalizeSubunitsDoc, mergeSubunitsIntoPois, SUBUNITS_DRAFT_KEY } from "./subunits.js";
+import { normalizeSubunitsDoc, mergeSubunitsIntoPois, SUBUNITS_DRAFT_KEY } from "./subunits.js?v=20261018-itineraries";
 import { openCommuneMap, isCommuneMapOpen } from "./commune.js";
-import { initOperations } from "./operations.js?v=20261018-cloud-sync";
+import { initOperations } from "./operations.js?v=20261018-itineraries";
 import {
   saveSubunitsCloud, subscribeSubunits,
   saveSituationCloud, deleteSituationCloud, subscribeSituations, onCloudStatus,

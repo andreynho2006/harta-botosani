@@ -66,6 +66,10 @@
 .ops-dot[data-kind="persons"], .ops-legend i[data-kind="persons"] { background: #dc2626; }
 .ops-dot[data-kind="command"], .ops-legend i[data-kind="command"] { background: #794bc5; }
 .ops-dot[data-kind="isu"], .ops-legend i[data-kind="isu"] { background: #c8102e; }
+.ops-dot[data-kind="route_primary"], .ops-legend i[data-kind="route_primary"] { background: #087f8c; }
+.ops-dot[data-kind="route_backup"], .ops-legend i[data-kind="route_backup"] { background: #b05c00; border-style: dashed; }
+#ops-itinerary select, #ops-itinerary input { max-width: 100%; }
+#ops-itinerary .ops-actions { flex-wrap: wrap; }
 .ops-dot[data-kind="police"], .ops-legend i[data-kind="police"] { background: #1e5bb8; }
 .ops-dot[data-kind="medical"], .ops-legend i[data-kind="medical"] { background: #d81b60; }
 .ops-dot[data-kind="utility"], .ops-legend i[data-kind="utility"] { background: #546e7a; }

@@ -9,6 +9,7 @@ export const SUBUNITS_DRAFT_KEY = "hb.subunits.draft.v1";
 export const SUBUNIT_TYPES = {
   inspectorat: "Inspectorat (sediu ISU)",
   detasament: "Detașament de pompieri",
+  statie: "Stație de pompieri",
   sectie: "Secție de pompieri",
   garda: "Gardă de intervenție",
   punct: "Punct de lucru / SMURD",

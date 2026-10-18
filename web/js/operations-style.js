@@ -8,7 +8,8 @@ const color = ['case', resolved, '#23834b', ['match', ['get', 'kind'],
   'evacuated', '#c92a2a', 'isolated', '#b5179e', 'power', '#d97706',
   'stranded', '#e11d48', 'houses', '#7c3aed', 'persons', '#dc2626',
   'command', '#6544ad', 'isu', '#c8102e', 'police', '#1d4ed8',
-  'medical', '#e03131', 'utility', '#d97706', 'shelter', '#21896b', '#c94949']];
+  'medical', '#e03131', 'utility', '#d97706', 'shelter', '#21896b',
+  'route_primary', '#087f8c', 'route_backup', '#b05c00', '#c94949']];
 const width = (extra = 0) => ['interpolate', ['linear'], ['zoom'], 8, 4 + extra, 14, 9 + extra, 19, 22 + extra];
 const rounded = { 'line-cap': 'round', 'line-join': 'round' };
 
@@ -66,8 +67,10 @@ export function decorateOperationalStyle(style, state = {}) {
       paint: { 'line-color': color, 'line-width': 3, 'line-dasharray': [3, 2] } },
     { id: 'ops-features-line-halo', type: 'line', source: 'ops-features', filter: isGeometry('LineString'), layout: rounded,
       paint: { 'line-color': '#ffffff', 'line-width': width(4), 'line-opacity': ['case', resolved, 0.6, 1] } },
-    { id: 'ops-features-line', type: 'line', source: 'ops-features', filter: isGeometry('LineString'), layout: rounded,
+    { id: 'ops-features-line', type: 'line', source: 'ops-features', filter: ['all', isGeometry('LineString'), ['!=', ['get', 'kind'], 'route_backup']], layout: rounded,
       paint: { 'line-color': color, 'line-width': width(), 'line-opacity': ['case', resolved, 0.65, 1] } },
+    { id: 'ops-route-backup', type: 'line', source: 'ops-features', filter: ['all', isGeometry('LineString'), ['==', ['get', 'kind'], 'route_backup']], layout: rounded,
+      paint: { 'line-color': color, 'line-width': width(), 'line-dasharray': [2, 2], 'line-opacity': ['case', resolved, 0.65, 1] } },
     { id: 'ops-features-point', type: 'circle', source: 'ops-features', filter: isGeometry('Point'),
       paint: { 'circle-radius': ['interpolate', ['linear'], ['zoom'], 8, 7, 14, 10, 19, 15],
         'circle-color': color, 'circle-stroke-color': '#ffffff', 'circle-stroke-width': 3 } },

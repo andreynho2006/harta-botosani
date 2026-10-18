@@ -1,12 +1,13 @@
-import { EventStore, createEvent, sanitizeEvent, cleanupLegacyArchive } from "./event-store.js?v=20261018-archive-cleanup";
+import { EventStore, createEvent, sanitizeEvent, cleanupLegacyArchive } from "./event-store.js?v=20261018-itineraries";
 import {
   snapToRoad, buildRoadSegment, findRoadRoute, findRoadByRef, sliceRoadByKm, sliceRoadByPlaces,
   projectPointOnRoad, roadNetworkToFeatures, roadsListOf, lineLengthKm,
 } from "./road-sketch.js";
 import { outsideMask, geometryBounds } from "./commune-geometry.js";
 import { circle } from "./geo.js";
-import { LAYER_GROUPS, LAYER_PRESETS } from "./config.js";
+import { LAYER_GROUPS, LAYER_PRESETS } from "./config.js?v=20261018-itineraries";
 import { localTime, isoTime, dateLabel } from "./operations-time.js";
+import { createInterventionPlanner } from "./intervention-planner.js?v=20261018-itineraries";
 
 const FC = (features = []) => ({ type: "FeatureCollection", features });
 const esc = (value) => String(value ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -38,7 +39,11 @@ export const KINDS = {
   medical: "Echipaj SAJ / SMURD / PMA",
   utility: "Utilaj SDN / DJDP / SGA / Delgaz",
   shelter: "Punct sprijin / adăpostire sinistrați",
+  route_primary: "Itinerar de bază",
+  route_backup: "Itinerar de rezervă",
 };
+
+const isItinerary = feature => ["route_primary", "route_backup"].includes(feature?.properties?.kind);
 
 const ROAD_KINDS = ["blocked", "snow", "flooded", "damaged"];
 const ZONE_KINDS = ["threat", "flooded", "snow", "fire", "evacuated"];
@@ -335,7 +340,7 @@ function withMapLabels(features = []) {
   return features.map(f => {
     const p = f.properties || {};
     const name = shortLabel(p.title || p.road || "");
-    const status = STATUS_WORD[p.status] || "Raportat";
+    const status = isItinerary(f) ? `${p.lengthKm ?? "—"} km` : STATUS_WORD[p.status] || "Raportat";
     return { ...f, properties: { ...p, mapLabel: name ? `${name}\n${status}` : status, mapLabelInline: name ? `${name} · ${status}` : status } };
   });
 }
@@ -495,6 +500,46 @@ export function initOperations(ctx) {
   presentation.hidden = true;
   document.querySelector(".mapwrap").appendChild(presentation);
 
+  const itinerary = createInterventionPlanner({
+    state, map, getActive: () => active, render, toast,
+    onPickStart() {
+      stopOtherTools(); stopDrawing(); setSheet("peek");
+      map.getCanvas().style.cursor = "crosshair";
+      drawbar.innerHTML = '<span>Alege intrarea în obiectiv pe hartă.</span><button type="button" class="btn" data-action="cancel-itinerary-pick">Anulează</button>';
+      drawbar.hidden = false;
+      toast("Alege pe hartă intrarea în obiectivul afectat.");
+    },
+    onPickEnd() {
+      map.getCanvas().style.cursor = "";
+      drawbar.hidden = true;
+      selectTab("situatii"); setSheet("half");
+    },
+    onRoutes(result, meta) {
+      if (!active || !result.primary) return;
+      const group = `itinerary-${meta.unit.id}-${meta.destination.coordinate.map(n => Math.round(n * 1e6)).join("-")}`;
+      const routes = [["route_primary", result.primary], ["route_backup", result.alternative]]
+        .filter(([, route]) => route).map(([kind, route]) => ({
+          type: "Feature", geometry: route.geometry,
+          properties: {
+            id: id(), kind, status: "reported", routeGroup: group,
+            subunitId: meta.unit.id, objectiveId: String(meta.destination.id || "").slice(0, 200),
+            origin: [...meta.unit.coordinate], destination: [...meta.destination.coordinate],
+            title: `${KINDS[kind]} · ${meta.destination.name}`.slice(0, 200),
+            source: meta.unit.name, lengthKm: +route.distanceKm.toFixed(2),
+            observedAt: new Date().toISOString(),
+            notes: "Propunere pe rețeaua hărții; accesul și gabaritul autospecialei trebuie verificate în teren.",
+          },
+        }));
+      const candidate = structuredClone(active);
+      candidate.isolateArea = false;
+      candidate.features.features = [...candidate.features.features.filter(f => f.properties.routeGroup !== group), ...routes];
+      try { sanitizeEvent(candidate); }
+      catch { toast("Itinerarul depășește limitele arhivei și nu a fost salvat."); return; }
+      active = candidate;
+      changed(); sync(true); render(); fit();
+    },
+  });
+
   const hoverPop = document.createElement("div");
   hoverPop.className = "ops-hover-pop";
   hoverPop.hidden = true;
@@ -509,7 +554,7 @@ export function initOperations(ctx) {
       hideHoverPop();
       return;
     }
-    const layers = ["ops-features-point", "ops-features-line", "ops-features-fill"].filter(layer => map.getLayer(layer));
+    const layers = ["ops-features-point", "ops-features-line", "ops-route-backup", "ops-features-fill"].filter(layer => map.getLayer(layer));
     if (!layers.length) {
       hideHoverPop();
       return;
@@ -812,6 +857,7 @@ export function initOperations(ctx) {
   }
 
   function start(tool, defaultKind = null) {
+    itinerary.cancelPick();
     ensureActiveEvent();
     if (pending && tool !== "retrace-road") {
       return message("Salvează marcajul curent (Adaugă / Actualizează) sau apasă Renunță înainte de a folosi alt instrument.");
@@ -907,21 +953,23 @@ export function initOperations(ctx) {
   }
 
   function availableRoads() {
-    const netFeatures = roadNetworkToFeatures(state.data.roads, state.visible);
+    const netFeatures = roadNetworkToFeatures(state.data.roads);
     if (!map?.isStyleLoaded()) return netFeatures;
-    const tileFeatures = map.querySourceFeatures("osm", { sourceLayer: "roads" }).filter(f => state.visible["road:" + f.properties.cls]);
+    const tileFeatures = map.querySourceFeatures("osm", { sourceLayer: "roads" });
     return [...netFeatures, ...tileFeatures];
   }
 
   function handleMapClick(event) {
     if (document.body.classList.contains("presenting")) return true;
+    if (itinerary.handleMapClick(event)) return true;
     if (!mode) {
       if (!active || pending) return false;
-      const layers = ["ops-features-line", "ops-features-point", "ops-features-fill"].filter(layer => map.getLayer(layer));
+      const layers = ["ops-features-line", "ops-route-backup", "ops-features-point", "ops-features-fill"].filter(layer => map.getLayer(layer));
       if (!layers.length || !map.isStyleLoaded()) return false;
       const features = map.queryRenderedFeatures([[event.point.x - 8, event.point.y - 8], [event.point.x + 8, event.point.y + 8]], { layers });
       const feature = active.features.features.find(f => f.properties.id === features[0]?.properties.id);
       if (!feature) return false;
+      if (isItinerary(feature)) { fitGeometry(feature.geometry); toast(feature.properties.title); return true; }
       pending = structuredClone(feature); editingId = pending.properties.id; sync(); render(); selectTab("situatii"); setSheet("half");
       requestAnimationFrame(() => panel.querySelector("#ops-marker")?.scrollIntoView({ block: "start" }));
       return true;
@@ -1055,7 +1103,7 @@ export function initOperations(ctx) {
       ? pickKinds(ROAD_KINDS)
       : isZone
       ? pickKinds(ZONE_KINDS)
-      : KINDS;
+      : Object.fromEntries(Object.entries(KINDS).filter(([kind]) => !kind.startsWith("route_")));
 
     const matchedRoad = isRoad && p.road ? findRoadByRef(state.data.roads, p.road) : null;
     const roadPlaces = matchedRoad?.places || [];
@@ -1121,7 +1169,7 @@ export function initOperations(ctx) {
       <select id="ops-archive" aria-label="Alege o situație precedentă din arhivă">
         <option value="">— Alege o situație precedentă (${events.length} salvate) —</option>
         ${events.map(e => {
-          const roadCount = e.features.features.filter(f => f.geometry.type === "LineString").length;
+          const roadCount = e.features.features.filter(f => f.geometry.type === "LineString" && !isItinerary(f)).length;
           const uats = e.areas?.length ? ` · ${e.areas.slice(0, 2).join(", ")}${e.areas.length > 2 ? "…" : ""}` : "";
           return `<option value="${esc(e.id)}" ${active?.id === e.id ? "selected" : ""}>${esc(e.title)} (${esc(TYPES[e.type] || e.type)}${roadCount ? `, ${roadCount} drumuri` : ""}${esc(uats)} · ${dateLabel(e.updatedAt)})</option>`;
         }).join("")}
@@ -1136,7 +1184,8 @@ export function initOperations(ctx) {
 
   function render() {
     const events = list();
-    const roadMarks = active ? active.features.features.filter(f => f.geometry.type === "LineString") : [];
+    const roadMarks = active ? active.features.features.filter(f => f.geometry.type === "LineString" && !isItinerary(f)) : [];
+    const routeMarks = active ? active.features.features.filter(isItinerary) : [];
     const otherMarks = active ? active.features.features.filter(f => f.geometry.type !== "LineString") : [];
 
     panel.innerHTML = `<div class="ops">
@@ -1198,6 +1247,7 @@ export function initOperations(ctx) {
       <section class="ops-card">
         <h3>Adaugă pe hartă (Drumuri, Situații, Localități, Forțe)</h3>
         <div class="ops-tools-grid">
+          <button class="btn" type="button" data-action="open-itinerary">⇢ Itinerar de bază și de rezervă</button>
           <button class="btn primary" type="button" data-action="open-road-form">⛔ Drum blocat / afectat (după km sau click)</button>
           <button class="btn" type="button" data-action="road">━ Trasează drum cu 2 click-uri pe hartă</button>
           <button class="btn" type="button" data-action="point" data-kind="stranded">🚗 Mașini blocate în zăpadă / trafic</button>
@@ -1216,6 +1266,8 @@ export function initOperations(ctx) {
         </div>
       </section>
 
+      ${itinerary.html()}
+      ${routeMarks.length ? `<section class="ops-card"><h3>Itinerare de deplasare</h3><ul class="ops-marks">${routeMarks.map(f => `<li><button class="ops-mark-main" type="button" data-zoom-mark="${esc(f.properties.id)}"><b><span class="ops-dot" data-kind="${esc(f.properties.kind)}"></span>${esc(f.properties.title)}</b><small>${esc(f.properties.source)} · ${esc(f.properties.lengthKm)} km</small></button><button class="lnk danger" type="button" data-remove="${esc(f.properties.id)}" aria-label="Elimină ${esc(KINDS[f.properties.kind])}">Elimină</button></li>`).join("")}</ul></section>` : ""}
       ${markerHTML()}
 
       <section class="ops-card">
@@ -1437,7 +1489,7 @@ export function initOperations(ctx) {
   }
 
   function canReplaceDraft() {
-    if (pending || mode) {
+    if (pending || mode || itinerary.isPicking()) {
       message("Finalizează sau anulează marcajul în curs înainte de a schimba situația.");
       return false;
     }
@@ -1491,7 +1543,7 @@ export function initOperations(ctx) {
     const panelToggle = (name, label, collapsed, arrow) => `<button class="ops-pres-toggle ops-pres-toggle-${name}" type="button" data-action="pres-toggle-${name}" aria-expanded="${!collapsed}" aria-controls="ops-pres-${name}" aria-label="${collapsed ? "Arată" : "Ascunde"} ${label.toLowerCase()}" title="${collapsed ? "Arată" : "Ascunde"} ${label.toLowerCase()}"><span aria-hidden="true">${arrow}</span><span class="ops-toggle-label">${label}</span></button>`;
 
     const allFeats = active.features.features || [];
-    const nonForceFeats = allFeats.filter(f => !FORCE_KINDS.includes(f.properties.kind));
+    const nonForceFeats = allFeats.filter(f => !FORCE_KINDS.includes(f.properties.kind) && !isItinerary(f));
     const activeIncidentCount = nonForceFeats.filter(f => f.properties.status !== "resolved").length;
     const resolvedIncidentCount = nonForceFeats.filter(f => f.properties.status === "resolved").length;
 
@@ -1633,7 +1685,7 @@ export function initOperations(ctx) {
   }
 
   function present() {
-    if (pending || mode) return message("Finalizează marcajul sau selecția înainte de prezentare.");
+    if (pending || mode || itinerary.isPicking()) return message("Finalizează marcajul sau selecția înainte de prezentare.");
     if (!active) return;
     compactPresentation = isCompactViewport();
     messagesCollapsed = compactPresentation;
@@ -1657,6 +1709,7 @@ export function initOperations(ctx) {
 
   panel.oninput = (event) => {
     const input = event.target;
+    if (["coordinate", "name"].includes(input.dataset?.itineraryField) && itinerary.handleChange(input)) return;
     if (input.id === "ops-archive-search") {
       archiveFilter = input.value;
       render();
@@ -1684,6 +1737,7 @@ export function initOperations(ctx) {
 
   panel.onchange = async (event) => {
     const target = event.target;
+    if (itinerary.handleChange(target)) return;
     if (applyMetaInput(target)) return;
     if (target.id === "ops-archive") {
       if (!canReplaceDraft()) { render(); return; }
@@ -1827,6 +1881,8 @@ export function initOperations(ctx) {
 
   panel.onclick = async (event) => {
     const button = event.target.closest("button"); if (!button) return;
+    if (button.dataset.action === "open-itinerary" && pending) return message("Finalizează marcajul curent înainte de a calcula itinerarul.");
+    if (itinerary.handleClick(button)) return;
 
     if (button.dataset.preset) {
       if (applyPreset) applyPreset(button.dataset.preset);
@@ -1960,6 +2016,7 @@ export function initOperations(ctx) {
 
   drawbar.onclick = (event) => {
     const action = event.target.closest("button")?.dataset.action;
+    if (action === "cancel-itinerary-pick") itinerary.cancelPick();
     if (action === "finish") finishDrawing();
     if (action === "cancel") cancelDrawing();
     if (action === "undo") { points.pop(); sync(); drawInstructions(); }
@@ -2036,6 +2093,7 @@ export function initOperations(ctx) {
   };
 
   const handleKey = (event) => {
+    if (event.key === "Escape" && itinerary.isPicking()) { itinerary.cancelPick(); event.preventDefault(); return true; }
     if (event.key === "Escape" && document.body.classList.contains("presenting")) { exitPresentation(); event.preventDefault(); return true; }
     if (event.key === "Escape" && mode) { cancelDrawing(); event.preventDefault(); return true; }
     return false;
@@ -2065,5 +2123,5 @@ export function initOperations(ctx) {
   restoreSession();
   sync(true);
   render();
-  return { handleMapClick, handleKey, cancelDrawing, isDrawing: () => !!mode, sync, openRoadCreator, syncFromCloud };
+  return { handleMapClick, handleKey, cancelDrawing: () => { itinerary.cancelPick(); cancelDrawing(); }, isDrawing: () => !!mode || itinerary.isPicking(), sync, openRoadCreator, syncFromCloud };
 }

@@ -4,7 +4,7 @@
 //   web/data/hidranti.enc     (hidranții, criptați)
 import { wrapFor, encryptJSON, generatePassword, ITERATIONS } from "./auth.js";
 import { fromStereo70 } from "./geo.js";
-import { SUBUNIT_TYPES, normalizeSubunit, normalizeSubunitsDoc, subunitsFromOsm, parseCoordinateCandidates } from "./subunits.js";
+import { SUBUNIT_TYPES, normalizeSubunit, normalizeSubunitsDoc, subunitsFromOsm, parseCoordinateCandidates } from "./subunits.js?v=20261018-itineraries";
 
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const normKey = (s) => String(s ?? "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[^a-z0-9]/g, "");

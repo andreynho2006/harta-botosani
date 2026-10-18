@@ -4,7 +4,7 @@ export const EVENT_TYPES = Object.freeze(Object.fromEntries(['fire', 'flood', 's
 export const MARK_TYPES = Object.freeze(Object.fromEntries([
   'blocked', 'flooded', 'damaged', 'snow', 'threat', 'fire',
   'evacuated', 'isolated', 'power', 'stranded', 'houses', 'persons',
-  'command', 'isu', 'police', 'medical', 'utility', 'shelter',
+  'command', 'isu', 'police', 'medical', 'utility', 'shelter', 'route_primary', 'route_backup',
 ].map(key => [key, key])));
 const MAX_EVENTS = 500;
 const MAX_FEATURES = 2000;
@@ -90,6 +90,14 @@ function feature(value, budget) {
   if (affectedAssets) props.affectedAssets = affectedAssets;
   if (personnel) props.personnel = personnel;
   if (vehicles) props.vehicles = vehicles;
+  if (p.kind === 'route_primary' || p.kind === 'route_backup') {
+    if (value.geometry?.type !== 'LineString') throw new Error('An itinerary must follow a road line.');
+    props.routeGroup = identifier(p.routeGroup);
+    props.subunitId = identifier(p.subunitId);
+    props.objectiveId = string(p.objectiveId, 200);
+    props.origin = position(p.origin, budget);
+    props.destination = position(p.destination, budget);
+  }
   return {
     type: 'Feature', geometry: geometry(value.geometry, budget),
     properties: props,
