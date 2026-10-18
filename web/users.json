@@ -12,12 +12,20 @@
    "wk": "whx/4y6iBXu81pd1zfOuPg3TJyJsKHyZjn4b7wsM4Ef7D4/fa8pEAju5y1unc/0W"
   },
   {
+   "u": "dispecerat",
+   "name": "Dispecerat",
+   "role": "user",
+   "salt": "uL/SNPHnDJNou7Vx7N7TvQ==",
+   "iv": "/pOAAHKb+GnRY+dF",
+   "wk": "wIBdeskNEZCwXav80o4SQcA8tEfN2q5yIvhPixHYeRjU4XHt3Y+YZt7WqfZArJzN"
+  },
+  {
    "u": "test",
    "name": "Utilizator test",
    "role": "user",
-   "salt": "iopFhXuj31AiNAoF/v460A==",
-   "iv": "pOajQKqI2ZA8f5Wc",
-   "wk": "y3o5PtPThRkyECkTJ0AdJIHhyfJH1eU5LhXLczz44feqxcvhZ454yvFjynZLzOes"
+   "salt": "NPB4pnQc81jcEC5lIlAknA==",
+   "iv": "Xt3o9V0IZH/JmXr+",
+   "wk": "TCSjZuEohowBx8duWGhL4mh/xtuyhlJoUPESd5jxjuQrzOR6jlRJ1qy1VBUgcVB1"
   }
  ]
 }

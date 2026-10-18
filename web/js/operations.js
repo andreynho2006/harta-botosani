@@ -69,6 +69,201 @@ const DEFAULT_AGENCY = {
   shelter: "CLSU / Primărie",
 };
 
+export const AFFECTED_META = {
+  stranded: {
+    categoryBadge: "Surprinse în mașini / trafic",
+    sectionTitle: "🚗 Persoane și autovehicule surprinse în mașini / trafic",
+    personsLabel: "Persoane surprinse în mașini",
+    shortPersonsLabel: "Surprinse în mașini",
+    personsPlaceholder: "Ex. 7 persoane (5 adulți, 2 copii)",
+    assetsLabel: "Autovehicule blocate",
+    shortAssetsLabel: "Vehicule blocate",
+    assetsPlaceholder: "Ex. 3 autoturisme, 1 microbuz",
+  },
+  houses: {
+    categoryBadge: "În case / gospodării afectate",
+    sectionTitle: "🏠 Persoane și gospodării afectate (în case)",
+    personsLabel: "Persoane în case / gospodării",
+    shortPersonsLabel: "Persoane în case",
+    personsPlaceholder: "Ex. 5 persoane vârstnice monitorizate",
+    assetsLabel: "Case / gospodării afectate",
+    shortAssetsLabel: "Gospodării",
+    assetsPlaceholder: "Ex. 3 gospodării înzăpezite",
+  },
+  persons: {
+    categoryBadge: "Victime / cazuri medicale critice",
+    sectionTitle: "🆘 Victime / persoane blocate sau cazuri medicale",
+    personsLabel: "Victime / persoane asistate",
+    shortPersonsLabel: "Victime / persoane",
+    personsPlaceholder: "Ex. 2 persoane (1 pacient dializat, 1 gravidă)",
+    assetsLabel: "Unde se află (casă, auto, teren)",
+    shortAssetsLabel: "Locație",
+    assetsPlaceholder: "Ex. În locuință izolată / în autoturism",
+  },
+  isolated: {
+    categoryBadge: "Populație în localitate izolată",
+    sectionTitle: "🏘️ Populație și gospodării izolate",
+    personsLabel: "Populație izolată / afectată",
+    shortPersonsLabel: "Populație izolată",
+    personsPlaceholder: "Ex. ~120 locuitori (15 vârstnici)",
+    assetsLabel: "Gospodării / obiective izolate",
+    shortAssetsLabel: "Gospodării izolate",
+    assetsPlaceholder: "Ex. 45 gospodării fără acces auto",
+  },
+  power: {
+    categoryBadge: "Consumatori fără energie electrică",
+    sectionTitle: "⚡ Populație și gospodării fără curent",
+    personsLabel: "Consumatori / persoane afectate",
+    shortPersonsLabel: "Consumatori afectați",
+    personsPlaceholder: "Ex. ~350 locuitori afectați",
+    assetsLabel: "Gospodării / PT nealimentate",
+    shortAssetsLabel: "Obiective afectate",
+    assetsPlaceholder: "Ex. 140 gospodării, 2 posturi trafo",
+  },
+  evacuated: {
+    categoryBadge: "Persoane evacuate / autoevacuate",
+    sectionTitle: "🚨 Persoane și gospodării evacuate",
+    personsLabel: "Persoane evacuate / autoevacuate",
+    shortPersonsLabel: "Persoane evacuate",
+    personsPlaceholder: "Ex. 18 persoane (14 adulți, 4 copii)",
+    assetsLabel: "Locuințe / gospodării evacuate",
+    shortAssetsLabel: "Locuințe evacuate",
+    assetsPlaceholder: "Ex. 7 locuințe evacuate preventiv",
+  },
+  flooded: {
+    categoryBadge: "Gospodării / sector afectat de inundații",
+    sectionTitle: "🌊 Persoane și bunuri afectate de inundații",
+    personsLabel: "Persoane afectate / izolate de ape",
+    shortPersonsLabel: "Persoane afectate",
+    personsPlaceholder: "Ex. 6 persoane în gospodării inundate",
+    assetsLabel: "Case / curți / anexe inundate",
+    shortAssetsLabel: "Bunuri inundate",
+    assetsPlaceholder: "Ex. 2 case, 5 curți inundate",
+  },
+  threat: {
+    categoryBadge: "Zonă expusă / amenințată",
+    sectionTitle: "⚠️ Populație și obiective în zona de risc",
+    personsLabel: "Persoane în zona amenințată",
+    shortPersonsLabel: "Persoane în risc",
+    personsPlaceholder: "Ex. ~30 persoane avizate",
+    assetsLabel: "Gospodării / obiective expuse",
+    shortAssetsLabel: "Obiective expuse",
+    assetsPlaceholder: "Ex. 12 gospodării în lunca inundabilă",
+  },
+  fire: {
+    categoryBadge: "Victime / bunuri în perimetrul incendiului",
+    sectionTitle: "🔥 Victime și bunuri afectate de incendiu",
+    personsLabel: "Victime / persoane evacuate",
+    shortPersonsLabel: "Victime / evacuați",
+    personsPlaceholder: "Ex. 2 persoane asistate medical (fără decese)",
+    assetsLabel: "Construcții / suprafață afectată",
+    shortAssetsLabel: "Bunuri afectate",
+    assetsPlaceholder: "Ex. 2 locuințe, 3 anexe / 10 ha vegetație",
+  },
+  blocked: {
+    categoryBadge: "Sector de drum blocat / închis",
+    sectionTitle: "⛔ Persoane și vehicule surprinse pe sectorul blocat (opțional)",
+    personsLabel: "Persoane surprinse pe drum",
+    shortPersonsLabel: "Persoane pe drum",
+    personsPlaceholder: "Ex. 7 persoane în autovehicule (dacă există)",
+    assetsLabel: "Autovehicule oprite / blocate",
+    shortAssetsLabel: "Vehicule oprite",
+    assetsPlaceholder: "Ex. 3 autoturisme, 1 TIR (dacă există)",
+  },
+  snow: {
+    categoryBadge: "Sector / zonă înzăpezită",
+    sectionTitle: "❄️ Persoane și vehicule afectate de înzăpezire (opțional)",
+    personsLabel: "Persoane surprinse în zăpadă",
+    shortPersonsLabel: "Persoane afectate",
+    personsPlaceholder: "Ex. 4 persoane în autoturisme (dacă există)",
+    assetsLabel: "Autovehicule / gospodării afectate",
+    shortAssetsLabel: "Bunuri afectate",
+    assetsPlaceholder: "Ex. 2 autoturisme (dacă există)",
+  },
+  damaged: {
+    categoryBadge: "Sector de drum deteriorat / restricționat",
+    sectionTitle: "⚠️ Persoane și vehicule afectate pe sector (opțional)",
+    personsLabel: "Persoane afectate",
+    shortPersonsLabel: "Persoane afectate",
+    personsPlaceholder: "Ex. Fără victime (opțional)",
+    assetsLabel: "Vehicule / infrastructură afectată",
+    shortAssetsLabel: "Infrastructură",
+    assetsPlaceholder: "Ex. 1 podeț avariat (opțional)",
+  },
+};
+
+export function getAffectedMeta(kind) {
+  return AFFECTED_META[kind] || {
+    categoryBadge: KINDS[kind] || "Situație operativă",
+    sectionTitle: "Persoane și bunuri afectate",
+    personsLabel: "Victime / persoane afectate",
+    shortPersonsLabel: "Persoane afectate",
+    personsPlaceholder: "Ex. număr persoane (adulți, copii, vârstnici)",
+    assetsLabel: "Vehicule / clădiri / bunuri afectate",
+    shortAssetsLabel: "Bunuri afectate",
+    assetsPlaceholder: "Ex. autoturisme, gospodării, anexe",
+  };
+}
+
+const CIVIL_PERSON_RE = /\b(persoan[aăe]|adul[tț]i?|copi[il]|v[aă]rstnic[iăe]?|victim[aăe]|pacien[tț]i?|locuitor[i]?|cet[aă][tț]en[i]?|evacua[tț][iăe]?|sinistra[tț][iăe]?)\b/i;
+const FORCE_PERSON_RE = /\b(ofi[tț]er[i]?|subofi[tț]er[i]?|agen[tț]i?|jandarm[i]?|pompier[i]?|militar[i]?|voluntar[i]?|lucr[aă]tor[i]?|operator[i]?|echipaj[e]?|paramedic[i]?)\b/i;
+const CIVIL_ASSET_RE = /\b(autoturism[e]?|autovehicul[e]?|ma[sș]in[aăi]|microbuz[e]?|autobuz[e]?|tir(-uri)?|camion|camioane|gospod[aă]ri[ie]|cas[aăe]|locuin[tț][aăe]|anex[aăe]|bloc(uri)?)\b/i;
+const FORCE_VEHICLE_RE = /\b(asas|autospecial[aăe]|[sș]enilat[aăe]|utv|autofrez[aăe]|buldoexcavator|ambulan[tț][aăe]|smurd|motopomp[aăe]|barc[aăi]|autocamion)\b/i;
+
+export function normalizeFeatureProperties(p) {
+  if (!p || FORCE_KINDS.includes(p.kind)) return p;
+  if (p.id === "mark-masini-blocate-1" && !p.affectedPersons && p.personnel === "7 persoane (5 adulți, 2 copii)") {
+    p.affectedPersons = "7 persoane (5 adulți, 2 copii)";
+    p.affectedAssets = p.vehicles || "3 autoturisme";
+    p.source = "ISU Botoșani, IPJ Botoșani, SDN Botoșani";
+    p.personnel = "3 subofițeri ISU, 2 agenți IPJ, 1 operator SDN";
+    p.vehicles = "1 șenilată ISU, 1 autofreză SDN, 1 autospecială IPJ";
+    return p;
+  }
+  if (p.id === "mark-case-inzapezite-1" && !p.affectedPersons && p.personnel === "5 persoane vârstnice monitorizate") {
+    p.affectedPersons = "5 persoane vârstnice monitorizate";
+    p.affectedAssets = "3 gospodării înzăpezite";
+    p.personnel = "2 lucrători SVSU Vlădeni";
+    return p;
+  }
+  if (!p.affectedPersons && p.personnel && CIVIL_PERSON_RE.test(p.personnel) && !FORCE_PERSON_RE.test(p.personnel)) {
+    p.affectedPersons = p.personnel;
+    p.personnel = "";
+  }
+  if (!p.affectedAssets && p.vehicles && CIVIL_ASSET_RE.test(p.vehicles) && !FORCE_VEHICLE_RE.test(p.vehicles)) {
+    p.affectedAssets = p.vehicles;
+    p.vehicles = "";
+  }
+  return p;
+}
+
+function normalizeEventFeatures(ev) {
+  if (!ev?.features?.features) return ev;
+  for (const f of ev.features.features) {
+    if (f?.properties) normalizeFeatureProperties(f.properties);
+  }
+  return ev;
+}
+
+function formatMarkerDetails(p) {
+  if (!p) return "";
+  if (FORCE_KINDS.includes(p.kind)) {
+    return [
+      p.source || DEFAULT_AGENCY[p.kind],
+      p.personnel ? `Forțe: ${p.personnel}` : "",
+      p.vehicles ? `Mijloace: ${p.vehicles}` : "",
+    ].filter(Boolean).join(" · ");
+  }
+  const meta = getAffectedMeta(p.kind);
+  return [
+    p.affectedPersons ? `${meta.shortPersonsLabel}: ${p.affectedPersons}` : "",
+    p.affectedAssets ? `${meta.shortAssetsLabel}: ${p.affectedAssets}` : "",
+    p.source ? `Intervenție: ${p.source}` : "",
+    p.personnel ? `Forțe: ${p.personnel}` : "",
+    p.vehicles ? `Mijloace: ${p.vehicles}` : "",
+  ].filter(Boolean).join(" · ");
+}
+
 export const STATUSES = {
   confirmed: "Confirmat",
   reported: "Raportat",
@@ -182,7 +377,7 @@ export function initOperations(ctx) {
 
   let active = null, dirty = false, exported = false, mode = null, points = [], startSnap = null, roadPool = [];
   let pending = null, editingId = null, beforePresentation = null, previousOverlays = null;
-  let archiveError = "", notice = "", resizeFrame = 0, archiveFilter = "", summaryCollapsed = false, hideResolvedInPresentation = true;
+  let archiveError = "", notice = "", resizeFrame = 0, archiveFilter = "", summaryCollapsed = false, messagesCollapsed = false, hideResolvedInPresentation = true;
   let standaloneFocus = { areas: [], places: [], isolate: true };
   let restoring = false;
 
@@ -201,6 +396,7 @@ export function initOperations(ctx) {
         editingId,
         dirty,
         summaryCollapsed,
+        messagesCollapsed,
         hideResolvedInPresentation,
       }));
     } catch { /* ignore storage quota errors */ }
@@ -227,6 +423,7 @@ export function initOperations(ctx) {
       if (!raw) return;
       const saved = JSON.parse(raw);
       if (typeof saved?.summaryCollapsed === "boolean") summaryCollapsed = saved.summaryCollapsed;
+      if (typeof saved?.messagesCollapsed === "boolean") messagesCollapsed = saved.messagesCollapsed;
       if (typeof saved?.hideResolvedInPresentation === "boolean") hideResolvedInPresentation = saved.hideResolvedInPresentation;
       if (saved?.standaloneFocus && typeof saved.standaloneFocus === "object") {
         standaloneFocus = {
@@ -236,13 +433,14 @@ export function initOperations(ctx) {
         };
       }
       if (saved?.active && typeof saved.active === "object") {
+        const fromDb = !saved.dirty && saved.active.id ? db.load(saved.active.id) : null;
         try {
-          active = sanitizeEvent(saved.active);
+          active = fromDb && fromDb.updatedAt > (saved.active.updatedAt || "") ? fromDb : sanitizeEvent(saved.active);
         } catch {
-          const fromDb = saved.active.id ? db.load(saved.active.id) : null;
           active = fromDb || saved.active;
         }
         if (active) {
+          normalizeEventFeatures(active);
           active.places = Array.isArray(active.places) ? active.places : [];
           active.areas = Array.isArray(active.areas) ? active.areas : [];
           active.isolateArea = active.isolateArea ?? false;
@@ -250,6 +448,7 @@ export function initOperations(ctx) {
         }
       }
       if (saved?.pending && typeof saved.pending === "object" && saved.pending.properties) {
+        normalizeFeatureProperties(saved.pending.properties);
         pending = saved.pending;
         editingId = saved.editingId || null;
       }
@@ -302,9 +501,9 @@ export function initOperations(ctx) {
       hideHoverPop();
       return;
     }
-    const p = feature.properties || {};
+    const p = normalizeFeatureProperties({ ...(feature.properties || {}) });
     const isForce = FORCE_KINDS.includes(p.kind);
-    const hasForcesInfo = isForce || Boolean(p.personnel || p.vehicles || p.source);
+    const meta = getAffectedMeta(p.kind);
     const kmTxt = p.kmFrom != null ? `km ${p.kmFrom}${p.kmTo != null ? "–" + p.kmTo : ""}` : "";
     const lenTxt = p.lengthKm ? `${p.lengthKm} km` : "";
     const roadLine = [p.road, kmTxt, lenTxt ? `(${lenTxt})` : ""].filter(Boolean).join(" · ");
@@ -312,11 +511,20 @@ export function initOperations(ctx) {
     const dotKind = p.status === "resolved" ? "resolved" : p.kind;
 
     const rows = [];
-    if (hasForcesInfo) {
+    if (isForce) {
       const agency = p.source || DEFAULT_AGENCY[p.kind] || "—";
-      rows.push(["Instituție", agency]);
-      if (isForce || p.personnel) rows.push(["Forțe (oameni)", p.personnel || "Nespecificat"]);
-      if (isForce || p.vehicles) rows.push(["Mijloace (mașini)", p.vehicles || "Nespecificat"]);
+      rows.push(["Structură / Instituție", agency]);
+      rows.push(["Forțe (efective)", p.personnel || "Nespecificat"]);
+      rows.push(["Mijloace (tehnică)", p.vehicles || "Nespecificat"]);
+    } else {
+      if (p.affectedPersons || p.affectedAssets) {
+        rows.push(["Categorie situație", meta.categoryBadge]);
+      }
+      if (p.affectedPersons) rows.push([meta.personsLabel, p.affectedPersons]);
+      if (p.affectedAssets) rows.push([meta.assetsLabel, p.affectedAssets]);
+      if (p.source) rows.push(["Structuri intervenție", p.source]);
+      if (p.personnel) rows.push(["Forțe (ISU/IPJ/IJJ…)", p.personnel]);
+      if (p.vehicles) rows.push(["Mijloace intervenție", p.vehicles]);
     }
     if (roadLine && roadLine !== title) rows.push(["Sector drum", roadLine]);
     if (p.notes) rows.push(["Detalii / Măsuri", p.notes]);
@@ -1215,15 +1423,18 @@ export function initOperations(ctx) {
       ...(active.areas.length ? [`UAT: ${active.areas.join(", ")}`] : []),
       ...((active.places || []).length ? [`Localități: ${active.places.join(", ")}`] : []),
     ].join(" · ") || "Județul Botoșani";
+    const hasNotes = Boolean(active.notes && String(active.notes).trim());
+    const hasAlert = Boolean(active.alert && Object.values(active.alert).some(Boolean));
 
     presentation.innerHTML = `
-      <header class="ops-slide-head">
+      <header class="ops-slide-head${messagesCollapsed ? " is-messages-collapsed" : ""}">
         <div>
           <span class="ops-slide-eyebrow">ȘEDINȚĂ CJSU · ${esc(TYPES[active.type] || active.type)} · ${esc(areaText)}</span>
           <h1>${esc(active.title)}</h1>
-          ${active.notes ? `<p>${esc(active.notes)}</p>` : ""}
+          ${hasNotes && !messagesCollapsed ? `<p class="ops-slide-notes">${esc(active.notes)}</p>` : ""}
         </div>
         <div class="ops-slide-controls">
+          <button class="btn" type="button" data-action="pres-toggle-messages" aria-pressed="${!messagesCollapsed}" title="${messagesCollapsed ? "Afișează blocul de mesaje și alerta pe ecran" : "Colapsează blocul de mesaje și alerta pentru a te concentra pe hartă"}">${messagesCollapsed ? "▼ Arată mesajele" : "▲ Ascunde mesajele"}</button>
           <button class="btn" type="button" data-action="pres-toggle-summary" aria-pressed="${!summaryCollapsed}">${summaryCollapsed ? "▶ Arată banda stângă" : "◀ Ascunde banda stângă"}</button>
           <button class="btn" type="button" data-action="pres-toggle-resolved" aria-pressed="${!hideResolvedInPresentation}" title="Alege dacă situațiile rezolvate dispar automat din prezentare sau apar marcate ca rezolvate">${hideResolvedInPresentation ? `Arată rezolvate (${resolvedIncidentCount})` : `Ascunde rezolvate (${resolvedIncidentCount})`}</button>
           <button class="btn" type="button" data-action="pres-fit">Încadrează</button>
@@ -1232,12 +1443,7 @@ export function initOperations(ctx) {
           <button class="btn" type="button" data-action="pres-theme">${state.theme === "noapte" ? "Zi" : "Noapte"}</button>
           <button class="btn primary" type="button" data-action="exit">Ieși din prezentare</button>
         </div>
-        ${Object.values(active.alert).some(Boolean) ? `
-          <div class="ops-alert" data-code="${esc(active.alert.code)}" tabindex="0" role="note">
-            <b>${esc(ALERTS[active.alert.code] || active.alert.code)}</b> ${esc(active.alert.text)}
-            ${active.alert.source ? ` · ${esc(active.alert.source)}` : ""}
-            ${active.alert.validFrom || active.alert.validTo ? ` · ${dateLabel(active.alert.validFrom)} – ${dateLabel(active.alert.validTo)}` : ""}
-          </div>` : ""}
+        ${hasAlert && !messagesCollapsed ? `<p class="ops-alert" data-code="${esc(active.alert.code)}" tabindex="0" role="note"><b>${esc(ALERTS[active.alert.code] || active.alert.code)}</b> ${esc(active.alert.text)}${active.alert.source ? ` · ${esc(active.alert.source)}` : ""}${active.alert.validFrom || active.alert.validTo ? ` · ${dateLabel(active.alert.validFrom)} – ${dateLabel(active.alert.validTo)}` : ""}</p>` : ""}
       </header>
 
       <div class="ops-slide-body">
@@ -1316,9 +1522,33 @@ export function initOperations(ctx) {
       </footer>`;
   }
 
+  function applyMetaInput(input) {
+    if (!active || !input?.dataset) return false;
+    if (input.dataset.field) {
+      active[input.dataset.field] = input.value;
+      changed();
+      return true;
+    }
+    if (input.dataset.alert) {
+      const field = input.dataset.alert;
+      try {
+        active.alert[field] = field === "validFrom" || field === "validTo" ? isoTime(input.value) : input.value;
+        input.setCustomValidity("");
+      } catch {
+        input.setCustomValidity("Alege o dată și oră validă în ora României.");
+        return true;
+      }
+      changed();
+      if (field === "code") sync(true);
+      return true;
+    }
+    return false;
+  }
+
   function present() {
     if (pending || mode) return message("Finalizează marcajul sau selecția înainte de prezentare.");
     if (!active) return;
+    messagesCollapsed = false;
     beforePresentation = { ...currentView(), padding: map.getPadding() };
     previousOverlays = state.overlays;
     state.overlays = { sel: FC(), analysis: FC(), measure: FC(), pin: FC() };
@@ -1343,16 +1573,7 @@ export function initOperations(ctx) {
       return;
     }
     if (!active) return;
-    if (input.dataset.field) { active[input.dataset.field] = input.value; changed(); }
-    if (input.dataset.alert) {
-      const field = input.dataset.alert;
-      try {
-        active.alert[field] = field === "validFrom" || field === "validTo" ? isoTime(input.value) : input.value;
-        input.setCustomValidity("");
-      } catch { input.setCustomValidity("Alege o dată și oră validă în ora României."); return; }
-      changed();
-      if (field === "code") sync(true);
-    }
+    applyMetaInput(input);
     // When typing a road name inside #ops-marker, refresh the road info & localities dropdowns if it matches a known road
     if (pending && input.name === "road") {
       pending.properties.road = input.value;
@@ -1371,6 +1592,7 @@ export function initOperations(ctx) {
 
   panel.onchange = async (event) => {
     const target = event.target;
+    if (applyMetaInput(target)) return;
     if (target.id === "ops-archive") {
       if (!canReplaceDraft()) { render(); return; }
       const val = target.value;
@@ -1692,7 +1914,12 @@ export function initOperations(ctx) {
     const act = btn.dataset.action;
     if (act === "exit") exitPresentation();
     else if (act === "pres-fit") fit();
-    else if (act === "pres-toggle-summary") {
+    else if (act === "pres-toggle-messages") {
+      messagesCollapsed = !messagesCollapsed;
+      persistSession();
+      renderPresentationOverlay();
+      fit();
+    } else if (act === "pres-toggle-summary") {
       summaryCollapsed = !summaryCollapsed;
       persistSession();
       renderPresentationOverlay();

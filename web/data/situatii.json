@@ -1,14 +1,14 @@
 {
   "format": "harta-botosani-events",
   "version": 1,
-  "exportedAt": "2026-10-16T10:00:00.000Z",
+  "exportedAt": "2026-10-17T18:45:00.000Z",
   "events": [
     {
       "id": "cjsu-exemplu-iarna-dj29",
       "title": "Viscol și înzăpezire · Situație CJSU (DJ29 km 3–6)",
       "type": "snow",
       "createdAt": "2026-10-16T08:00:00.000Z",
-      "updatedAt": "2026-10-16T12:15:00.000Z",
+      "updatedAt": "2026-10-17T18:45:00.000Z",
       "alert": {
         "code": "orange",
         "source": "ANM / IGSU RO-Alert",
@@ -387,9 +387,11 @@
               "road": "DJ29",
               "kmFrom": 4.5,
               "kmTo": null,
-              "source": "ISU / IPJ Botoșani",
-              "personnel": "7 persoane (5 adulți, 2 copii)",
-              "vehicles": "3 autoturisme",
+              "affectedPersons": "7 persoane (5 adulți, 2 copii)",
+              "affectedAssets": "3 autoturisme",
+              "source": "ISU Botoșani, IPJ Botoșani, SDN Botoșani",
+              "personnel": "3 subofițeri ISU, 2 agenți IPJ, 1 operator SDN",
+              "vehicles": "1 șenilată ISU, 1 autofreză SDN, 1 autospecială IPJ",
               "observedAt": "2026-10-16T09:35:00.000Z",
               "notes": "Se intervine cu șenilata ISU și autofreza SDN pentru degajare."
             }
@@ -411,8 +413,10 @@
               "road": "",
               "kmFrom": null,
               "kmTo": null,
+              "affectedPersons": "5 persoane vârstnice monitorizate",
+              "affectedAssets": "3 gospodării înzăpezite",
               "source": "CLSU Vlădeni / SVSU",
-              "personnel": "5 persoane vârstnice monitorizate",
+              "personnel": "2 lucrători SVSU Vlădeni",
               "vehicles": "1 buldoexcavator SVSU",
               "observedAt": "2026-10-16T09:40:00.000Z",
               "notes": "Căi de acces troienite; SVSU Vlădeni acționează pentru deblocare."

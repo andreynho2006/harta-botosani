@@ -76,6 +76,8 @@ function feature(value, budget) {
   const kmFrom = kilometer(p.kmFrom), kmTo = kilometer(p.kmTo);
   if (kmFrom !== null && kmTo !== null && kmTo < kmFrom) throw new Error('Road kilometers are reversed.');
   const lengthKm = kilometer(p.lengthKm);
+  const affectedPersons = string(p.affectedPersons, 300);
+  const affectedAssets = string(p.affectedAssets, 400);
   const personnel = string(p.personnel, 300);
   const vehicles = string(p.vehicles, 400);
   const props = {
@@ -84,6 +86,8 @@ function feature(value, budget) {
     observedAt: p.observedAt ? timestamp(p.observedAt) : '', notes: string(p.notes, 5000),
   };
   if (lengthKm !== null) props.lengthKm = lengthKm;
+  if (affectedPersons) props.affectedPersons = affectedPersons;
+  if (affectedAssets) props.affectedAssets = affectedAssets;
   if (personnel) props.personnel = personnel;
   if (vehicles) props.vehicles = vehicles;
   return {
