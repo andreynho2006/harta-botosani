@@ -179,6 +179,9 @@ function createSubunitsEditor(ctx) {
   const commit = (next, msg) => {
     list = next;
     ctx.onSubunits?.(list, { draft: true });
+    try {
+      ctx.cloudDb?.saveSubunits?.({ format: "harta-botosani-subunitati", version: 1, subunits: list });
+    } catch (e) { console.warn(e); }
     if (msg) ctx.toast(msg);
     draw();
   };

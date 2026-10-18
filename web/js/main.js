@@ -8,7 +8,11 @@ import { renderAdmin } from "./admin.js";
 import { formatRestriction } from "./restrictions.js";
 import { normalizeSubunitsDoc, mergeSubunitsIntoPois, SUBUNITS_DRAFT_KEY } from "./subunits.js";
 import { openCommuneMap, isCommuneMapOpen } from "./commune.js";
-import { initOperations } from "./operations.js?v=20261018-mobile-cjsu-2";
+import { initOperations } from "./operations.js?v=20261018-cloud-sync";
+import {
+  saveSubunitsCloud, subscribeSubunits,
+  saveSituationCloud, deleteSituationCloud, subscribeSituations, onCloudStatus,
+} from "./cloud-db.js";
 import {
   distance, bearing, direction, circle, fmtDistance, fmtLatLon, fmtStereo, fmtDMS,
   parseCoordinates, makeUatLookup,
@@ -147,6 +151,14 @@ function pickPoint(callback) {
 function flyToPoint(ll) {
   map?.flyTo({ center: ll, zoom: Math.max(map.getZoom(), 14) });
 }
+const cloudDb = {
+  saveSituation: typeof saveSituationCloud === "function" ? saveSituationCloud : null,
+  deleteSituation: typeof deleteSituationCloud === "function" ? deleteSituationCloud : null,
+  saveSubunits: typeof saveSubunitsCloud === "function" ? saveSubunitsCloud : null,
+  subscribeSubunits: typeof subscribeSubunits === "function" ? subscribeSubunits : null,
+  subscribeSituations: typeof subscribeSituations === "function" ? subscribeSituations : null,
+  onStatus: typeof onCloudStatus === "function" ? onCloudStatus : null,
+};
 
 async function init() {
   session = await ensureLogin();
@@ -188,15 +200,34 @@ async function init() {
   renderAnalysis();
   initSheet();
   initMap();
+  const cloud = typeof cloudDb !== "undefined" ? cloudDb : null;
+
   operations = initOperations({ map, state, uatAt, toast, selectTab, setSheet, applyStyle, renderLayerPanel,
     applyPreset: typeof applyPreset === "function" ? applyPreset : null,
+    cloudDb: cloud,
     stopOtherTools: () => { setMode(null); closeInfo(); closeContextMenu(); } });
   initSearch();
   initUI();
   if (session.role === "admin") {
     renderAdmin($("#tab-admin"), { session, state, uatAt, onHydrants: replaceHydrants, toast, copy,
-      onSubunits: replaceSubunits, pickPoint, flyToPoint });
+      onSubunits: replaceSubunits, pickPoint, flyToPoint, cloudDb: cloud });
   }
+
+  // Sincronizare în timp real din Firebase Firestore (dacă este activ în browser)
+  try {
+    if (cloud?.subscribeSubunits) {
+      cloud.subscribeSubunits((cloudDoc) => {
+        if (Array.isArray(cloudDoc?.subunits) && cloudDoc.subunits.length) {
+          replaceSubunits(cloudDoc.subunits, { draft: false });
+        }
+      });
+    }
+    if (cloud?.subscribeSituations) {
+      cloud.subscribeSituations((cloudEvents) => {
+        operations?.syncFromCloud?.(cloudEvents);
+      });
+    }
+  } catch { /* context de test fără cloud */ }
 }
 
 // ------------------------------------------------------------------ telefon / ecran mic

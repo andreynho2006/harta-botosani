@@ -364,11 +364,22 @@ function buildEndpointsFC(features = []) {
 }
 
 export function initOperations(ctx) {
-  const { map, state, uatAt, toast, selectTab, setSheet, applyStyle, renderLayerPanel, stopOtherTools, applyPreset } = ctx;
+  const { map, state, uatAt, toast, selectTab, setSheet, applyStyle, renderLayerPanel, stopOtherTools, applyPreset, cloudDb } = ctx;
   const panel = document.querySelector("#tab-situatii");
   const storage = ctx.storage ?? globalThis.localStorage;
   const SESSION_KEY = "hb.ops.session.v1";
   const db = new EventStore(storage);
+  let cloudStatus = "offline";
+  if (cloudDb?.onStatus) {
+    cloudDb.onStatus((s) => {
+      cloudStatus = s;
+      const el = panel?.querySelector("#ops-cloud-pill");
+      if (el) {
+        el.className = `ops-cloud-pill is-${s}`;
+        el.textContent = s === "connected" ? "🟢 Cloud sincronizat" : s === "connecting" ? "🟡 Conectare Cloud…" : "⚪ Mod local";
+      }
+    });
+  }
 
   try { cleanupLegacyArchive(storage); }
   catch (e) { console.warn("Nu am putut curăța arhiva din 16.10.2026; datele originale sunt păstrate.", e); }
@@ -1125,7 +1136,10 @@ export function initOperations(ctx) {
       ${localitiesDatalistHTML()}
       ${uatsDatalistHTML()}
       ${agenciesDatalistHTML()}
-      <p class="ops-notice" role="status">${esc(notice)}</p>
+      <div class="ops-top-bar" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+        <span id="ops-cloud-pill" class="ops-cloud-pill ${cloudStatus === "connected" ? "is-connected" : ""}" title="Sincronizare în timp real prin Firebase Firestore">${cloudStatus === "connected" ? "🟢 Cloud sincronizat" : cloudStatus === "connecting" ? "🟡 Conectare Cloud…" : "⚪ Mod local"}</span>
+        <p class="ops-notice" role="status" style="margin:0">${esc(notice)}</p>
+      </div>
 
       ${!active ? `
       <section class="ops-card ops-intro">
@@ -1348,7 +1362,8 @@ export function initOperations(ctx) {
       if (pending || mode) return message("Finalizează adăugarea marcajului curent înainte de a salva situația.");
       active = db.save(snapshot()); dirty = false; exported = false;
       persistSession();
-      notice = "Situația a fost salvată în baza de date a aplicației.";
+      try { cloudDb?.saveSituation?.(active); } catch (e) { console.warn(e); }
+      notice = "Situația a fost salvată în baza de date (și sincronizată în Cloud).";
       render(); toast(notice);
     } catch (error) {
       console.warn(error);
@@ -1364,13 +1379,39 @@ export function initOperations(ctx) {
     const wasResolved = feat.properties.status === "resolved";
     feat.properties.status = wasResolved ? "confirmed" : "resolved";
     feat.properties.observedAt = new Date().toISOString();
-    try { active = db.save(snapshot()); dirty = false; } catch { changed(); }
+    try {
+      active = db.save(snapshot()); dirty = false;
+      try { cloudDb?.saveSituation?.(active); } catch (e) { console.warn(e); }
+    } catch { changed(); }
     sync();
     render();
     if (document.body.classList.contains("presenting")) renderPresentationOverlay();
     toast(wasResolved
       ? `Situația „${feat.properties.title || KINDS[feat.properties.kind]}” a fost reactivată.`
       : `Situația „${feat.properties.title || KINDS[feat.properties.kind]}” a fost marcată ca REZOLVATĂ.`);
+  }
+
+  function syncFromCloud(cloudEvents = []) {
+    if (!Array.isArray(cloudEvents) || !cloudEvents.length) return;
+    try {
+      db.importArchive({ format: "harta-botosani-events", version: 1, events: cloudEvents });
+    } catch (e) {
+      console.warn("Nu s-au putut sincroniza evenimentele din cloud:", e);
+      return;
+    }
+    if (active) {
+      const remote = cloudEvents.find(e => e.id === active.id);
+      if (remote && remote.updatedAt && remote.updatedAt !== active.updatedAt) {
+        active = structuredClone(remote);
+        persistSession();
+        sync();
+        render();
+        if (document.body.classList.contains("presenting")) renderPresentationOverlay();
+        toast(`Situația „${active.title}” a fost actualizată în direct din Cloud.`);
+        return;
+      }
+    }
+    render();
   }
 
   function setActive(event) {
@@ -1834,9 +1875,11 @@ export function initOperations(ctx) {
       return;
     }
     if (button.dataset.deleteId) {
-      db.remove(button.dataset.deleteId);
-      if (active?.id === button.dataset.deleteId) { active = null; pending = null; stopDrawing(); sync(true); }
-      render(); toast("Situația a fost ștearsă din arhiva locală.");
+      const delId = button.dataset.deleteId;
+      db.remove(delId);
+      try { cloudDb?.deleteSituation?.(delId); } catch (e) { console.warn(e); }
+      if (active?.id === delId) { active = null; pending = null; stopDrawing(); sync(true); }
+      render(); toast("Situația a fost ștearsă (și din Cloud).");
       return;
     }
 
@@ -2014,5 +2057,5 @@ export function initOperations(ctx) {
   restoreSession();
   sync(true);
   render();
-  return { handleMapClick, handleKey, cancelDrawing, isDrawing: () => !!mode, sync, openRoadCreator };
+  return { handleMapClick, handleKey, cancelDrawing, isDrawing: () => !!mode, sync, openRoadCreator, syncFromCloud };
 }
