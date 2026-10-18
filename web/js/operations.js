@@ -1,4 +1,4 @@
-import { EventStore, createEvent, sanitizeEvent } from "./event-store.js";
+import { EventStore, createEvent, sanitizeEvent, cleanupLegacyArchive } from "./event-store.js";
 import {
   snapToRoad, buildRoadSegment, findRoadByRef, sliceRoadByKm, sliceRoadByPlaces,
   projectPointOnRoad, roadNetworkToFeatures, roadsListOf, lineLengthKm,
@@ -369,6 +369,9 @@ export function initOperations(ctx) {
   const storage = ctx.storage ?? globalThis.localStorage;
   const SESSION_KEY = "hb.ops.session.v1";
   const db = new EventStore(storage);
+
+  try { cleanupLegacyArchive(storage); }
+  catch (e) { console.warn("Nu am putut curăța arhiva din 16.10.2026; datele originale sunt păstrate.", e); }
 
   // Merge initial seed events from data/situatii.json if available
   if (state.data.initialEvents?.events?.length) {

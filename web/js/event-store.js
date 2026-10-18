@@ -155,6 +155,62 @@ function parseArchive(input) {
   return events;
 }
 
+export const LEGACY_CLEANUP_KEY = 'hb.events.cleanup.2026-10-16.v1';
+export const LEGACY_ARCHIVE_BACKUP_KEY = 'hb.events.backup.2026-10-16.v1';
+export const LEGACY_SESSION_BACKUP_KEY = 'hb.ops.session.backup.2026-10-16.v1';
+const OPS_SESSION_KEY = 'hb.ops.session.v1';
+
+/** One-time removal of entries displayed as October 16, with recoverable backups. */
+export function cleanupLegacyArchive(storage = globalThis.localStorage) {
+  if (storage.getItem(LEGACY_CLEANUP_KEY) === '1') return { removed: [], alreadyApplied: true };
+  const raw = storage.getItem(EVENT_STORAGE_KEY);
+  // Validate first, then filter the original objects to preserve all retained data.
+  const events = raw === null ? [] : parseArchive(raw);
+  const formatter = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Europe/Bucharest', year: 'numeric', month: '2-digit', day: '2-digit',
+  });
+  const removed = events.filter(event => {
+    const parts = Object.fromEntries(formatter.formatToParts(new Date(event.updatedAt))
+      .filter(part => part.type !== 'literal').map(part => [part.type, part.value]));
+    return `${parts.year}-${parts.month}-${parts.day}` === '2026-10-16';
+  }).map(event => event.id);
+  if (!removed.length) {
+    storage.setItem(LEGACY_CLEANUP_KEY, '1');
+    return { removed, alreadyApplied: false };
+  }
+  const removedIds = new Set(removed);
+  const sessionRaw = storage.getItem(OPS_SESSION_KEY);
+  const session = sessionRaw === null ? null : object(JSON.parse(sessionRaw), 'operational session');
+  const removeSession = removedIds.has(session?.active?.id);
+  const archive = JSON.parse(raw);
+  const next = JSON.stringify({ ...archive, events: archive.events.filter(event => !removedIds.has(event.id)) });
+  const backup = (key, value) => {
+    const previous = storage.getItem(key);
+    // Never overwrite an earlier recovery snapshot, including after a failed run.
+    if (previous !== null && previous !== value) throw new Error('A different cleanup backup already exists; current data was preserved.');
+    if (previous === null) storage.setItem(key, value);
+  };
+  backup(LEGACY_ARCHIVE_BACKUP_KEY, raw);
+  if (removeSession) backup(LEGACY_SESSION_BACKUP_KEY, sessionRaw);
+  let sessionRemoved = false, archiveWritten = false;
+  try {
+    if (removeSession) {
+      storage.removeItem(OPS_SESSION_KEY);
+      sessionRemoved = true;
+    }
+    storage.setItem(EVENT_STORAGE_KEY, next);
+    archiveWritten = true;
+    storage.setItem(LEGACY_CLEANUP_KEY, '1');
+  } catch (error) {
+    // localStorage has no multi-key transactions. Restore originals when possible;
+    // the exact backups remain available even if storage also rejects rollback.
+    if (archiveWritten) { try { storage.setItem(EVENT_STORAGE_KEY, raw); } catch { /* Original remains in backup. */ } }
+    if (sessionRemoved) { try { storage.setItem(OPS_SESSION_KEY, sessionRaw); } catch { /* Original remains in backup. */ } }
+    throw error;
+  }
+  return { removed, alreadyApplied: false, backupKey: LEGACY_ARCHIVE_BACKUP_KEY };
+}
+
 export class EventStore {
   constructor(storage = globalThis.localStorage) { this.storage = storage; }
 
