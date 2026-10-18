@@ -1,4 +1,4 @@
-import { EventStore, createEvent, sanitizeEvent, cleanupLegacyArchive } from "./event-store.js";
+import { EventStore, createEvent, sanitizeEvent, cleanupLegacyArchive } from "./event-store.js?v=20261018-archive-cleanup";
 import {
   snapToRoad, buildRoadSegment, findRoadByRef, sliceRoadByKm, sliceRoadByPlaces,
   projectPointOnRoad, roadNetworkToFeatures, roadsListOf, lineLengthKm,
