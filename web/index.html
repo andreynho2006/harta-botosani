@@ -9,8 +9,8 @@
   <title>Harta Botoșani</title>
   <meta name="robots" content="noindex, nofollow">
   <link rel="stylesheet" href="vendor/maplibre-gl.css">
-  <link rel="stylesheet" href="css/app.css?v=20261016-labels">
-  <link rel="stylesheet" href="css/operations.css?v=20261017-alert">
+  <link rel="stylesheet" href="css/app.css?v=20261018-mobile-cjsu">
+  <link rel="stylesheet" href="css/operations.css?v=20261018-mobile-cjsu">
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='1' y='6' width='30' height='20' rx='4' fill='%23c8102e'/%3E%3Ctext x='16' y='21.5' font-family='Arial' font-weight='700' font-size='13' fill='white' text-anchor='middle'%3EBT%3C/text%3E%3C/svg%3E">
   <script>
     try {
@@ -21,7 +21,7 @@
   </script>
   <script src="vendor/proj4.js"></script>
   <script src="vendor/maplibre-gl.js"></script>
-  <script type="module" src="js/main.js?v=20261018-archive-cleanup"></script>
+  <script type="module" src="js/main.js?v=20261018-mobile-cjsu"></script>
 </head>
 <body>
 <div class="login" id="login" hidden>
@@ -41,7 +41,7 @@
   </div>
 </div>
 <div class="app">
-  <aside class="side">
+  <aside class="side" id="side-panel">
     <header class="brand">
       <div class="plate" aria-hidden="true">BT</div>
       <div>
@@ -105,7 +105,7 @@
 
     <div class="topbar" id="topbar"></div>
 
-    <div class="toolbar">
+    <div class="toolbar" id="map-tools">
       <div class="tb">
         <button id="t-analiza" title="Analizează un punct (A)" aria-label="Analizează un punct">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="2.5" fill="currentColor"/><path d="M12 1.5v3M12 19.5v3M1.5 12h3M19.5 12h3"/></svg>
@@ -135,6 +135,8 @@
         </button>
       </div>
     </div>
+
+    <button class="mobile-map-toggle" id="mobile-map-toggle" type="button" aria-label="Ascunde panourile" title="Ascunde panourile" aria-controls="side-panel topbar map-tools" aria-expanded="true"><span aria-hidden="true">⌄</span></button>
 
     <div class="modebar" id="modebar" hidden></div>
     <article class="info" id="info" hidden aria-live="polite"></article>

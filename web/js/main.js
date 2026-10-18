@@ -7,7 +7,7 @@ import { ensureLogin, decryptJSON, logout } from "./auth.js";
 import { renderAdmin } from "./admin.js";
 import { formatRestriction } from "./restrictions.js";
 import { openCommuneMap, isCommuneMapOpen } from "./commune.js";
-import { initOperations } from "./operations.js?v=20261018-archive-cleanup";
+import { initOperations } from "./operations.js?v=20261018-mobile-cjsu";
 import {
   distance, bearing, direction, circle, fmtDistance, fmtLatLon, fmtStereo, fmtDMS,
   parseCoordinates, makeUatLookup,
@@ -170,10 +170,23 @@ async function init() {
 
 // ------------------------------------------------------------------ telefon / ecran mic
 
-const MOBILE_MQ = matchMedia("(max-width: 760px), (max-height: 520px) and (pointer: coarse)");
+const MOBILE_MQ = matchMedia("(max-width: 760px), (max-height: 520px)");
 const isMobile = () => MOBILE_MQ.matches;
 let sheetDragged = false;
 let suppressClickUntil = 0;
+
+function setMobileMapOnly(hidden) {
+  document.body.classList.toggle("mobile-map-only", hidden);
+  const button = $("#mobile-map-toggle");
+  button.setAttribute("aria-expanded", String(!hidden));
+  button.setAttribute("aria-label", hidden ? "Arată panourile" : "Ascunde panourile");
+  button.title = hidden ? "Arată panourile" : "Ascunde panourile";
+  if (hidden) {
+    $("#results").hidden = true;
+    closeInfo();
+    closeContextMenu();
+  }
+}
 
 function applyLayout() {
   const search = $(".search");
@@ -200,6 +213,7 @@ function sheetPx(name) {
 
 function setSheet(name) {
   if (!isMobile()) return;
+  if (name !== "peek") setMobileMapOnly(false);
   $(".side").dataset.sheet = name;
   if (name !== "peek") $("#results").hidden = true;
 }
@@ -208,10 +222,11 @@ function setSheet(name) {
 function viewPadding() {
   if (!isMobile()) return { top: 80, bottom: 60, left: 60, right: $("#info").hidden ? 60 : 400 };
   const info = $("#info");
-  const top = Math.round($("#topbar").getBoundingClientRect().bottom + 12);
-  const covered = Math.max(sheetPx($(".side").dataset.sheet || "peek"), info.hidden ? 0 : info.offsetHeight);
+  const chromeHidden = document.body.classList.contains("mobile-map-only");
+  const top = chromeHidden ? 16 : Math.round($("#topbar").getBoundingClientRect().bottom + 12);
+  const covered = Math.max(chromeHidden ? 0 : sheetPx($(".side").dataset.sheet || "peek"), info.hidden ? 0 : info.offsetHeight);
   const bottom = Math.min(covered + 16, window.innerHeight - top - 120);
-  return { top, bottom: Math.max(bottom, 16), left: 16, right: 64 };
+  return { top, bottom: Math.max(bottom, 60), left: 16, right: chromeHidden ? 16 : 64 };
 }
 
 function initSheet() {
@@ -1134,6 +1149,7 @@ function initSearch() {
 // ------------------------------------------------------------------ interfață generală
 
 function selectTab(name) {
+  if (isMobile()) setMobileMapOnly(false);
   if (isMobile() && $(".side").dataset.sheet === "peek") setSheet("half");
   for (const b of document.querySelectorAll(".tabs button")) b.setAttribute("aria-selected", b.dataset.tab === name);
   for (const t of ["straturi", "situatii", "analiza", "ajutor", "admin"]) $("#tab-" + t).hidden = t !== name;
@@ -1193,6 +1209,9 @@ function exportImage() {
 }
 
 function initUI() {
+  $("#mobile-map-toggle").addEventListener("click", () => {
+    setMobileMapOnly(!document.body.classList.contains("mobile-map-only"));
+  });
   $("#t-tema-l").textContent = state.theme === "noapte" ? "Zi" : "Noapte";
   $("#t-harta").setAttribute("aria-pressed", state.basemap === "harta");
   $("#t-satelit").setAttribute("aria-pressed", state.basemap === "satelit");
@@ -1245,7 +1264,7 @@ function initUI() {
     }
     if (typing || e.ctrlKey || e.metaKey || e.altKey) return;
     const k = e.key.toLowerCase();
-    if (e.key === "/") { e.preventDefault(); $("#q").focus(); $("#q").select(); }
+    if (e.key === "/") { e.preventDefault(); if (isMobile()) setMobileMapOnly(false); $("#q").focus(); $("#q").select(); }
     else if (k === "m") (state.mode === "measure" ? finishMeasure() : setMode("measure"));
     else if (k === "a") setMode(state.mode === "pick" ? null : "pick");
     else if (k === "s") setBasemap(state.basemap === "harta" ? "satelit" : "harta");

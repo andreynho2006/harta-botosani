@@ -380,7 +380,9 @@ export function initOperations(ctx) {
 
   let active = null, dirty = false, exported = false, mode = null, points = [], startSnap = null, roadPool = [];
   let pending = null, editingId = null, beforePresentation = null, previousOverlays = null;
-  let archiveError = "", notice = "", resizeFrame = 0, archiveFilter = "", summaryCollapsed = false, messagesCollapsed = false, hideResolvedInPresentation = true;
+  let archiveError = "", notice = "", resizeFrame = 0, archiveFilter = "", summaryCollapsed = false, messagesCollapsed = false, legendCollapsed = false, commandsCollapsed = true, hideResolvedInPresentation = true;
+  const isCompactViewport = () => window.innerWidth <= 760 || window.innerHeight <= 520;
+  let compactPresentation = isCompactViewport(), lastOpenedPanel = "messages";
   let standaloneFocus = { areas: [], places: [], isolate: true };
   let restoring = false;
 
@@ -400,6 +402,8 @@ export function initOperations(ctx) {
         dirty,
         summaryCollapsed,
         messagesCollapsed,
+        legendCollapsed,
+        commandsCollapsed,
         hideResolvedInPresentation,
       }));
     } catch { /* ignore storage quota errors */ }
@@ -427,6 +431,8 @@ export function initOperations(ctx) {
       const saved = JSON.parse(raw);
       if (typeof saved?.summaryCollapsed === "boolean") summaryCollapsed = saved.summaryCollapsed;
       if (typeof saved?.messagesCollapsed === "boolean") messagesCollapsed = saved.messagesCollapsed;
+      if (typeof saved?.legendCollapsed === "boolean") legendCollapsed = saved.legendCollapsed;
+      if (typeof saved?.commandsCollapsed === "boolean") commandsCollapsed = saved.commandsCollapsed;
       if (typeof saved?.hideResolvedInPresentation === "boolean") hideResolvedInPresentation = saved.hideResolvedInPresentation;
       if (saved?.standaloneFocus && typeof saved.standaloneFocus === "object") {
         standaloneFocus = {
@@ -734,14 +740,10 @@ export function initOperations(ctx) {
     }
     if (!Number.isFinite(minX)) return;
     const presenting = document.body.classList.contains("presenting");
-    const head = presenting ? (presentation.querySelector(".ops-slide-head")?.offsetHeight || 80) + 24 : 80;
-    const bottom = presenting ? (presentation.querySelector(".ops-slide-foot")?.offsetHeight || 70) + 24 : 100;
-    const left = presenting && !summaryCollapsed ? Math.min(360, window.innerWidth * 0.35) + 28 : 28;
-    const right = 68;
-    const height = map.getContainer().clientHeight || 600;
+    const padding = presenting ? presentationPadding() : { top: 80, bottom: 100, left: 28, right: 68 };
     map.setPadding({ top: 0, bottom: 0, left: 0, right: 0 });
     map.fitBounds([[minX, minY], [maxX, maxY]], {
-      padding: { top: Math.min(head, height * 0.4), bottom: Math.min(bottom, height * 0.3), left, right },
+      padding,
       retainPadding: false, maxZoom: 15.5, duration: 450,
     });
   }
@@ -1402,10 +1404,43 @@ export function initOperations(ctx) {
     sync(true); map?.resize(); if (beforePresentation && map) map.jumpTo(beforePresentation);
     renderFocusBar();
     selectTab("situatii");
+    panel.querySelector('[data-action="present"]')?.focus({ preventScroll: true });
+  }
+
+  function presentationPadding() {
+    const container = map.getContainer();
+    const bounds = container.getBoundingClientRect();
+    const width = bounds.width || container.clientWidth || window.innerWidth;
+    const height = bounds.height || container.clientHeight || window.innerHeight;
+    const padding = { top: 64, bottom: 64, left: 16, right: 16 };
+    for (const panel of presentation.querySelectorAll("[data-pres-panel]")) {
+      if (panel.hidden) continue;
+      const rect = panel.getBoundingClientRect();
+      if (!rect.width || !rect.height) continue;
+      let edge = panel.dataset.presEdge;
+      if (compactPresentation) edge = ["messages", "summary"].includes(panel.dataset.presPanel) ? "top" : "bottom";
+      if (edge === "top") padding.top = Math.max(padding.top, rect.bottom - bounds.top + 12);
+      if (edge === "bottom") padding.bottom = Math.max(padding.bottom, bounds.bottom - rect.top + 12);
+      if (edge === "left") padding.left = Math.max(padding.left, rect.right - bounds.left + 12);
+      if (edge === "right") padding.right = Math.max(padding.right, bounds.right - rect.left + 12);
+    }
+    // Always leave a useful map rectangle, even on a very small landscape screen.
+    for (const [a, b, size] of [["left", "right", width], ["top", "bottom", height]]) {
+      const available = Math.max(0, size - Math.min(120, size * 0.45));
+      const total = padding[a] + padding[b];
+      if (total > available) { padding[a] *= available / total; padding[b] *= available / total; }
+    }
+    return padding;
   }
 
   function renderPresentationOverlay() {
     if (!active) return;
+    const focused = presentation.contains(document.activeElement) ? { id: document.activeElement.id, data: { ...document.activeElement.dataset } } : null;
+    const scrollPositions = new Map([...presentation.querySelectorAll("[data-pres-panel]")].map(el => [el.id, el.scrollTop]));
+    presentation.dataset.compact = String(compactPresentation);
+    presentation.dataset.commandsOpen = String(!commandsCollapsed);
+    const panelToggle = (name, label, collapsed, arrow) => `<button class="ops-pres-toggle ops-pres-toggle-${name}" type="button" data-action="pres-toggle-${name}" aria-expanded="${!collapsed}" aria-controls="ops-pres-${name}" aria-label="${collapsed ? "Arată" : "Ascunde"} ${label.toLowerCase()}" title="${collapsed ? "Arată" : "Ascunde"} ${label.toLowerCase()}"><span aria-hidden="true">${arrow}</span><span class="ops-toggle-label">${label}</span></button>`;
+
     const allFeats = active.features.features || [];
     const nonForceFeats = allFeats.filter(f => !FORCE_KINDS.includes(f.properties.kind));
     const activeIncidentCount = nonForceFeats.filter(f => f.properties.status !== "resolved").length;
@@ -1430,38 +1465,32 @@ export function initOperations(ctx) {
     const hasAlert = Boolean(active.alert && Object.values(active.alert).some(Boolean));
 
     presentation.innerHTML = `
-      <header class="ops-slide-head${messagesCollapsed ? " is-messages-collapsed" : ""}">
-        <div>
+      ${panelToggle("messages", "Mesaje", messagesCollapsed, messagesCollapsed ? "▼" : "▲")}
+      ${panelToggle("summary", "Monitorizare", summaryCollapsed, summaryCollapsed ? "▶" : "◀")}
+      ${panelToggle("legend", "Legendă", legendCollapsed, legendCollapsed ? "▲" : "▼")}
+      ${panelToggle("commands", "Comenzi", commandsCollapsed, commandsCollapsed ? "▲" : "▼")}
+      <button class="ops-pres-exit" type="button" data-action="exit" aria-label="Ieși din prezentare" title="Ieși din prezentare"><span aria-hidden="true">✕</span></button>
+      <header id="ops-pres-messages" class="ops-slide-head" data-pres-panel="messages" data-pres-edge="top" ${messagesCollapsed ? "hidden" : ""} aria-label="Mesaje și avertizări">
+        <div id="ops-pres-message-text" tabindex="0" aria-label="Titlu și descriere">
           <span class="ops-slide-eyebrow">ȘEDINȚĂ CJSU · ${esc(TYPES[active.type] || active.type)} · ${esc(areaText)}</span>
           <h1>${esc(active.title)}</h1>
-          ${hasNotes && !messagesCollapsed ? `<p class="ops-slide-notes">${esc(active.notes)}</p>` : ""}
+          ${hasNotes ? `<p class="ops-slide-notes">${esc(active.notes)}</p>` : ""}
         </div>
-        <div class="ops-slide-controls">
-          <button class="btn" type="button" data-action="pres-toggle-messages" aria-pressed="${!messagesCollapsed}" title="${messagesCollapsed ? "Afișează blocul de mesaje și alerta pe ecran" : "Colapsează blocul de mesaje și alerta pentru a te concentra pe hartă"}">${messagesCollapsed ? "▼ Arată mesajele" : "▲ Ascunde mesajele"}</button>
-          <button class="btn" type="button" data-action="pres-toggle-summary" aria-pressed="${!summaryCollapsed}">${summaryCollapsed ? "▶ Arată banda stângă" : "◀ Ascunde banda stângă"}</button>
-          <button class="btn" type="button" data-action="pres-toggle-resolved" aria-pressed="${!hideResolvedInPresentation}" title="Alege dacă situațiile rezolvate dispar automat din prezentare sau apar marcate ca rezolvate">${hideResolvedInPresentation ? `Arată rezolvate (${resolvedIncidentCount})` : `Ascunde rezolvate (${resolvedIncidentCount})`}</button>
-          <button class="btn" type="button" data-action="pres-fit">Încadrează</button>
-          <button class="btn" type="button" data-action="pres-isolate">${active.isolateArea ? "Arată tot județul" : "Izolează zona"}</button>
-          <button class="btn" type="button" data-action="pres-sat">${state.basemap === "satelit" ? "Hartă" : "Satelit"}</button>
-          <button class="btn" type="button" data-action="pres-theme">${state.theme === "noapte" ? "Zi" : "Noapte"}</button>
-          <button class="btn primary" type="button" data-action="exit">Ieși din prezentare</button>
-        </div>
-        ${hasAlert && !messagesCollapsed ? `<p class="ops-alert" data-code="${esc(active.alert.code)}" tabindex="0" role="note"><b>${esc(ALERTS[active.alert.code] || active.alert.code)}</b> ${esc(active.alert.text)}${active.alert.source ? ` · ${esc(active.alert.source)}` : ""}${active.alert.validFrom || active.alert.validTo ? ` · ${dateLabel(active.alert.validFrom)} – ${dateLabel(active.alert.validTo)}` : ""}</p>` : ""}
+        ${hasAlert ? `<p id="ops-pres-alert" class="ops-alert" data-code="${esc(active.alert.code)}" tabindex="0" role="note"><b>${esc(ALERTS[active.alert.code] || active.alert.code)}</b> ${esc(active.alert.text)}${active.alert.source ? ` · ${esc(active.alert.source)}` : ""}${active.alert.validFrom || active.alert.validTo ? ` · ${dateLabel(active.alert.validFrom)} – ${dateLabel(active.alert.validTo)}` : ""}</p>` : ""}
       </header>
-
-      <div class="ops-slide-body">
-        ${summaryCollapsed ? `
-          <button type="button" class="ops-pres-reopen" data-action="pres-toggle-summary" title="Afișează panoul de monitorizare a situațiilor">
-            ▶ Monitorizare situații (${activeIncidentCount} active${resolvedIncidentCount ? ` · ${resolvedIncidentCount} rezolvate` : ""})
-          </button>
-        ` : `
-        <aside class="ops-slide-summary">
+      <nav id="ops-pres-commands" class="ops-slide-controls" data-pres-panel="commands" data-pres-edge="right" ${commandsCollapsed ? "hidden" : ""} aria-label="Comenzi prezentare">
+        <button class="btn" type="button" data-action="pres-toggle-resolved" aria-pressed="${!hideResolvedInPresentation}" title="Alege dacă situațiile rezolvate dispar automat din prezentare sau apar marcate ca rezolvate">${hideResolvedInPresentation ? `Arată rezolvate (${resolvedIncidentCount})` : `Ascunde rezolvate (${resolvedIncidentCount})`}</button>
+        <button class="btn" type="button" data-action="pres-fit">Încadrează</button>
+        <button class="btn" type="button" data-action="pres-isolate">${active.isolateArea ? "Arată tot județul" : "Izolează zona"}</button>
+        <button class="btn" type="button" data-action="pres-sat">${state.basemap === "satelit" ? "Hartă" : "Satelit"}</button>
+        <button class="btn" type="button" data-action="pres-theme">${state.theme === "noapte" ? "Zi" : "Noapte"}</button>
+      </nav>
+      <aside id="ops-pres-summary" class="ops-slide-summary" data-pres-panel="summary" data-pres-edge="left" ${summaryCollapsed ? "hidden" : ""} aria-label="Monitorizare situații operative">
           <div class="ops-sum-top">
             <div>
               <strong>Monitorizare situații operative</strong>
               <small>${activeIncidentCount} active · ${resolvedIncidentCount} rezolvate</small>
             </div>
-            <button type="button" class="ops-sum-hide" data-action="pres-toggle-summary" title="Ascunde banda din stânga">◀ Ascunde</button>
           </div>
           <div class="ops-sum-filter">
             <span>${hideResolvedInPresentation ? "Situațiile rezolvate sunt ascunse automat" : "Situațiile rezolvate sunt afișate pe hartă"}</span>
@@ -1516,13 +1545,19 @@ export function initOperations(ctx) {
               </button></li>`;
             }).join("")}</ul>` : `<p class="muted" style="margin:0;font-size:11.5px">Nicio forță plasată pe hartă (0).</p>`}
           </div>
-        </aside>`}
-      </div>
+      </aside>
 
-      <footer class="ops-slide-foot">
+      <footer id="ops-pres-legend" class="ops-slide-foot" data-pres-panel="legend" data-pres-edge="bottom" ${legendCollapsed ? "hidden" : ""} aria-label="Legenda situației">
         <div class="ops-legend">${Object.entries(counts).map(([kind, count]) => `<span><i data-kind="${esc(kind)}"></i>${esc(kind === "resolved" ? "Rezolvat / Redeschis" : KINDS[kind])}: <b>${count}</b></span>`).join("") || `<span>Toate situațiile monitorizate: <b>0 probleme active</b></span>`}</div>
         <span>${dirty ? "Situație în lucru" : "Actualizat " + dateLabel(active.updatedAt)}</span>
       </footer>`;
+    for (const el of presentation.querySelectorAll("[data-pres-panel]")) el.scrollTop = scrollPositions.get(el.id) || 0;
+    if (focused) {
+      const replacement = focused.id
+        ? [...presentation.querySelectorAll("[id]")].find(element => element.id === focused.id)
+        : [...presentation.querySelectorAll("button")].find(button => Object.entries(focused.data).every(([key, value]) => button.dataset[key] === value));
+      replacement?.focus({ preventScroll: true });
+    }
   }
 
   function applyMetaInput(input) {
@@ -1551,12 +1586,17 @@ export function initOperations(ctx) {
   function present() {
     if (pending || mode) return message("Finalizează marcajul sau selecția înainte de prezentare.");
     if (!active) return;
-    messagesCollapsed = false;
+    compactPresentation = isCompactViewport();
+    messagesCollapsed = compactPresentation;
+    summaryCollapsed = compactPresentation;
+    legendCollapsed = compactPresentation;
+    commandsCollapsed = true;
+    lastOpenedPanel = "messages";
     beforePresentation = { ...currentView(), padding: map.getPadding() };
     previousOverlays = state.overlays;
     state.overlays = { sel: FC(), analysis: FC(), measure: FC(), pin: FC() };
     state.operations.presenting = true;
-    state.operations.labelSize = window.innerWidth <= 760 ? 14 : 18;
+    state.operations.labelSize = compactPresentation ? 14 : 18;
     sync(false);
     renderPresentationOverlay();
     presentation.hidden = false;
@@ -1917,16 +1957,17 @@ export function initOperations(ctx) {
     const act = btn.dataset.action;
     if (act === "exit") exitPresentation();
     else if (act === "pres-fit") fit();
-    else if (act === "pres-toggle-messages") {
-      messagesCollapsed = !messagesCollapsed;
+    else if (["pres-toggle-messages", "pres-toggle-summary", "pres-toggle-legend", "pres-toggle-commands"].includes(act)) {
+      const panel = act.slice("pres-toggle-".length);
+      const collapsed = { messages: messagesCollapsed, summary: summaryCollapsed, legend: legendCollapsed, commands: commandsCollapsed };
+      const opening = collapsed[panel];
+      if (compactPresentation && opening) for (const name of Object.keys(collapsed)) collapsed[name] = true;
+      collapsed[panel] = !opening;
+      if (opening) lastOpenedPanel = panel;
+      ({ messages: messagesCollapsed, summary: summaryCollapsed, legend: legendCollapsed, commands: commandsCollapsed } = collapsed);
       persistSession();
       renderPresentationOverlay();
-      fit();
-    } else if (act === "pres-toggle-summary") {
-      summaryCollapsed = !summaryCollapsed;
-      persistSession();
-      renderPresentationOverlay();
-      fit();
+      presentation.querySelector(`[data-action="${act}"]`)?.focus({ preventScroll: true });
     } else if (act === "pres-toggle-resolved") {
       hideResolvedInPresentation = !hideResolvedInPresentation;
       persistSession();
@@ -1953,11 +1994,20 @@ export function initOperations(ctx) {
     if (!document.body.classList.contains("presenting")) return;
     cancelAnimationFrame(resizeFrame);
     resizeFrame = requestAnimationFrame(() => {
-      state.operations.labelSize = window.innerWidth <= 760 ? 14 : 18;
+      const nextCompact = isCompactViewport();
+      if (nextCompact && !compactPresentation) {
+        const collapsed = { messages: messagesCollapsed, summary: summaryCollapsed, legend: legendCollapsed, commands: commandsCollapsed };
+        const keep = !collapsed[lastOpenedPanel] ? lastOpenedPanel : Object.keys(collapsed).find(name => !collapsed[name]);
+        for (const name of Object.keys(collapsed)) collapsed[name] = name !== keep;
+        ({ messages: messagesCollapsed, summary: summaryCollapsed, legend: legendCollapsed, commands: commandsCollapsed } = collapsed);
+      }
+      compactPresentation = nextCompact;
+      state.operations.labelSize = compactPresentation ? 14 : 18;
+      renderPresentationOverlay();
       for (const id of ["ops-features-label", "ops-features-label-line"]) {
         if (map.getLayer(id)) map.setLayoutProperty(id, "text-size", state.operations.labelSize);
       }
-      map.resize(); fit();
+      map.resize();
     });
   });
 

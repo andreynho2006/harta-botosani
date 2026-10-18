@@ -325,7 +325,7 @@ button { cursor: pointer; }
   .info { top: auto; bottom: 42px; width: calc(100% - 24px); max-height: 50%; }
 }
 
-@media (max-width: 760px), (max-height: 520px) and (pointer: coarse) {
+@media (max-width: 760px), (max-height: 520px) {
   .commune-dialog { width: 100%; height: 100%; height: 100dvh; border: 0; border-radius: 0; }
   .commune-header { padding: calc(8px + env(safe-area-inset-top, 0px)) 10px 8px 16px; }
   .commune-header h2 { font-size: 19px; }
@@ -340,12 +340,12 @@ button { cursor: pointer; }
 /* ================================================================ telefon / ecran mic
    Harta pe tot ecranul; căutarea sus; instrumentele într-o coloană în dreapta;
    panoul lateral devine foaie trasă de jos (strânsă / jumătate / tot ecranul). */
-.mob-only, .t-short, .sheet-grip { display: none; }
+.mob-only, .t-short, .sheet-grip, .mobile-map-toggle { display: none; }
 .topbar:empty { display: none; }
 .maplibregl-ctrl-top-right { display: none; } /* butonul GPS propriu declanșează localizarea */
 .tb button[aria-pressed="true"] svg { color: inherit; }
 
-@media (max-width: 760px), (max-height: 520px) and (pointer: coarse) {
+@media (max-width: 760px), (max-height: 520px) {
   :root { --top: calc(env(safe-area-inset-top, 0px) + 10px); --peek: calc(61px + env(safe-area-inset-bottom, 0px)); }
   body { font-size: 15px; overscroll-behavior: none; -webkit-tap-highlight-color: transparent; }
   button, .li, .near li, .results li { touch-action: manipulation; }
@@ -436,10 +436,27 @@ button { cursor: pointer; }
   .login .lg-check input { width: 19px; height: 19px; }
   .lg-btn { height: 48px; font-size: 15px; }
   .uform input, .uform select { height: 42px; font-size: 16px; }
+
+  .mobile-map-toggle { display: grid; place-items: center; position: absolute; z-index: 7;
+    left: max(10px, env(safe-area-inset-left, 0px)); bottom: calc(var(--peek) + 12px);
+    width: 44px; height: 44px; padding: 0; border: 1px solid var(--line-2); border-radius: 12px;
+    background: var(--panel); color: var(--ink); box-shadow: var(--shadow); font-size: 28px; line-height: 1; }
+  .mobile-map-toggle span { transform: translateY(-3px); }
+  .mobile-map-only .mobile-map-toggle { bottom: calc(env(safe-area-inset-bottom, 0px) + 12px); }
+  .mobile-map-only .mobile-map-toggle span { transform: rotate(180deg) translateY(-3px); }
+  .mobile-map-only .side, .mobile-map-only .topbar, .mobile-map-only .toolbar { display: none; }
+  .mobile-map-only .maplibregl-ctrl-bottom-left, .mobile-map-only .maplibregl-ctrl-bottom-right { bottom: calc(env(safe-area-inset-bottom, 0px) + 8px); }
+  .mobile-map-only .maplibregl-ctrl-bottom-left { left: 60px; }
+  .mobile-map-only .toast { bottom: calc(env(safe-area-inset-bottom, 0px) + 66px); }
+  .mobile-map-only .modebar, body.mobile-map-only .ops-drawbar { bottom: calc(env(safe-area-inset-bottom, 0px) + 66px); }
+  .mobile-map-only .ops-focusbar { top: var(--top); }
+  .uform .btn, .u-act button, .ops .btn { min-height: 44px; }
 }
 
+.presenting .mobile-map-toggle { display: none !important; }
+
 /* telefon ținut orizontal: puțină înălțime, deci instrumentele trec pe un rând lângă căutare */
-@media (max-height: 520px) and (pointer: coarse) and (orientation: landscape) {
+@media (max-height: 520px) and (orientation: landscape) {
   .topbar { right: calc(10px + 5 * 50px + 2 * 8px + 12px); }
   .toolbar { top: var(--top); flex-direction: row; }
   .tb { flex-direction: row; }
