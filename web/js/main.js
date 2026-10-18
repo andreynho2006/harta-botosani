@@ -6,6 +6,7 @@ import { SearchIndex, typeInfo, norm } from "./search.js";
 import { ensureLogin, decryptJSON, logout } from "./auth.js";
 import { renderAdmin } from "./admin.js";
 import { formatRestriction } from "./restrictions.js";
+import { normalizeSubunitsDoc, mergeSubunitsIntoPois, SUBUNITS_DRAFT_KEY } from "./subunits.js";
 import { openCommuneMap, isCommuneMapOpen } from "./commune.js";
 import { initOperations } from "./operations.js?v=20261018-mobile-cjsu-2";
 import {
@@ -124,6 +125,29 @@ function replaceHydrants(fc) {
   renderLayerPanel();
 }
 
+/** Aplică lista de subunități ISU pe hartă; `draft` = păstrată local până la publicarea subunitati.json. */
+function replaceSubunits(subunits, { draft = true } = {}) {
+  state.data.subunits = subunits;
+  state.data.subunitsDraft = draft ? { ...normalizeSubunitsDoc({ subunits }), updatedAt: new Date().toISOString() } : null;
+  try {
+    if (state.data.subunitsDraft) localStorage.setItem(SUBUNITS_DRAFT_KEY, JSON.stringify(state.data.subunitsDraft));
+    else localStorage.removeItem(SUBUNITS_DRAFT_KEY);
+  } catch { /* fără stocare */ }
+  state.data.pois = mergeSubunitsIntoPois(state.data.osmPois, subunits);
+  map?.getSource("pois")?.setData(state.data.pois);
+  renderLayerPanel();
+}
+
+let pendingPick = null;
+/** Următorul click pe hartă întoarce coordonatele [lon, lat] (folosit în Admin → Subunități ISU). */
+function pickPoint(callback) {
+  pendingPick = callback || null;
+  if (map) map.getCanvas().style.cursor = callback ? "crosshair" : "";
+}
+function flyToPoint(ll) {
+  map?.flyTo({ center: ll, zoom: Math.max(map.getZoom(), 14) });
+}
+
 async function init() {
   session = await ensureLogin();
   $("#who").innerHTML = `<span>${esc(session.name)}${session.role === "admin" ? " · admin" : ""}</span>
@@ -131,7 +155,7 @@ async function init() {
   $("#logout").addEventListener("click", logout);
   if (session.role === "admin") $("#tb-admin").hidden = false;
 
-  const [pois, hydrants, admin, searchRows, st, roadsData, initialEvents] = await Promise.all([
+  const [pois, hydrants, admin, searchRows, st, roadsData, initialEvents, subunitsDoc] = await Promise.all([
     loadJSON("data/pois.geojson", FC()),
     loadHydrants(),
     loadJSON("data/admin.geojson", FC()),
@@ -139,8 +163,14 @@ async function init() {
     loadJSON("data/stats.json", null),
     loadJSON("data/roads.json", { roads: [] }),
     loadJSON("data/situatii.json", null),
+    loadJSON("data/subunitati.json", null),
   ]);
-  state.data.pois = { ...pois, features: pois.features.filter((f) => f.properties.cat !== "hidrant_osm") };
+  state.data.osmPois = { ...pois, features: pois.features.filter((f) => f.properties.cat !== "hidrant_osm") };
+  state.data.subunitsPublished = normalizeSubunitsDoc(subunitsDoc);
+  const draft = (() => { try { return JSON.parse(localStorage.getItem(SUBUNITS_DRAFT_KEY) || "null"); } catch { return null; } })();
+  state.data.subunitsDraft = draft ? normalizeSubunitsDoc(draft) : null;
+  state.data.subunits = (state.data.subunitsDraft || state.data.subunitsPublished).subunits;
+  state.data.pois = mergeSubunitsIntoPois(state.data.osmPois, state.data.subunits);
   state.data.hydrants = prepareHydrants(hydrants);
   state.data.admin = admin;
   state.data.roads = Array.isArray(roadsData?.roads) ? roadsData : { roads: [] };
@@ -164,7 +194,8 @@ async function init() {
   initSearch();
   initUI();
   if (session.role === "admin") {
-    renderAdmin($("#tab-admin"), { session, state, uatAt, onHydrants: replaceHydrants, toast, copy });
+    renderAdmin($("#tab-admin"), { session, state, uatAt, onHydrants: replaceHydrants, toast, copy,
+      onSubunits: replaceSubunits, pickPoint, flyToPoint });
   }
 }
 
@@ -389,6 +420,13 @@ const PICK_ORDER = ["hydrant-icon", "hydrant-dot", "poi-major", "poi-minor", "pi
 function onMapClick(e) {
   if (Date.now() < suppressClickUntil) return;
   closeContextMenu();
+  if (pendingPick) {
+    const cb = pendingPick;
+    pendingPick = null;
+    map.getCanvas().style.cursor = "";
+    cb([e.lngLat.lng, e.lngLat.lat]);
+    return;
+  }
   if (operations?.handleMapClick(e)) return;
   const ll = [e.lngLat.lng, e.lngLat.lat];
   if (state.mode === "measure") return addMeasurePoint(ll);
@@ -440,6 +478,11 @@ function describe(f) {
   }
   if (id.startsWith("poi")) {
     const c = POI[p.cat];
+    if (p.official) {
+      add("Tip", p.typeLabel); add("Adresă", p.addr); add("Telefon", p.phone);
+      add("Tehnică din dotare", p.equipment); add("Efectiv pe tură", p.staff); add("Observații", p.notes);
+      return { title: p.name, kind: "Subunitate ISU · listă oficială", icon: iconDataURL(p.cat, 26), rows };
+    }
     add("Operator", p.operator); add("Adresă", p.addr); add("Telefon", p.phone); add("Cod", p.ref);
     add("Înălțime", p.height && `${p.height} m`); add("UAT", p.uat);
     if (p.website) add("Site", `<a href="${esc(p.website)}" target="_blank" rel="noopener">${esc(p.website.replace(/^https?:\/\//, ""))}</a>`, "html");

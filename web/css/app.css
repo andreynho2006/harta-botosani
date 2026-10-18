@@ -469,3 +469,4 @@ button { cursor: pointer; }
   .t-long { display: none; }
   .t-short { display: inline; }
 }
+.su-coord { font-size: 12.5px; margin: -2px 0 2px; }

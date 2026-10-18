@@ -4,6 +4,7 @@
 //   web/data/hidranti.enc     (hidranții, criptați)
 import { wrapFor, encryptJSON, generatePassword, ITERATIONS } from "./auth.js";
 import { fromStereo70 } from "./geo.js";
+import { SUBUNIT_TYPES, normalizeSubunit, normalizeSubunitsDoc, subunitsFromOsm, parseCoordinateCandidates } from "./subunits.js";
 
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const normKey = (s) => String(s ?? "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[^a-z0-9]/g, "");
@@ -157,9 +158,184 @@ export async function parseHydrants(file, uatAt) {
     columns: Object.keys(rows[0]) };
 }
 
+// ------------------------------------------------------------------ subunități ISU
+
+const EMPTY_FORM = { id: "", name: "", type: "detasament", coords: "", address: "", phone: "", equipment: "", staff: "", notes: "" };
+
+function createSubunitsEditor(ctx) {
+  let list = structuredClone(ctx.state.data.subunits || []);
+  let form = null;          // null = formular închis; altfel valorile din formular
+  let picking = false;
+  let container = null;
+
+  const resolveCoords = (text) => {
+    const cands = parseCoordinateCandidates(text, fromStereo70)
+      .filter((p) => p && Number.isFinite(p[0]) && Number.isFinite(p[1]) && Math.abs(p[1]) <= 90 && Math.abs(p[0]) <= 180);
+    const inside = cands.find((p) => ctx.uatAt(p[0], p[1]));
+    const p = inside || cands[0];
+    return p ? { lon: p[0], lat: p[1], uat: inside ? ctx.uatAt(p[0], p[1])?.name : null } : null;
+  };
+
+  const commit = (next, msg) => {
+    list = next;
+    ctx.onSubunits?.(list, { draft: true });
+    if (msg) ctx.toast(msg);
+    draw();
+  };
+
+  const coordPreview = () => {
+    if (!form?.coords) return `<span class="muted">Ex. <code>47.7471, 26.6694</code> (din Google Maps), <code>47°44'49"N 26°40'09"E</code> sau Stereo 70 <code>X Y</code></span>`;
+    const r = resolveCoords(form.coords);
+    if (!r) return `<span class="warnp">Nu recunosc coordonatele.</span>`;
+    return r.uat ? `✓ ${r.lat.toFixed(6)}, ${r.lon.toFixed(6)} · UAT ${esc(r.uat)}`
+      : `<span class="warnp">${r.lat.toFixed(6)}, ${r.lon.toFixed(6)} · în afara județului${form.type === "vecin" ? " (ok pentru județ vecin)" : ""}</span>`;
+  };
+
+  const formHTML = () => `<form class="uform" id="adm-su-form">
+      <h4>${form.id ? "Modifică subunitatea" : "Adaugă subunitate"}</h4>
+      <label>Denumire *<input name="name" required maxlength="160" value="${esc(form.name)}" placeholder="ex. Detașamentul de Pompieri Dorohoi"></label>
+      <label>Tip<select name="type">${Object.entries(SUBUNIT_TYPES).map(([k, v]) => `<option value="${k}" ${form.type === k ? "selected" : ""}>${esc(v)}</option>`).join("")}</select></label>
+      <label>Coordonate (punctul de ieșire al autospecialelor) *<input name="coords" required value="${esc(form.coords)}" placeholder="47.7471, 26.6694" autocomplete="off"></label>
+      <div class="su-coord" id="adm-su-preview">${coordPreview()}</div>
+      <div class="row-btns" style="margin-top:6px">
+        <button class="btn" type="button" data-su="pick">${picking ? "Dă click pe hartă… (anulează)" : "📍 Alege pe hartă"}</button>
+        ${form.coords && resolveCoords(form.coords) ? `<button class="btn" type="button" data-su="fly-form">Arată pe hartă</button>` : ""}
+      </div>
+      <label>Adresă<input name="address" maxlength="300" value="${esc(form.address)}" placeholder="ex. Str. Mihai Eminescu nr. 1, Dorohoi"></label>
+      <label>Telefon dispecerat<input name="phone" maxlength="80" value="${esc(form.phone)}"></label>
+      <label>Tehnică din dotare<textarea name="equipment" rows="2" maxlength="1000" placeholder="ex. 2 ASAS, 1 autoscară 30 m, 1 SMURD, 1 descarcerare">${esc(form.equipment)}</textarea></label>
+      <label>Efectiv pe tură (persoane)<input name="staff" type="number" min="0" max="999" value="${esc(form.staff)}"></label>
+      <label>Observații<textarea name="notes" rows="2" maxlength="2000">${esc(form.notes)}</textarea></label>
+      <div class="row-btns">
+        <button class="btn primary" type="submit">${form.id ? "Salvează modificările" : "Adaugă în listă"}</button>
+        <button class="btn" type="button" data-su="cancel">Renunță</button>
+      </div>
+    </form>`;
+
+  const draw = () => {
+    if (!container) return;
+    const draft = !!ctx.state.data.subunitsDraft;
+    const typeCount = (t) => list.filter((s) => s.type === t).length;
+    container.innerHTML = `
+      <h3>Subunități ISU (puncte de plecare pentru rute)</h3>
+      <p class="muted">${list.length ? `${list.length} subunități în lista oficială · ${Object.keys(SUBUNIT_TYPES).filter(typeCount).map((t) => `${typeCount(t)} ${esc(SUBUNIT_TYPES[t].split(" ")[0].toLowerCase())}`).join(", ")}` :
+        "Lista oficială e goală – pe hartă apar deocamdată punctele „pompieri” din OpenStreetMap."}</p>
+      ${list.length ? `<ul class="ulist">${list.map((s) => `
+        <li><div class="u-main"><b>${esc(s.name)}</b><span>${esc(SUBUNIT_TYPES[s.type])} · ${s.lat.toFixed(5)}, ${s.lon.toFixed(5)}${ctx.uatAt(s.lon, s.lat) ? " · " + esc(ctx.uatAt(s.lon, s.lat).name) : ""}</span>
+          ${s.equipment ? `<span>🚒 ${esc(s.equipment)}</span>` : ""}</div>
+          <div class="u-act"><button class="lnk" type="button" data-su-fly="${esc(s.id)}">Hartă</button>
+          <button class="lnk" type="button" data-su-edit="${esc(s.id)}">Modifică</button>
+          <button class="lnk danger" type="button" data-su-del="${esc(s.id)}">Șterge</button></div></li>`).join("")}</ul>` : ""}
+      ${form ? formHTML() : `<div class="row-btns" style="margin-top:10px">
+        <button class="btn primary" type="button" data-su="new">+ Adaugă subunitate</button>
+        ${!list.length && subunitsFromOsm(ctx.state.data.osmPois).length ? `<button class="btn" type="button" data-su="from-osm">Preia cele ${subunitsFromOsm(ctx.state.data.osmPois).length} din OSM (apoi le corectez)</button>` : ""}
+      </div>`}
+      ${draft ? `<div class="save">
+        <p><b>Lista e salvată doar în acest browser</b> (o vezi deja pe hartă). Ca s-o vadă toți utilizatorii, descarcă
+        <code>subunitati.json</code> și urcă-l în GitHub în <code>web/data/</code>, sau trimite-l lui Claude.</p>
+        <div class="row-btns"><button class="btn primary" type="button" data-su="download">Descarcă subunitati.json</button>
+        <button class="btn" type="button" data-su="revert">Renunță la modificările locale</button></div></div>` :
+        list.length ? `<div class="row-btns"><button class="btn" type="button" data-su="download">Descarcă subunitati.json</button></div>` : ""}
+      <div class="row-btns"><label class="btn file">Încarcă subunitati.json<input type="file" id="adm-su-import" accept=".json,application/json" hidden></label></div>`;
+  };
+
+  const readForm = (f) => {
+    const fd = new FormData(f);
+    form = { ...form, ...Object.fromEntries([...fd.entries()].map(([k, v]) => [k, String(v)])) };
+  };
+
+  const onClick = (e) => {
+    const b = e.target.closest("button");
+    if (!b) return;
+    const f = container.querySelector("#adm-su-form");
+    if (f) readForm(f);
+    const act = b.dataset.su;
+    if (act === "new") { form = { ...EMPTY_FORM }; draw(); container.querySelector("[name=name]")?.focus(); }
+    if (act === "cancel") { form = null; picking = false; draw(); }
+    if (act === "pick") {
+      if (picking) { picking = false; ctx.pickPoint?.(null); draw(); return; }
+      picking = true;
+      ctx.toast("Dă click pe hartă exact la ieșirea autospecialelor din subunitate.");
+      ctx.pickPoint?.((ll) => {
+        picking = false;
+        if (!ll || !form) { draw(); return; }
+        form.coords = `${ll[1].toFixed(6)}, ${ll[0].toFixed(6)}`;
+        draw();
+      });
+      draw();
+    }
+    if (act === "fly-form") { const r = resolveCoords(form?.coords); if (r) ctx.flyToPoint?.([r.lon, r.lat]); }
+    if (act === "from-osm") commit(subunitsFromOsm(ctx.state.data.osmPois), "Am preluat punctele din OSM. Verifică și corectează fiecare subunitate.");
+    if (act === "download") download("subunitati.json", { ...normalizeSubunitsDoc({ subunits: list }), updatedAt: new Date().toISOString() });
+    if (act === "revert") {
+      list = structuredClone(ctx.state.data.subunitsPublished?.subunits || []);
+      ctx.onSubunits?.(list, { draft: false });
+      form = null;
+      draw();
+    }
+    if (b.dataset.suFly) { const s = list.find((x) => x.id === b.dataset.suFly); if (s) ctx.flyToPoint?.([s.lon, s.lat]); }
+    if (b.dataset.suEdit) {
+      const s = list.find((x) => x.id === b.dataset.suEdit);
+      if (s) { form = { ...EMPTY_FORM, ...s, coords: `${s.lat}, ${s.lon}`, staff: s.staff ?? "" }; draw(); container.querySelector("#adm-su-form")?.scrollIntoView({ block: "nearest" }); }
+    }
+    if (b.dataset.suDel) {
+      if (b.dataset.confirm !== "1") { b.dataset.confirm = "1"; b.textContent = "Sigur?"; return; }
+      commit(list.filter((x) => x.id !== b.dataset.suDel), "Subunitate ștearsă.");
+    }
+  };
+
+  const onInput = (e) => {
+    if (e.target.form?.id !== "adm-su-form") return;
+    readForm(e.target.form);
+    if (e.target.name === "coords" || e.target.name === "type") container.querySelector("#adm-su-preview").innerHTML = coordPreview();
+  };
+
+  const onSubmit = (e) => {
+    if (e.target.id !== "adm-su-form") return;
+    e.preventDefault();
+    e.stopPropagation();
+    readForm(e.target);
+    const r = resolveCoords(form.coords);
+    if (!r) { ctx.toast("Coordonatele nu sunt valide."); return; }
+    if (!r.uat && form.type !== "vecin") { ctx.toast("Punctul e în afara județului. Alege tipul „Subunitate județ vecin” sau corectează coordonatele."); return; }
+    const s = normalizeSubunit({ ...form, lat: r.lat, lon: r.lon, id: form.id || undefined });
+    if (!s) { ctx.toast("Completează denumirea și coordonatele."); return; }
+    const next = form.id ? list.map((x) => (x.id === form.id ? s : x)) : [...list, s];
+    form = null;
+    commit(next, `Subunitatea „${s.name}” a fost ${next.length > list.length ? "adăugată" : "actualizată"} pe hartă.`);
+  };
+
+  const onChange = async (e) => {
+    if (e.target.id !== "adm-su-import") return;
+    e.stopPropagation();
+    const file = e.target.files[0];
+    if (!file) return;
+    try {
+      const doc = normalizeSubunitsDoc(JSON.parse(await file.text()));
+      if (!doc.subunits.length) throw new Error();
+      commit(doc.subunits, `${doc.subunits.length} subunități încărcate.`);
+    } catch {
+      ctx.toast("Fișierul nu conține o listă validă de subunități.");
+    }
+  };
+
+  return {
+    mount(el) {
+      if (!el?.addEventListener) return;
+      container = el;
+      el.addEventListener("click", onClick);
+      el.addEventListener("input", onInput);
+      el.addEventListener("submit", onSubmit);
+      el.addEventListener("change", onChange);
+      draw();
+    },
+  };
+}
+
 // ------------------------------------------------------------------ panoul
 
 export function renderAdmin(el, ctx) {
+  const subunitsEditor = createSubunitsEditor(ctx);
   const { session } = ctx;
   const users = structuredClone(session.users);
   if (!Number.isSafeInteger(users.iterations) || users.iterations <= 0) users.iterations = ITERATIONS;
@@ -170,6 +346,7 @@ export function renderAdmin(el, ctx) {
 
   const draw = () => {
     el.innerHTML = `<div class="adm">
+      <div id="adm-su"></div>
       <h3>Utilizatori</h3>
       <ul class="ulist">${users.users.map((x) => `
         <li><div class="u-main"><b>${esc(x.name)}</b><span>${esc(x.u)} · ${x.role === "admin" ? "administrator" : "utilizator"}</span>
@@ -196,6 +373,7 @@ export function renderAdmin(el, ctx) {
       <div id="adm-imp"></div>
       <p class="muted" style="margin-top:14px">Fișierul original nu părăsește calculatorul. Se urcă doar varianta criptată.</p>
     </div>`;
+    subunitsEditor.mount(el.querySelector("#adm-su"));
   };
 
   const drawImport = (msg) => {

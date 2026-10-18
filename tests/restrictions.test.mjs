@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import vm from 'node:vm';
+import { normalizeSubunitsDoc, mergeSubunitsIntoPois, SUBUNITS_DRAFT_KEY } from '../web/js/subunits.js';
 
 const source = readFileSync(new URL('../web/js/restrictions.js', import.meta.url), 'utf8');
 const { formatRestriction } = await import(`data:text/javascript;base64,${Buffer.from(source).toString('base64')}`);
@@ -60,6 +61,7 @@ test('startup removes OSM hydrants from POIs and search while preserving ISU hyd
     updateDataInfo: noop, renderLayerPanel: noop, renderAnalysis: noop,
     map: {}, toast: noop, selectTab: noop, setSheet: noop, applyStyle: noop,
     initSheet: noop, initMap: noop, initSearch: noop, initUI: noop, initOperations: noop,
+    normalizeSubunitsDoc, mergeSubunitsIntoPois, SUBUNITS_DRAFT_KEY, localStorage: { getItem: () => null },
   });
   await vm.runInContext(initSource + '\ninit()', context);
   assert.equal(state.data.pois.features.length, 1);
