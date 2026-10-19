@@ -1,0 +1,31 @@
+{
+ "version": 1,
+ "kdf": "PBKDF2-SHA256",
+ "iterations": 310000,
+ "users": [
+  {
+   "u": "andrei",
+   "name": "Andrei",
+   "role": "admin",
+   "salt": "/wAJMEx06qcneiYvICCRSw==",
+   "iv": "8NA0YvMZ5Z06614V",
+   "wk": "whx/4y6iBXu81pd1zfOuPg3TJyJsKHyZjn4b7wsM4Ef7D4/fa8pEAju5y1unc/0W"
+  },
+  {
+   "u": "dispecerat",
+   "name": "Dispecerat",
+   "role": "user",
+   "salt": "fzrbq72Iw6DyD9u5o3kkLQ==",
+   "iv": "x2hYof/uE5xKUFfB",
+   "wk": "6Gwal4PhspthcnXq2hQB5iTfEtgywppgCwTJKayjcjPOUWhyy50ySKYmXM9CyyaJ"
+  },
+  {
+   "u": "test",
+   "name": "Utilizator test",
+   "role": "user",
+   "salt": "NPB4pnQc81jcEC5lIlAknA==",
+   "iv": "Xt3o9V0IZH/JmXr+",
+   "wk": "TCSjZuEohowBx8duWGhL4mh/xtuyhlJoUPESd5jxjuQrzOR6jlRJ1qy1VBUgcVB1"
+  }
+ ]
+}
