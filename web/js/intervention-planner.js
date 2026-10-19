@@ -101,7 +101,7 @@ export function createInterventionPlanner(ctx) {
       ${destinationId === 'custom' ? `<label>Denumirea obiectivului<input data-itinerary-field="name" maxlength="200" value="${esc(destinationName)}" placeholder="Ex. obiectivul intervenției" ${request ? 'disabled' : ''}></label><label>Coordonate obiectiv (latitudine, longitudine)<input data-itinerary-field="coordinate" value="${esc(coordinateText)}" placeholder="47.750000, 26.660000" ${request ? 'disabled' : ''}></label>` : ''}
       ${picking ? '<p role="status">Alege punctul exact pe hartă; destinația nu este estimată din conturul unei zone.</p>' : ''}
       <div class="ops-actions"><button class="btn primary" type="button" data-itinerary="calculate" ${selected && !request && !picking ? '' : 'disabled'}>${request ? 'Se calculează local…' : 'Calculează itinerarele'}</button>${request ? '<button class="btn" type="button" data-itinerary="cancel">Anulează calculul</button>' : ''}</div>
-      <p class="muted">Trasee orientative; verifică accesul și gabaritul autospecialei. Sensurile și restricțiile din date pot fi incomplete. Calcul local pe drumurile disponibile; sectoarele marcate „Drum blocat” și nerezolvate sunt evitate. Accesul de la punctele alese până la drum se verifică separat.</p>
+      <p class="muted">Trasee orientative; verifică accesul și gabaritul autospecialei. Sensurile și restricțiile din date pot fi incomplete. Sunt favorizate arterele principale; aleile de acces și drumurile de exploatare rămân disponibile când sunt necesare. Calcul local pe drumurile disponibile; sectoarele marcate „Drum blocat” și nerezolvate sunt evitate. Accesul de la punctele alese până la drum se verifică separat.</p>
       ${feedback ? `<p class="ops-notice" data-itinerary-feedback role="status">${esc(feedback)}</p>` : ''}
       ${lastResult?.primary ? `<p data-itinerary-result><b>Principal:</b> ${esc(distanceLabel(lastResult.primary.distanceKm))}${lastResult.alternative ? `<br><b>Rezervă:</b> ${esc(distanceLabel(lastResult.alternative.distanceKm))}` : '<br>Nu există o alternativă suficient de diferită în rețeaua disponibilă.'}</p>` : ''}
       </section>`;
@@ -114,7 +114,7 @@ export function createInterventionPlanner(ctx) {
     feedback = ''; lastResult = null;
     try {
       if (!worker) {
-        worker = ctx.createWorker ? ctx.createWorker() : new Worker(new URL('./intervention-route-worker.js?v=20261018-itineraries-v2', import.meta.url), { type: 'module' });
+        worker = ctx.createWorker ? ctx.createWorker() : new Worker(new URL('./intervention-route-worker.js?v=20261019-road-priority', import.meta.url), { type: 'module' });
         worker.onmessage = ({ data }) => {
           const current = request;
           if (!current || data?.id !== current.id) return;

@@ -164,3 +164,13 @@ test('quantized same-grade service/street endpoint junctions connect within 75 c
   const roundedJunction = [B[0], B[1] + 0.000001];
   isFailure(route(A, D, [road([A, C], { bridge: 1 }), road([roundedJunction, D])]));
 });
+
+test('a reasonable main-road route is preferred to a shorter access-alley shortcut without dropping access roads', () => {
+  const roads = [road([A, C], {cls:'service',name:'Access alley'}), road([A, D, C], {cls:'dj',name:'Public road'})];
+  const result = route(A, C, roads);
+  assert.deepEqual(result.primary.geometry.coordinates, [A, D, C]);
+  assert.ok(result.primary.distanceKm > route(A, C, [roads[0]]).primary.distanceKm);
+  assert.ok(route(A, C, [roads[0]]).primary, 'Access remains available when it is needed');
+  assert.ok(result.alternative);
+  assert.equal(result.alternative.roads[0].cls, 'service');
+});

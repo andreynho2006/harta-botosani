@@ -3,6 +3,11 @@ const R = 6371008.8, RAD = Math.PI / 180;
 const GRAPH_KIND = 'hb-intervention-graph-v1';
 // z15 tile geometry rounds genuine junction coordinates by a few decimeters.
 const ENDPOINT_JOIN_METERS = 0.75;
+// Access alleys and tracks remain usable, but should not become through shortcuts
+// when a reasonable route on the public road network exists. These are relative
+// planning costs, not speeds, travel times or clearance guarantees.
+const ROAD_COST = { service: 4, track: 6, street: 1.4, local: 1.1 };
+const roadCost = edge => ROAD_COST[edge.road.cls] || 1;
 const CLASSES = new Set(['dn', 'dj', 'dc', 'local', 'street', 'service', 'track']);
 const HIGHWAYS = new Set(['motorway', 'motorway_link', 'trunk', 'trunk_link', 'primary', 'primary_link', 'secondary', 'secondary_link', 'tertiary', 'tertiary_link', 'unclassified', 'residential', 'living_street', 'service', 'track', 'road']);
 const NON_DRIVING = new Set(['footway', 'pedestrian', 'path', 'steps', 'cycleway', 'bridleway', 'corridor', 'construction', 'proposed']);
@@ -279,7 +284,7 @@ export function computeInterventionRoutes(start, end, featuresOrGraph, options =
       if (current.node === target) break;
       for (const arc of [...(graph.adjacency[current.node] ?? []), ...(extra.get(current.node) ?? [])]) {
         if (blocked.has(arc.edge)) continue;
-        const cost = current.cost + arc.length * (penalized.has(arc.edge) ? penalty : 1);
+        const cost = current.cost + arc.length * roadCost(graph.edges[arc.edge]) * (penalized.has(arc.edge) ? penalty : 1);
         if (cost >= distances[arc.to]) continue;
         distances[arc.to] = cost; previous[arc.to] = current.node; previousEdge[arc.to] = arc.edge; stepLength[arc.to] = arc.length;
         heap.push({ node: arc.to, cost });
@@ -298,11 +303,12 @@ export function computeInterventionRoutes(start, end, featuresOrGraph, options =
       const road = graph.edges[id].road, key = `${road.osm}:${road.ref}:${road.name}:${road.cls}`;
       if (!seenRoads.has(key)) { roads.push({ ...road }); seenRoads.add(key); }
     }
-    return { geometry: { type: 'LineString', coordinates }, distanceKm: distance / 1000, roads, edgeMeters };
+    const routingCost = [...edgeMeters].reduce((sum, [id, length]) => sum + length * roadCost(graph.edges[id]), 0);
+    return { geometry: { type: 'LineString', coordinates }, distanceKm: distance / 1000, roads, edgeMeters, routingCost };
   };
   const primary = search();
   if (!primary) return fail('disconnected_or_blocked', { snaps, blockedEdgeCount: blocked.size });
-  let alternative = null;
+  let alternative = null, alternativeScore = Infinity;
   const primaryEdges = new Set(primary.edgeMeters.keys());
   const maxShared = Math.min(0.95, Math.max(0, options.maxAlternativeSharedFraction ?? 0.7));
   const maxRatio = Math.max(1, Number(options.maxAlternativeRatio) || 3);
@@ -310,12 +316,16 @@ export function computeInterventionRoutes(start, end, featuresOrGraph, options =
     const candidate = search(primaryEdges, penalty);
     if (!candidate) continue;
     const sharedMeters = [...candidate.edgeMeters].reduce((sum, [id, length]) => sum + Math.min(length, primary.edgeMeters.get(id) ?? 0), 0);
-    candidate.sharedFraction = Math.min(1, Math.max(sharedMeters, geometricSharedMeters(primary, candidate, graph)) / (primary.distanceKm * 1000));
-    if (candidate.sharedFraction <= maxShared && candidate.distanceKm <= primary.distanceKm * maxRatio && (!alternative || candidate.distanceKm < alternative.distanceKm)) alternative = candidate;
+    const sharedDistance = Math.max(sharedMeters, geometricSharedMeters(primary, candidate, graph));
+    candidate.sharedFraction = Math.min(1, sharedDistance / (primary.distanceKm * 1000));
+    // Rank viable reserves by road suitability AND independence. Picking the
+    // shortest candidate again would undo the primary-edge avoidance search.
+    const score = candidate.routingCost + 12 * sharedDistance;
+    if (candidate.sharedFraction <= maxShared && candidate.distanceKm <= primary.distanceKm * maxRatio && (score < alternativeScore)) { alternative = candidate; alternativeScore = score; }
   }
   const publicRoute = route => {
     if (!route) return null;
-    const { edgeMeters, ...result } = route;
+    const { edgeMeters, routingCost, ...result } = route;
     return result;
   };
   return { primary: publicRoute(primary), alternative: publicRoute(alternative), reason: '', alternativeReason: alternative ? '' : 'no_materially_different_alternative', snaps, blockedEdgeCount: blocked.size, stats: graph.stats };
