@@ -11,6 +11,10 @@ const roadCost = edge => ROAD_COST[edge.road.cls] || 1;
 const CLASSES = new Set(['dn', 'dj', 'dc', 'local', 'street', 'service', 'track']);
 const HIGHWAYS = new Set(['motorway', 'motorway_link', 'trunk', 'trunk_link', 'primary', 'primary_link', 'secondary', 'secondary_link', 'tertiary', 'tertiary_link', 'unclassified', 'residential', 'living_street', 'service', 'track', 'road']);
 const NON_DRIVING = new Set(['footway', 'pedestrian', 'path', 'steps', 'cycleway', 'bridleway', 'corridor', 'construction', 'proposed']);
+// Operator-confirmed physical non-motor continuation: Octav Băncilă →
+// Pietonalul Unirii, Botoșani (2026-10-19). Keep the drivable part of
+// Octav Băncilă available; reject only this way, even if source tags change.
+const CONFIRMED_NON_MOTOR_WAYS = new Set(['w686307418']);
 const RESTRICTED = new Set(['no', 'private', 'agricultural', 'forestry', 'delivery', 'customers', 'destination']);
 const list = value => Array.isArray(value) ? value : value?.features ?? [];
 const lines = geometry => geometry?.type === 'LineString' && Array.isArray(geometry.coordinates) ? [geometry.coordinates] : geometry?.type === 'MultiLineString' && Array.isArray(geometry.coordinates) ? geometry.coordinates.filter(Array.isArray) : [];
@@ -29,6 +33,8 @@ function makeProjector(latitude) {
 }
 const gradeOf = p => `${Number(p.layer) || 0}:${flag(p.bridge) ? 1 : 0}:${flag(p.tunnel) ? 1 : 0}`;
 function drivable(p) {
+  const osm = String(p.osm ?? '').replace(/^way\//, 'w').replace(/^(\d+)$/, 'w$1');
+  if (CONFIRMED_NON_MOTOR_WAYS.has(osm)) return false;
   const highway = text(p.hw ?? p.highway), cls = text(p.cls);
   if (NON_DRIVING.has(highway) || ['rail', 'railway', 'footway', 'pedestrian'].includes(cls)) return false;
   if (!CLASSES.has(cls) && !HIGHWAYS.has(highway)) return false;

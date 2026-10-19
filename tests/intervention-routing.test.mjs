@@ -174,3 +174,10 @@ test('a reasonable main-road route is preferred to a shorter access-alley shortc
   assert.ok(result.alternative);
   assert.equal(result.alternative.roads[0].cls, 'service');
 });
+
+test('confirmed Octav Bancila pedestrian continuation stays excluded even if source tags claim motor or emergency access', () => {
+  for (const osm of ['w686307418', 'way/686307418', 686307418]) {
+    isFailure(route(A, C, [road([A, C], { osm, cls: 'street', hw: 'residential', motor_vehicle: 'yes', emergency: 'yes' })]));
+  }
+  assert.ok(route(A, C, [road([A, C], {osm:'w34140646', cls:'street', hw:'residential', name:'Strada Octav Băncilă'})]).primary, 'The drivable section is preserved');
+});

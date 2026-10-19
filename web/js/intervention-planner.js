@@ -114,7 +114,7 @@ export function createInterventionPlanner(ctx) {
     feedback = ''; lastResult = null;
     try {
       if (!worker) {
-        worker = ctx.createWorker ? ctx.createWorker() : new Worker(new URL('./intervention-route-worker.js?v=20261019-road-priority', import.meta.url), { type: 'module' });
+        worker = ctx.createWorker ? ctx.createWorker() : new Worker(new URL('./intervention-route-worker.js?v=20261019-unirii-access', import.meta.url), { type: 'module' });
         worker.onmessage = ({ data }) => {
           const current = request;
           if (!current || data?.id !== current.id) return;

@@ -1,4 +1,4 @@
-import { prepareInterventionGraph, computeInterventionRoutes } from './intervention-routing.js?v=20261019-road-priority';
+import { prepareInterventionGraph, computeInterventionRoutes } from './intervention-routing.js?v=20261019-unirii-access';
 
 let graphPromise = null;
 function graph() {

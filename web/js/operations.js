@@ -9,7 +9,7 @@ import { circle } from "./geo.js";
 import { LAYER_GROUPS, LAYER_PRESETS } from "./config.js?v=20261018-itineraries-v2";
 import { localTime, isoTime, dateLabel } from "./operations-time.js";
 import { createOperationsCards } from "./operations-cards.js?v=20261018-cards";
-import { createInterventionPlanner } from "./intervention-planner.js?v=20261019-road-priority";
+import { createInterventionPlanner } from "./intervention-planner.js?v=20261019-unirii-access";
 
 const FC = (features = []) => ({ type: "FeatureCollection", features });
 const esc = (value) => String(value ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
