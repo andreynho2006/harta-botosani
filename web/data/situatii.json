@@ -1,34 +1,206 @@
 {
   "format": "harta-botosani-events",
   "version": 1,
-  "exportedAt": "2026-10-17T18:45:00.000Z",
+  "exportedAt": "2026-10-19T07:32:20.806895Z",
   "events": [
     {
-      "id": "cjsu-exemplu-iarna-dj29",
-      "title": "Viscol și înzăpezire · Situație CJSU (DJ29 km 3–6)",
+      "notes": "Activare Plan Roșu de Intervenție la nivelul municipiului Botoșani. Evacuarea completă a personalului și a cetățenilor din clădire. Închiderea perimetrului central (Piața Revoluției / str. Cuza Vodă / str. Mihail Kogălniceanu). Mobilizare forțe ISU Botoșani, Detașamentul Dorohoi în rezervă, echipaje SAJ, IPJ și IJJ.",
+      "isolateArea": false,
+      "title": "Incendiu cu degajari mari de fum - Primaria Municipiului Botosani",
+      "visible": {
+        "rail": false,
+        "roadlabels": true,
+        "poi:politie": false,
+        "road:local": true,
+        "bld:public": true,
+        "road:track": true,
+        "bld:casa": true,
+        "poi:medical": false,
+        "poi:gradinita": false,
+        "road:service": false,
+        "poi:scoala": false,
+        "poi:ambulanta": true,
+        "poi:baraj": false,
+        "bld:altele": false,
+        "rivers": true,
+        "places": true,
+        "road:dn": true,
+        "water": true,
+        "poi:frontiera": false,
+        "poi:pompieri": true,
+        "bld:anexa": false,
+        "landuse": true,
+        "streams": false,
+        "uat": true,
+        "hidranti": true,
+        "poi:sursa_apa": true,
+        "poi:primarie": false,
+        "poi:carburant": false,
+        "hidranti_defecti": true,
+        "bld:cult": false,
+        "road:dc": true,
+        "bld:industrial": true,
+        "poi:jandarmerie": false,
+        "road:dj": true,
+        "dams": false,
+        "road:street": true,
+        "poi:spital": true,
+        "bld:bloc": true,
+        "bld:comercial": true
+      },
+      "features": {
+        "type": "FeatureCollection",
+        "features": [
+          {
+            "type": "Feature",
+            "geometry": {
+              "type": "Polygon",
+              "coordinates": [
+                [
+                  [
+                    26.662796078600962,
+                    47.74545393468313
+                  ],
+                  [
+                    26.662786897223384,
+                    47.745253286024536
+                  ],
+                  [
+                    26.66313119889523,
+                    47.745336632484225
+                  ],
+                  [
+                    26.66281903204566,
+                    47.745457021579426
+                  ],
+                  [
+                    26.662796078600962,
+                    47.74545393468313
+                  ]
+                ]
+              ]
+            },
+            "properties": {
+              "id": "29434e18-0ee9-4ce0-853a-6f98e242c96c",
+              "kind": "fire",
+              "status": "confirmed",
+              "title": "Zona afectata de incendiu",
+              "road": "",
+              "kmFrom": null,
+              "kmTo": null,
+              "source": "ISU Botoșani",
+              "observedAt": "2026-10-18T09:24:00.000Z",
+              "notes": "Aprox. 120 persoane evacuate, 2 asistate medical",
+              "personnel": "1 ofiter 14 subofiteri",
+              "vehicles": "2 ASAS, 1 S45 2 EPA, 1 TIM"
+            }
+          },
+          {
+            "type": "Feature",
+            "geometry": {
+              "type": "Point",
+              "coordinates": [
+                26.663298633345534,
+                47.744649921825555
+              ]
+            },
+            "properties": {
+              "id": "3cf2cc35-8945-45a6-aefd-281a600d9a9f",
+              "kind": "command",
+              "status": "confirmed",
+              "title": "PCM",
+              "road": "",
+              "kmFrom": null,
+              "kmTo": null,
+              "source": "ISU / CJSU Botoșani",
+              "observedAt": "2026-10-18T09:29:00.000Z",
+              "notes": ""
+            }
+          },
+          {
+            "type": "Feature",
+            "geometry": {
+              "type": "Point",
+              "coordinates": [
+                26.663284867467183,
+                47.744190867235716
+              ]
+            },
+            "properties": {
+              "id": "525bdd6b-f937-4f7d-bb63-70bb62872d56",
+              "kind": "medical",
+              "status": "confirmed",
+              "title": "Echipaj SAJ / SMURD / PMA",
+              "road": "",
+              "kmFrom": null,
+              "kmTo": null,
+              "source": "SAJ / SMURD Botoșani",
+              "observedAt": "2026-10-18T09:30:00.000Z",
+              "notes": ""
+            }
+          },
+          {
+            "type": "Feature",
+            "geometry": {
+              "type": "Point",
+              "coordinates": [
+                26.662970402607954,
+                47.7439966817918
+              ]
+            },
+            "properties": {
+              "id": "2a2ed187-ab1a-49ba-b3da-ad0038c5b086",
+              "kind": "shelter",
+              "status": "confirmed",
+              "title": "Punct sprijin / adăpostire sinistrați",
+              "road": "",
+              "kmFrom": null,
+              "kmTo": null,
+              "source": "CLSU / Primărie",
+              "observedAt": "2026-10-18T09:30:00.000Z",
+              "notes": "",
+              "personnel": " 1 SVSU, 1 ofter ISU BT"
+            }
+          }
+        ]
+      },
+      "tintAreas": true,
+      "updatedAt": "2026-10-19T07:31:08.050Z",
+      "areas": [
+        "Botoșani"
+      ],
+      "alert": {
+        "text": "Incendiu major la sediul Primăriei Municipiului Botoșani (Piața Revoluției). Degajări dense de fum. Evitați zona centrală, eliberați căile de acces pentru autospecialele de intervenție.",
+        "code": "ro-alert",
+        "validFrom": "2026-10-18T07:18:00.000Z",
+        "validTo": "",
+        "source": "ISU BT"
+      },
+      "createdAt": "2026-10-18T09:18:19.496Z",
+      "view": {
+        "zoom": 16.25,
+        "pitch": 0,
+        "bearing": 0,
+        "center": [
+          26.66345,
+          47.744138
+        ]
+      },
+      "type": "fire",
+      "id": "2505e7dc-fc85-4b74-8550-a281ef4ea04a"
+    },
+    {
       "type": "snow",
       "createdAt": "2026-10-16T08:00:00.000Z",
-      "updatedAt": "2026-10-17T18:45:00.000Z",
-      "alert": {
-        "code": "orange",
-        "source": "ANM / IGSU RO-Alert",
-        "validFrom": "2026-10-16T06:00:00.000Z",
-        "validTo": "2026-10-16T20:00:00.000Z",
-        "text": "Cod portocaliu de viscol puternic, vizibilitate sub 50 m și troienirea zăpezii."
+      "view": {
+        "bearing": 0,
+        "pitch": 10.000000000000002,
+        "center": [
+          27.17848950000007,
+          47.5793810995128
+        ],
+        "zoom": 13.292493631484255
       },
-      "notes": "Sectoare de drum închise temporar circulației pentru deszăpezire. Filtre IPJ și echipaje ISU în teren.",
-      "areas": [
-        "Vlădeni",
-        "Mihai Eminescu",
-        "Răuseni",
-        "Hlipiceni"
-      ],
-      "places": [
-        "Huțani",
-        "Vlădeni"
-      ],
-      "isolateArea": false,
-      "tintAreas": true,
       "features": {
         "type": "FeatureCollection",
         "features": [
@@ -99,10 +271,10 @@
               "road": "DJ29",
               "kmFrom": 3,
               "kmTo": 6,
-              "lengthKm": 3,
               "source": "SDN / DJDP Botoșani · IPJ",
               "observedAt": "2026-10-16T09:15:00.000Z",
-              "notes": "Sector impracticabil din cauza sulurilor de zăpadă (km 3 – km 6). Se acționează cu autofreză."
+              "notes": "Sector impracticabil din cauza sulurilor de zăpadă (km 3 – km 6). Se acționează cu autofreză.",
+              "lengthKm": 3
             }
           },
           {
@@ -311,15 +483,15 @@
             "properties": {
               "id": "mark-dj282-km8-14",
               "kind": "snow",
-              "status": "reported",
+              "status": "resolved",
               "title": "DJ282 · km 8–14 (6 km) · Răuseni – Hlipiceni",
               "road": "DJ282",
               "kmFrom": 8,
               "kmTo": 14,
-              "lengthKm": 6,
               "source": "DJDP Botoșani",
-              "observedAt": "2026-10-16T09:30:00.000Z",
-              "notes": "Circulație îngreunată de viscol între Răuseni și Hlipiceni."
+              "observedAt": "2026-10-18T12:36:36.452Z",
+              "notes": "Circulație îngreunată de viscol între Răuseni și Hlipiceni.",
+              "lengthKm": 6
             }
           },
           {
@@ -340,10 +512,10 @@
               "kmFrom": 3,
               "kmTo": null,
               "source": "IPJ Botoșani",
-              "personnel": "2 agenți Poliția Rutieră, 2 jandarmi IJJ",
-              "vehicles": "1 autospecială IPJ, 1 autospecială IJJ",
               "observedAt": "2026-10-16T09:20:00.000Z",
-              "notes": "Echipaj mixt IPJ / IJJ pentru restricționarea accesului pe sectorul închis."
+              "notes": "Echipaj mixt IPJ / IJJ pentru restricționarea accesului pe sectorul închis.",
+              "personnel": "2 agenți Poliția Rutieră, 2 jandarmi IJJ",
+              "vehicles": "1 autospecială IPJ, 1 autospecială IJJ"
             }
           },
           {
@@ -364,10 +536,10 @@
               "kmFrom": 6,
               "kmTo": null,
               "source": "ISU Botoșani (Detașamentul Botoșani)",
-              "personnel": "1 ofițer, 6 subofițeri",
-              "vehicles": "1 ASAS, 1 autofreză de zăpadă, 1 șenilată UTV",
               "observedAt": "2026-10-16T09:25:00.000Z",
-              "notes": "Se acționează pentru deblocarea persoanelor surprinse în trafic și sprijin medical de urgență."
+              "notes": "Se acționează pentru deblocarea persoanelor surprinse în trafic și sprijin medical de urgență.",
+              "personnel": "1 ofițer, 6 subofițeri",
+              "vehicles": "1 ASAS, 1 autofreză de zăpadă, 1 șenilată UTV"
             }
           },
           {
@@ -387,13 +559,13 @@
               "road": "DJ29",
               "kmFrom": 4.5,
               "kmTo": null,
+              "source": "ISU Botoșani, IPJ Botoșani, SDN Botoșani",
+              "observedAt": "2026-10-16T09:35:00.000Z",
+              "notes": "Se intervine cu șenilata ISU și autofreza SDN pentru degajare.",
               "affectedPersons": "7 persoane (5 adulți, 2 copii)",
               "affectedAssets": "3 autoturisme",
-              "source": "ISU Botoșani, IPJ Botoșani, SDN Botoșani",
               "personnel": "3 subofițeri ISU, 2 agenți IPJ, 1 operator SDN",
-              "vehicles": "1 șenilată ISU, 1 autofreză SDN, 1 autospecială IPJ",
-              "observedAt": "2026-10-16T09:35:00.000Z",
-              "notes": "Se intervine cu șenilata ISU și autofreza SDN pentru degajare."
+              "vehicles": "1 șenilată ISU, 1 autofreză SDN, 1 autospecială IPJ"
             }
           },
           {
@@ -408,40 +580,1503 @@
             "properties": {
               "id": "mark-case-inzapezite-1",
               "kind": "houses",
-              "status": "confirmed",
+              "status": "resolved",
               "title": "3 gospodării înzăpezite · sat Vlădeni",
               "road": "",
               "kmFrom": null,
               "kmTo": null,
+              "source": "CLSU Vlădeni / SVSU",
+              "observedAt": "2026-10-18T07:13:05.985Z",
+              "notes": "Căi de acces troienite; SVSU Vlădeni acționează pentru deblocare.",
               "affectedPersons": "5 persoane vârstnice monitorizate",
               "affectedAssets": "3 gospodării înzăpezite",
-              "source": "CLSU Vlădeni / SVSU",
               "personnel": "2 lucrători SVSU Vlădeni",
-              "vehicles": "1 buldoexcavator SVSU",
-              "observedAt": "2026-10-16T09:40:00.000Z",
-              "notes": "Căi de acces troienite; SVSU Vlădeni acționează pentru deblocare."
+              "vehicles": "1 buldoexcavator SVSU"
             }
           }
         ]
       },
-      "view": null,
+      "tintAreas": true,
+      "updatedAt": "2026-10-19T07:31:08.050Z",
+      "areas": [
+        "Vlădeni"
+      ],
+      "alert": {
+        "validTo": "2026-10-16T20:00:00.000Z",
+        "validFrom": "2026-10-16T06:00:00.000Z",
+        "text": "Cod portocaliu de viscol puternic, vizibilitate sub 50 m și troienirea zăpezii.",
+        "code": "orange",
+        "source": "ANM / IGSU RO-Alert"
+      },
+      "id": "cjsu-exemplu-iarna-dj29",
+      "notes": "Sectoare de drum închise temporar circulației pentru deszăpezire. Filtre IPJ și echipaje ISU în teren.",
       "visible": {
-        "uat": true,
-        "places": true,
-        "road:dn": true,
-        "road:dj": true,
         "road:dc": true,
-        "road:street": true,
-        "roadlabels": true,
-        "rail": true,
-        "water": true,
+        "poi:baraj": false,
         "rivers": true,
-        "poi:pompieri": true,
+        "places": true,
+        "bld:casa": false,
+        "hidranti_defecti": false,
+        "bld:anexa": false,
+        "poi:gradinita": false,
+        "poi:primarie": false,
+        "water": true,
         "poi:ambulanta": true,
+        "road:street": true,
+        "uat": true,
         "poi:spital": true,
-        "poi:politie": true,
+        "road:dj": true,
+        "dams": false,
         "poi:jandarmerie": true,
-        "poi:frontiera": true
+        "poi:frontiera": true,
+        "bld:public": false,
+        "poi:sursa_apa": false,
+        "road:local": false,
+        "rail": true,
+        "road:service": false,
+        "bld:industrial": false,
+        "poi:politie": true,
+        "road:track": false,
+        "poi:carburant": false,
+        "poi:pompieri": true,
+        "bld:bloc": false,
+        "roadlabels": true,
+        "landuse": false,
+        "streams": false,
+        "bld:altele": false,
+        "road:dn": true,
+        "hidranti": false,
+        "bld:cult": false,
+        "bld:comercial": false,
+        "poi:medical": false,
+        "poi:scoala": false
+      },
+      "isolateArea": true,
+      "title": "Viscol și înzăpezire · Situație CJSU (DJ29 km 3–6)"
+    },
+    {
+      "createdAt": "2026-10-18T12:06:05.749Z",
+      "isolateArea": false,
+      "view": {
+        "center": [
+          26.66999,
+          47.74889
+        ],
+        "zoom": 13.87,
+        "pitch": 0,
+        "bearing": 0
+      },
+      "type": "fire",
+      "areas": [],
+      "alert": {
+        "validTo": "",
+        "source": "",
+        "validFrom": "",
+        "code": "",
+        "text": ""
+      },
+      "tintAreas": true,
+      "updatedAt": "2026-10-19T06:13:49.550Z",
+      "id": "d3463f81-3965-403d-9ab6-8cf5b6a8ca1b",
+      "features": {
+        "type": "FeatureCollection",
+        "features": [
+          {
+            "type": "Feature",
+            "geometry": {
+              "type": "LineString",
+              "coordinates": [
+                [
+                  26.648401814936097,
+                  47.7522659797516
+                ],
+                [
+                  26.6484225,
+                  47.7522406
+                ],
+                [
+                  26.64857,
+                  47.7520584
+                ],
+                [
+                  26.6486156,
+                  47.7520043
+                ],
+                [
+                  26.6486022,
+                  47.751833
+                ],
+                [
+                  26.6485727,
+                  47.7517645
+                ],
+                [
+                  26.648562,
+                  47.75175
+                ],
+                [
+                  26.6486317,
+                  47.7517176
+                ],
+                [
+                  26.648621,
+                  47.7516887
+                ],
+                [
+                  26.6486263,
+                  47.7516545
+                ],
+                [
+                  26.6486478,
+                  47.7516256
+                ],
+                [
+                  26.6486853,
+                  47.7516004
+                ],
+                [
+                  26.6487309,
+                  47.7515859
+                ],
+                [
+                  26.6487846,
+                  47.7515823
+                ],
+                [
+                  26.6488329,
+                  47.7515914
+                ],
+                [
+                  26.648806,
+                  47.7514633
+                ],
+                [
+                  26.649152,
+                  47.7513551
+                ],
+                [
+                  26.6494524,
+                  47.7512505
+                ],
+                [
+                  26.6495302,
+                  47.7512433
+                ],
+                [
+                  26.6499433,
+                  47.7511297
+                ],
+                [
+                  26.6502893,
+                  47.7510377
+                ],
+                [
+                  26.650646,
+                  47.7509367
+                ],
+                [
+                  26.6509947,
+                  47.7508321
+                ],
+                [
+                  26.651507,
+                  47.7506897
+                ],
+                [
+                  26.6521052,
+                  47.7505472
+                ],
+                [
+                  26.652301,
+                  47.7505436
+                ],
+                [
+                  26.6524941,
+                  47.7505688
+                ],
+                [
+                  26.6526979,
+                  47.7506103
+                ],
+                [
+                  26.652832,
+                  47.7506283
+                ],
+                [
+                  26.6532022,
+                  47.7506788
+                ],
+                [
+                  26.6534302,
+                  47.7507023
+                ],
+                [
+                  26.6535911,
+                  47.7507023
+                ],
+                [
+                  26.6537333,
+                  47.7506861
+                ],
+                [
+                  26.6539451,
+                  47.7506572
+                ],
+                [
+                  26.6542268,
+                  47.7505851
+                ],
+                [
+                  26.65479,
+                  47.7504246
+                ],
+                [
+                  26.6554955,
+                  47.7502081
+                ],
+                [
+                  26.6576761,
+                  47.7496004
+                ],
+                [
+                  26.6595563,
+                  47.7490882
+                ],
+                [
+                  26.659846,
+                  47.7490215
+                ],
+                [
+                  26.6598782,
+                  47.7489926
+                ],
+                [
+                  26.659838,
+                  47.7487636
+                ],
+                [
+                  26.6593927,
+                  47.7483939
+                ],
+                [
+                  26.6592667,
+                  47.7482911
+                ],
+                [
+                  26.6587409,
+                  47.7478564
+                ],
+                [
+                  26.6585961,
+                  47.7477284
+                ],
+                [
+                  26.6588777,
+                  47.7476671
+                ],
+                [
+                  26.6608492,
+                  47.7471873
+                ],
+                [
+                  26.6613212,
+                  47.7468952
+                ],
+                [
+                  26.6614285,
+                  47.7467112
+                ],
+                [
+                  26.6614366,
+                  47.746695
+                ],
+                [
+                  26.6614982,
+                  47.7465759
+                ],
+                [
+                  26.6617343,
+                  47.7460295
+                ],
+                [
+                  26.6617611,
+                  47.746015
+                ],
+                [
+                  26.6617987,
+                  47.7460078
+                ],
+                [
+                  26.6620186,
+                  47.7459862
+                ],
+                [
+                  26.66237,
+                  47.7459483
+                ],
+                [
+                  26.6627991,
+                  47.7459032
+                ],
+                [
+                  26.663011,
+                  47.7458834
+                ],
+                [
+                  26.6632792,
+                  47.7458491
+                ],
+                [
+                  26.6631988,
+                  47.7457679
+                ],
+                [
+                  26.6631827,
+                  47.7455804
+                ]
+              ]
+            },
+            "properties": {
+              "id": "7d3ad73a-fa78-4aeb-942f-38022d8d7a3d",
+              "kind": "route_primary",
+              "status": "reported",
+              "title": "Itinerar de bază · Garda Botoșani → Primăria Botoșani · Botoșani · Piața Revoluției 1, Botoșani",
+              "road": "",
+              "kmFrom": null,
+              "kmTo": null,
+              "source": "Garda Botoșani",
+              "observedAt": "2026-10-19T06:13:49.550Z",
+              "notes": "Propunere pe rețeaua hărții; accesul și gabaritul autospecialei trebuie verificate în teren.",
+              "lengthKm": 1.65,
+              "routeGroup": "itinerary-garda-botosani-26662969-47745412",
+              "subunitId": "garda-botosani",
+              "objectiveId": "poi:8",
+              "origin": [
+                26.648383,
+                47.752259
+              ],
+              "destination": [
+                26.662969,
+                47.745412
+              ]
+            }
+          },
+          {
+            "type": "Feature",
+            "geometry": {
+              "type": "LineString",
+              "coordinates": [
+                [
+                  26.648401814936097,
+                  47.7522659797516
+                ],
+                [
+                  26.6484225,
+                  47.7522406
+                ],
+                [
+                  26.64857,
+                  47.7520584
+                ],
+                [
+                  26.6486156,
+                  47.7520043
+                ],
+                [
+                  26.6486022,
+                  47.751833
+                ],
+                [
+                  26.6485727,
+                  47.7517645
+                ],
+                [
+                  26.648562,
+                  47.75175
+                ],
+                [
+                  26.6485083,
+                  47.7516743
+                ],
+                [
+                  26.6483849,
+                  47.7515535
+                ],
+                [
+                  26.648275,
+                  47.7515715
+                ],
+                [
+                  26.6481623,
+                  47.7515733
+                ],
+                [
+                  26.6480362,
+                  47.7515571
+                ],
+                [
+                  26.6479477,
+                  47.7515373
+                ],
+                [
+                  26.6478378,
+                  47.7514958
+                ],
+                [
+                  26.6477278,
+                  47.7514453
+                ],
+                [
+                  26.6476205,
+                  47.7513948
+                ],
+                [
+                  26.6472638,
+                  47.7512
+                ],
+                [
+                  26.6472048,
+                  47.7511603
+                ],
+                [
+                  26.6469365,
+                  47.7510467
+                ],
+                [
+                  26.6467488,
+                  47.7509836
+                ],
+                [
+                  26.6466013,
+                  47.7509385
+                ],
+                [
+                  26.646435,
+                  47.7509115
+                ],
+                [
+                  26.6459092,
+                  47.7509656
+                ],
+                [
+                  26.6458207,
+                  47.750953
+                ],
+                [
+                  26.6457832,
+                  47.7509421
+                ],
+                [
+                  26.6457269,
+                  47.7509061
+                ],
+                [
+                  26.6457108,
+                  47.7508862
+                ],
+                [
+                  26.6456491,
+                  47.7507979
+                ],
+                [
+                  26.6453594,
+                  47.750466
+                ],
+                [
+                  26.6450241,
+                  47.7501324
+                ],
+                [
+                  26.6451073,
+                  47.7500585
+                ],
+                [
+                  26.6451931,
+                  47.7500134
+                ],
+                [
+                  26.6453111,
+                  47.7499845
+                ],
+                [
+                  26.6456357,
+                  47.7499503
+                ],
+                [
+                  26.6465986,
+                  47.749411
+                ],
+                [
+                  26.6471082,
+                  47.74909
+                ],
+                [
+                  26.6475642,
+                  47.7488339
+                ],
+                [
+                  26.6482159,
+                  47.7484588
+                ],
+                [
+                  26.6486666,
+                  47.7482045
+                ],
+                [
+                  26.6490394,
+                  47.7479935
+                ],
+                [
+                  26.649667,
+                  47.7476238
+                ],
+                [
+                  26.6509813,
+                  47.7468807
+                ],
+                [
+                  26.6512281,
+                  47.7467401
+                ],
+                [
+                  26.6512817,
+                  47.7467112
+                ],
+                [
+                  26.6513622,
+                  47.7466679
+                ],
+                [
+                  26.6519389,
+                  47.7463324
+                ],
+                [
+                  26.6523814,
+                  47.7460619
+                ],
+                [
+                  26.6526899,
+                  47.7458924
+                ],
+                [
+                  26.652832,
+                  47.7458112
+                ],
+                [
+                  26.6531458,
+                  47.7456309
+                ],
+                [
+                  26.6535267,
+                  47.7453874
+                ],
+                [
+                  26.6537949,
+                  47.7452503
+                ],
+                [
+                  26.6542268,
+                  47.7449924
+                ],
+                [
+                  26.654959,
+                  47.7446064
+                ],
+                [
+                  26.6552487,
+                  47.7444134
+                ],
+                [
+                  26.655584,
+                  47.7441988
+                ],
+                [
+                  26.6556698,
+                  47.7441447
+                ],
+                [
+                  26.6558442,
+                  47.744004
+                ],
+                [
+                  26.6560587,
+                  47.7438128
+                ],
+                [
+                  26.6563484,
+                  47.7435242
+                ],
+                [
+                  26.6564342,
+                  47.7434449
+                ],
+                [
+                  26.6565335,
+                  47.7433385
+                ],
+                [
+                  26.6568822,
+                  47.743003
+                ],
+                [
+                  26.6569492,
+                  47.7429326
+                ],
+                [
+                  26.6577592,
+                  47.7421318
+                ],
+                [
+                  26.6579765,
+                  47.7419045
+                ],
+                [
+                  26.6580436,
+                  47.7418378
+                ],
+                [
+                  26.6586095,
+                  47.7412877
+                ],
+                [
+                  26.6587356,
+                  47.7410965
+                ],
+                [
+                  26.658875,
+                  47.7409233
+                ],
+                [
+                  26.6588455,
+                  47.7408764
+                ],
+                [
+                  26.6588429,
+                  47.7408421
+                ],
+                [
+                  26.658859,
+                  47.7408079
+                ],
+                [
+                  26.6588885,
+                  47.740779
+                ],
+                [
+                  26.6589528,
+                  47.7407501
+                ],
+                [
+                  26.6590279,
+                  47.7407447
+                ],
+                [
+                  26.6590762,
+                  47.7407538
+                ],
+                [
+                  26.6591164,
+                  47.7407718
+                ],
+                [
+                  26.6591486,
+                  47.740797
+                ],
+                [
+                  26.6591674,
+                  47.7408277
+                ],
+                [
+                  26.6593337,
+                  47.740889
+                ],
+                [
+                  26.6596985,
+                  47.7411145
+                ],
+                [
+                  26.6605836,
+                  47.7416917
+                ],
+                [
+                  26.6606051,
+                  47.7417043
+                ],
+                [
+                  26.6614956,
+                  47.7422941
+                ],
+                [
+                  26.6621071,
+                  47.7427018
+                ],
+                [
+                  26.6623673,
+                  47.7428749
+                ],
+                [
+                  26.6625899,
+                  47.7430156
+                ],
+                [
+                  26.6628796,
+                  47.7431383
+                ],
+                [
+                  26.6628474,
+                  47.7431563
+                ],
+                [
+                  26.6628233,
+                  47.7431797
+                ],
+                [
+                  26.6628098,
+                  47.7432068
+                ],
+                [
+                  26.6628098,
+                  47.7432357
+                ],
+                [
+                  26.6628233,
+                  47.7432645
+                ],
+                [
+                  26.6628474,
+                  47.743288
+                ],
+                [
+                  26.6628796,
+                  47.743306
+                ],
+                [
+                  26.6629198,
+                  47.7433168
+                ],
+                [
+                  26.663003,
+                  47.7433132
+                ],
+                [
+                  26.6627857,
+                  47.7435296
+                ],
+                [
+                  26.6626704,
+                  47.7438074
+                ],
+                [
+                  26.662437,
+                  47.7443683
+                ],
+                [
+                  26.6621634,
+                  47.7450104
+                ],
+                [
+                  26.6624022,
+                  47.7450465
+                ],
+                [
+                  26.6626033,
+                  47.7450663
+                ],
+                [
+                  26.6629305,
+                  47.7451132
+                ],
+                [
+                  26.6630486,
+                  47.7451168
+                ],
+                [
+                  26.6630968,
+                  47.7450916
+                ],
+                [
+                  26.6631398,
+                  47.7450591
+                ],
+                [
+                  26.6633382,
+                  47.7446299
+                ],
+                [
+                  26.6633087,
+                  47.7445649
+                ],
+                [
+                  26.6633141,
+                  47.7445397
+                ],
+                [
+                  26.663762,
+                  47.7446497
+                ],
+                [
+                  26.6635931,
+                  47.7450068
+                ],
+                [
+                  26.6635984,
+                  47.7450339
+                ],
+                [
+                  26.6636252,
+                  47.7450501
+                ],
+                [
+                  26.6638184,
+                  47.7450934
+                ],
+                [
+                  26.6639417,
+                  47.7451222
+                ],
+                [
+                  26.6638559,
+                  47.7453098
+                ],
+                [
+                  26.6638184,
+                  47.7453369
+                ],
+                [
+                  26.6637594,
+                  47.7453549
+                ],
+                [
+                  26.6636413,
+                  47.7453549
+                ],
+                [
+                  26.6634214,
+                  47.7457679
+                ],
+                [
+                  26.6633812,
+                  47.745813
+                ],
+                [
+                  26.6633302,
+                  47.7458365
+                ],
+                [
+                  26.6632792,
+                  47.7458491
+                ],
+                [
+                  26.6631988,
+                  47.7457679
+                ],
+                [
+                  26.6631827,
+                  47.7455804
+                ]
+              ]
+            },
+            "properties": {
+              "id": "27eb0c76-4d08-4258-8d9b-e9a7fd60e0e5",
+              "kind": "route_backup",
+              "status": "reported",
+              "title": "Itinerar de rezervă · Garda Botoșani → Primăria Botoșani · Botoșani · Piața Revoluției 1, Botoșani",
+              "road": "",
+              "kmFrom": null,
+              "kmTo": null,
+              "source": "Garda Botoșani",
+              "observedAt": "2026-10-19T06:13:49.550Z",
+              "notes": "Propunere pe rețeaua hărții; accesul și gabaritul autospecialei trebuie verificate în teren.",
+              "lengthKm": 2.92,
+              "routeGroup": "itinerary-garda-botosani-26662969-47745412",
+              "subunitId": "garda-botosani",
+              "objectiveId": "poi:8",
+              "origin": [
+                26.648383,
+                47.752259
+              ],
+              "destination": [
+                26.662969,
+                47.745412
+              ]
+            }
+          }
+        ]
+      },
+      "title": "Incendiu primaria Botosani",
+      "notes": "",
+      "visible": {
+        "bld:bloc": true,
+        "road:local": true,
+        "bld:public": true,
+        "poi:primarie": false,
+        "road:track": true,
+        "water": true,
+        "poi:sursa_apa": true,
+        "rivers": true,
+        "places": true,
+        "roadlabels": true,
+        "poi:carburant": false,
+        "bld:altele": false,
+        "bld:cult": false,
+        "dams": false,
+        "road:dn": true,
+        "bld:comercial": true,
+        "streams": false,
+        "landuse": true,
+        "poi:jandarmerie": false,
+        "road:street": true,
+        "hidranti": true,
+        "poi:scoala": false,
+        "bld:anexa": false,
+        "road:dc": true,
+        "bld:industrial": true,
+        "hidranti_defecti": true,
+        "poi:baraj": false,
+        "rail": true,
+        "poi:politie": false,
+        "bld:casa": true,
+        "road:service": true,
+        "poi:spital": true,
+        "uat": true,
+        "poi:frontiera": false,
+        "poi:medical": false,
+        "poi:pompieri": true,
+        "poi:gradinita": false,
+        "poi:ambulanta": true,
+        "road:dj": true
+      }
+    },
+    {
+      "id": "incendiu-padure-agafton",
+      "isolateArea": false,
+      "alert": {
+        "code": "orange",
+        "text": "Cod portocaliu: vânt puternic cu rafale de 55-65 km/h, umiditate scăzută și risc ridicat de extindere a incendiilor de vegetație uscată în fondul forestier.",
+        "validFrom": "2026-10-18T10:00:00.000Z",
+        "source": "ANM / Ocolul Silvic / Dispecerat ISU",
+        "validTo": "2026-10-18T22:00:00.000Z"
+      },
+      "areas": [
+        "Curtești",
+        "Mihai Eminescu",
+        "Botoșani"
+      ],
+      "tintAreas": true,
+      "updatedAt": "2026-10-19T07:31:08.050Z",
+      "notes": "Incendiu activ de pădure în zona Mănăstirii Agafton. Se acționează pentru localizare și protejarea obiectivelor monahale și a locuințelor din proximitate. Traseu principal stabilit pe DJ207N/DC60A, traseu de rezervă pe DN29 Baisa.",
+      "type": "fire",
+      "title": "Incendiu fond forestier · Pădurea Agafton (Curtești)",
+      "createdAt": "2026-10-18T10:00:00.000Z",
+      "view": {
+        "center": [
+          26.62,
+          47.725
+        ],
+        "bearing": 0,
+        "pitch": 0,
+        "zoom": 13.2
+      },
+      "places": [
+        "Agafton",
+        "Curtești",
+        "Mănăstirea Doamnei",
+        "Hudum"
+      ],
+      "features": {
+        "type": "FeatureCollection",
+        "features": [
+          {
+            "type": "Feature",
+            "geometry": {
+              "type": "Polygon",
+              "coordinates": [
+                [
+                  [
+                    26.588,
+                    47.718
+                  ],
+                  [
+                    26.595,
+                    47.724
+                  ],
+                  [
+                    26.604,
+                    47.7215
+                  ],
+                  [
+                    26.6025,
+                    47.715
+                  ],
+                  [
+                    26.592,
+                    47.7125
+                  ],
+                  [
+                    26.588,
+                    47.718
+                  ]
+                ]
+              ]
+            },
+            "properties": {
+              "id": "incendiu-perimetru-agafton",
+              "kind": "fire",
+              "status": "confirmed",
+              "title": "Perimetru activ incendiu pădure Agafton",
+              "notes": "Incendiu de litieră și vegetație uscată cu propagare spre coronament. Suprafață estimată: 5.2 ha. Risc de extindere spre Mănăstirea Agafton.",
+              "personnel": "1 ofițer, 22 subofițeri ISU Botoșani, 8 lucrători Ocolul Silvic",
+              "vehicles": "4 ASAS ISU, 1 cisternă 10.000 l Curtești, 1 UTV intervenție rapidă"
+            }
+          },
+          {
+            "type": "Feature",
+            "geometry": {
+              "type": "LineString",
+              "coordinates": [
+                [
+                  26.6785,
+                  47.742
+                ],
+                [
+                  26.673,
+                  47.741
+                ],
+                [
+                  26.666,
+                  47.7375
+                ],
+                [
+                  26.65948,
+                  47.73415
+                ],
+                [
+                  26.65948,
+                  47.73415
+                ],
+                [
+                  26.65928,
+                  47.73382
+                ],
+                [
+                  26.65967,
+                  47.73186
+                ],
+                [
+                  26.66012,
+                  47.7307
+                ],
+                [
+                  26.66027,
+                  47.72963
+                ],
+                [
+                  26.66028,
+                  47.72914
+                ],
+                [
+                  26.6601,
+                  47.72774
+                ],
+                [
+                  26.65995,
+                  47.7273
+                ],
+                [
+                  26.65805,
+                  47.72537
+                ],
+                [
+                  26.65757,
+                  47.72478
+                ],
+                [
+                  26.65736,
+                  47.72384
+                ],
+                [
+                  26.65737,
+                  47.72356
+                ],
+                [
+                  26.65761,
+                  47.7229
+                ],
+                [
+                  26.65755,
+                  47.72277
+                ],
+                [
+                  26.6574,
+                  47.72266
+                ],
+                [
+                  26.65639,
+                  47.72226
+                ],
+                [
+                  26.65606,
+                  47.72207
+                ],
+                [
+                  26.65421,
+                  47.72021
+                ],
+                [
+                  26.65373,
+                  47.71927
+                ],
+                [
+                  26.65176,
+                  47.71787
+                ],
+                [
+                  26.65148,
+                  47.71772
+                ],
+                [
+                  26.65121,
+                  47.71766
+                ],
+                [
+                  26.65005,
+                  47.71775
+                ],
+                [
+                  26.64983,
+                  47.71765
+                ],
+                [
+                  26.6498,
+                  47.71754
+                ],
+                [
+                  26.64988,
+                  47.71738
+                ],
+                [
+                  26.65058,
+                  47.71697
+                ],
+                [
+                  26.65059,
+                  47.71659
+                ],
+                [
+                  26.64876,
+                  47.71362
+                ],
+                [
+                  26.64819,
+                  47.71396
+                ],
+                [
+                  26.64727,
+                  47.7147
+                ],
+                [
+                  26.64698,
+                  47.71486
+                ],
+                [
+                  26.64674,
+                  47.71486
+                ],
+                [
+                  26.64569,
+                  47.71412
+                ],
+                [
+                  26.64483,
+                  47.71333
+                ],
+                [
+                  26.64439,
+                  47.71279
+                ],
+                [
+                  26.64412,
+                  47.71256
+                ],
+                [
+                  26.6427,
+                  47.71153
+                ],
+                [
+                  26.64245,
+                  47.71141
+                ],
+                [
+                  26.64215,
+                  47.71144
+                ],
+                [
+                  26.64053,
+                  47.71215
+                ],
+                [
+                  26.63798,
+                  47.71356
+                ],
+                [
+                  26.63567,
+                  47.71498
+                ],
+                [
+                  26.63222,
+                  47.71644
+                ],
+                [
+                  26.63014,
+                  47.71723
+                ],
+                [
+                  26.62835,
+                  47.71809
+                ],
+                [
+                  26.62705,
+                  47.71861
+                ],
+                [
+                  26.62573,
+                  47.71943
+                ],
+                [
+                  26.62553,
+                  47.71951
+                ],
+                [
+                  26.62521,
+                  47.71954
+                ],
+                [
+                  26.62443,
+                  47.71935
+                ],
+                [
+                  26.61919,
+                  47.71692
+                ],
+                [
+                  26.61787,
+                  47.71637
+                ],
+                [
+                  26.61708,
+                  47.71623
+                ],
+                [
+                  26.61539,
+                  47.71606
+                ],
+                [
+                  26.61419,
+                  47.71624
+                ]
+              ]
+            },
+            "properties": {
+              "id": "traseu-principal-botosani-agafton",
+              "kind": "isu",
+              "status": "confirmed",
+              "title": "Traseu PRINCIPAL deplasare: Detașament Botoșani -> DJ207N -> DC60A Agafton",
+              "road": "DJ207N / DC60A",
+              "lengthKm": 8.4,
+              "kmFrom": 0,
+              "kmTo": 8.4,
+              "notes": "Traseul principal și cel mai rapid pentru autospeciale (8.4 km, timp estimat ~11 min). Drum practicabil pe toată lungimea.",
+              "personnel": "Coloană autospeciale ISU (3 ASAS, 1 SMURD B2)",
+              "vehicles": "3 autospeciale ASAS, 1 ambulanță SMURD"
+            }
+          },
+          {
+            "type": "Feature",
+            "geometry": {
+              "type": "LineString",
+              "coordinates": [
+                [
+                  26.6785,
+                  47.742
+                ],
+                [
+                  26.67,
+                  47.745
+                ],
+                [
+                  26.655,
+                  47.748
+                ],
+                [
+                  26.638,
+                  47.744
+                ],
+                [
+                  26.625,
+                  47.738
+                ],
+                [
+                  26.61675,
+                  47.73292
+                ],
+                [
+                  26.61675,
+                  47.73292
+                ],
+                [
+                  26.6166,
+                  47.73266
+                ],
+                [
+                  26.61498,
+                  47.73136
+                ],
+                [
+                  26.60591,
+                  47.72537
+                ],
+                [
+                  26.60513,
+                  47.7248
+                ],
+                [
+                  26.60498,
+                  47.72454
+                ],
+                [
+                  26.60466,
+                  47.72346
+                ],
+                [
+                  26.60609,
+                  47.72235
+                ],
+                [
+                  26.60714,
+                  47.72089
+                ],
+                [
+                  26.60815,
+                  47.72014
+                ],
+                [
+                  26.60821,
+                  47.71985
+                ],
+                [
+                  26.60816,
+                  47.71927
+                ],
+                [
+                  26.60822,
+                  47.71657
+                ],
+                [
+                  26.60843,
+                  47.71623
+                ],
+                [
+                  26.60897,
+                  47.71581
+                ],
+                [
+                  26.6092,
+                  47.71571
+                ],
+                [
+                  26.60975,
+                  47.71564
+                ],
+                [
+                  26.61238,
+                  47.71593
+                ],
+                [
+                  26.61419,
+                  47.71624
+                ],
+                [
+                  26.61539,
+                  47.71606
+                ],
+                [
+                  26.61708,
+                  47.71623
+                ]
+              ]
+            },
+            "properties": {
+              "id": "traseu-rezerva-dn29-agafton",
+              "kind": "command",
+              "status": "confirmed",
+              "title": "Traseu REZERVĂ: DN29 (Baisa) -> DC60A Hudum -> Mănăstirea Doamnei",
+              "road": "DN29 / DC60A",
+              "lengthKm": 11.2,
+              "kmFrom": 0,
+              "kmTo": 11.2,
+              "notes": "Traseu de rezervă pe drum național de mare viteză (11.2 km, timp estimat ~14 min). Se folosește în caz de blocaje pe DJ207N.",
+              "personnel": "1 echipaj sprijin ISU Botoșani",
+              "vehicles": "1 autocisternă 10.000 l, 1 microbuz transport personal"
+            }
+          },
+          {
+            "type": "Feature",
+            "geometry": {
+              "type": "Point",
+              "coordinates": [
+                26.5985,
+                47.7155
+              ]
+            },
+            "properties": {
+              "id": "pcm-agafton",
+              "kind": "command",
+              "status": "confirmed",
+              "title": "Punct de Comandă Mobil ISU Agafton",
+              "notes": "Amplasat la intersecția DC60A cu aleea de acces Mănăstirea Agafton. Coordonare forțe terestre și legătură radio dispecerat.",
+              "personnel": "Comandant intervenție (ofițer ISU), 2 subofițeri transmisiuni",
+              "vehicles": "1 autospecială Punct de Comandă Mobil (APCM)"
+            }
+          },
+          {
+            "type": "Feature",
+            "geometry": {
+              "type": "Point",
+              "coordinates": [
+                26.645,
+                47.714
+              ]
+            },
+            "properties": {
+              "id": "filtru-ipj-curtesti",
+              "kind": "police",
+              "status": "confirmed",
+              "title": "Filtru Poliție Rutieră IPJ Curtești - Agafton",
+              "notes": "Dirijare și restricționare acces trafic civil pe DC60A spre zona de intervenție. Prioritizare autospeciale de pompieri.",
+              "personnel": "2 agenți Poliție Rutieră IPJ Botoșani",
+              "vehicles": "1 autospecială IPJ"
+            }
+          },
+          {
+            "type": "Feature",
+            "geometry": {
+              "type": "Point",
+              "coordinates": [
+                26.6485,
+                47.7138
+              ]
+            },
+            "properties": {
+              "id": "punct-alimentare-apa",
+              "kind": "utility",
+              "status": "confirmed",
+              "title": "Punct de realimentare cu apă (Hidrant / Bazin Curtești)",
+              "notes": "Punct organizat pentru naveta cisternelor de alimentare cu apă a autospecialelor din linia întâi.",
+              "personnel": "1 echipă SVSU Curtești",
+              "vehicles": "1 motopompă de mare capacitate"
+            }
+          }
+        ]
       }
     }
   ]

@@ -176,7 +176,7 @@ async function init() {
     loadJSON("data/search.json", []),
     loadJSON("data/stats.json", null),
     loadJSON("data/roads.json", { roads: [] }),
-    loadJSON("data/situatii.json", null),
+    loadJSON("data/situatii.json?v=20261019-saved-alerts", null),
     loadJSON("data/subunitati.json?v=20261018-itineraries-v2", null),
   ]);
   state.data.osmPois = { ...pois, features: pois.features.filter((f) => f.properties.cat !== "hidrant_osm") };

@@ -1,0 +1,448 @@
+{
+  "format": "harta-botosani-events",
+  "version": 1,
+  "exportedAt": "2026-10-17T18:45:00.000Z",
+  "events": [
+    {
+      "id": "cjsu-exemplu-iarna-dj29",
+      "title": "Viscol și înzăpezire · Situație CJSU (DJ29 km 3–6)",
+      "type": "snow",
+      "createdAt": "2026-10-16T08:00:00.000Z",
+      "updatedAt": "2026-10-17T18:45:00.000Z",
+      "alert": {
+        "code": "orange",
+        "source": "ANM / IGSU RO-Alert",
+        "validFrom": "2026-10-16T06:00:00.000Z",
+        "validTo": "2026-10-16T20:00:00.000Z",
+        "text": "Cod portocaliu de viscol puternic, vizibilitate sub 50 m și troienirea zăpezii."
+      },
+      "notes": "Sectoare de drum închise temporar circulației pentru deszăpezire. Filtre IPJ și echipaje ISU în teren.",
+      "areas": [
+        "Vlădeni",
+        "Mihai Eminescu",
+        "Răuseni",
+        "Hlipiceni"
+      ],
+      "places": [
+        "Huțani",
+        "Vlădeni"
+      ],
+      "isolateArea": false,
+      "tintAreas": true,
+      "features": {
+        "type": "FeatureCollection",
+        "features": [
+          {
+            "type": "Feature",
+            "geometry": {
+              "type": "LineString",
+              "coordinates": [
+                [
+                  26.46631,
+                  47.707578
+                ],
+                [
+                  26.47877,
+                  47.71235
+                ],
+                [
+                  26.48027,
+                  47.71287
+                ],
+                [
+                  26.48071,
+                  47.71295
+                ],
+                [
+                  26.48162,
+                  47.71294
+                ],
+                [
+                  26.48261,
+                  47.71271
+                ],
+                [
+                  26.48526,
+                  47.71133
+                ],
+                [
+                  26.49054,
+                  47.70931
+                ],
+                [
+                  26.49119,
+                  47.70916
+                ],
+                [
+                  26.49176,
+                  47.70911
+                ],
+                [
+                  26.49307,
+                  47.7091
+                ],
+                [
+                  26.49443,
+                  47.70916
+                ],
+                [
+                  26.502649,
+                  47.709928
+                ]
+              ]
+            },
+            "properties": {
+              "id": "mark-dj29-km3-6",
+              "kind": "blocked",
+              "status": "confirmed",
+              "title": "DJ29 · km 3–6 (3 km)",
+              "road": "DJ29",
+              "kmFrom": 3,
+              "kmTo": 6,
+              "lengthKm": 3,
+              "source": "SDN / DJDP Botoșani · IPJ",
+              "observedAt": "2026-10-16T09:15:00.000Z",
+              "notes": "Sector impracticabil din cauza sulurilor de zăpadă (km 3 – km 6). Se acționează cu autofreză."
+            }
+          },
+          {
+            "type": "Feature",
+            "geometry": {
+              "type": "LineString",
+              "coordinates": [
+                [
+                  27.206202,
+                  47.563693
+                ],
+                [
+                  27.20327,
+                  47.5633
+                ],
+                [
+                  27.20104,
+                  47.56292
+                ],
+                [
+                  27.20032,
+                  47.56288
+                ],
+                [
+                  27.19966,
+                  47.563
+                ],
+                [
+                  27.19859,
+                  47.56337
+                ],
+                [
+                  27.19712,
+                  47.56467
+                ],
+                [
+                  27.19647,
+                  47.56502
+                ],
+                [
+                  27.1936,
+                  47.56543
+                ],
+                [
+                  27.19167,
+                  47.56546
+                ],
+                [
+                  27.19054,
+                  47.56566
+                ],
+                [
+                  27.18916,
+                  47.56602
+                ],
+                [
+                  27.1879,
+                  47.56609
+                ],
+                [
+                  27.18744,
+                  47.56622
+                ],
+                [
+                  27.1865,
+                  47.56683
+                ],
+                [
+                  27.18224,
+                  47.57011
+                ],
+                [
+                  27.18174,
+                  47.57055
+                ],
+                [
+                  27.18095,
+                  47.5711
+                ],
+                [
+                  27.18051,
+                  47.57137
+                ],
+                [
+                  27.17889,
+                  47.57217
+                ],
+                [
+                  27.177,
+                  47.57287
+                ],
+                [
+                  27.17627,
+                  47.5732
+                ],
+                [
+                  27.1758,
+                  47.57354
+                ],
+                [
+                  27.17471,
+                  47.57456
+                ],
+                [
+                  27.17441,
+                  47.57477
+                ],
+                [
+                  27.17279,
+                  47.57564
+                ],
+                [
+                  27.17265,
+                  47.57584
+                ],
+                [
+                  27.17242,
+                  47.57682
+                ],
+                [
+                  27.17181,
+                  47.57779
+                ],
+                [
+                  27.17154,
+                  47.57797
+                ],
+                [
+                  27.17051,
+                  47.57828
+                ],
+                [
+                  27.16975,
+                  47.57868
+                ],
+                [
+                  27.16947,
+                  47.57894
+                ],
+                [
+                  27.16841,
+                  47.58033
+                ],
+                [
+                  27.16802,
+                  47.58102
+                ],
+                [
+                  27.16661,
+                  47.5852
+                ],
+                [
+                  27.16641,
+                  47.58546
+                ],
+                [
+                  27.16518,
+                  47.58644
+                ],
+                [
+                  27.16507,
+                  47.58668
+                ],
+                [
+                  27.16494,
+                  47.58745
+                ],
+                [
+                  27.16432,
+                  47.58833
+                ],
+                [
+                  27.16371,
+                  47.58896
+                ],
+                [
+                  27.16281,
+                  47.58959
+                ],
+                [
+                  27.15798,
+                  47.59181
+                ],
+                [
+                  27.15634,
+                  47.59237
+                ],
+                [
+                  27.1559,
+                  47.59265
+                ],
+                [
+                  27.15429,
+                  47.59401
+                ],
+                [
+                  27.15307,
+                  47.59455
+                ],
+                [
+                  27.150777,
+                  47.595877
+                ]
+              ]
+            },
+            "properties": {
+              "id": "mark-dj282-km8-14",
+              "kind": "snow",
+              "status": "reported",
+              "title": "DJ282 · km 8–14 (6 km) · Răuseni – Hlipiceni",
+              "road": "DJ282",
+              "kmFrom": 8,
+              "kmTo": 14,
+              "lengthKm": 6,
+              "source": "DJDP Botoșani",
+              "observedAt": "2026-10-16T09:30:00.000Z",
+              "notes": "Circulație îngreunată de viscol între Răuseni și Hlipiceni."
+            }
+          },
+          {
+            "type": "Feature",
+            "geometry": {
+              "type": "Point",
+              "coordinates": [
+                26.46631,
+                47.707578
+              ]
+            },
+            "properties": {
+              "id": "mark-filtru-ipj-1",
+              "kind": "police",
+              "status": "confirmed",
+              "title": "Filtru rutier IPJ · DJ29 km 3",
+              "road": "DJ29",
+              "kmFrom": 3,
+              "kmTo": null,
+              "source": "IPJ Botoșani",
+              "personnel": "2 agenți Poliția Rutieră, 2 jandarmi IJJ",
+              "vehicles": "1 autospecială IPJ, 1 autospecială IJJ",
+              "observedAt": "2026-10-16T09:20:00.000Z",
+              "notes": "Echipaj mixt IPJ / IJJ pentru restricționarea accesului pe sectorul închis."
+            }
+          },
+          {
+            "type": "Feature",
+            "geometry": {
+              "type": "Point",
+              "coordinates": [
+                26.502649,
+                47.709928
+              ]
+            },
+            "properties": {
+              "id": "mark-echipaj-isu-1",
+              "kind": "isu",
+              "status": "confirmed",
+              "title": "Echipaj intervenție ISU · DJ29 km 6",
+              "road": "DJ29",
+              "kmFrom": 6,
+              "kmTo": null,
+              "source": "ISU Botoșani (Detașamentul Botoșani)",
+              "personnel": "1 ofițer, 6 subofițeri",
+              "vehicles": "1 ASAS, 1 autofreză de zăpadă, 1 șenilată UTV",
+              "observedAt": "2026-10-16T09:25:00.000Z",
+              "notes": "Se acționează pentru deblocarea persoanelor surprinse în trafic și sprijin medical de urgență."
+            }
+          },
+          {
+            "type": "Feature",
+            "geometry": {
+              "type": "Point",
+              "coordinates": [
+                26.48526,
+                47.71133
+              ]
+            },
+            "properties": {
+              "id": "mark-masini-blocate-1",
+              "kind": "stranded",
+              "status": "confirmed",
+              "title": "3 autoturisme blocate în zăpadă · DJ29 km 4.5",
+              "road": "DJ29",
+              "kmFrom": 4.5,
+              "kmTo": null,
+              "affectedPersons": "7 persoane (5 adulți, 2 copii)",
+              "affectedAssets": "3 autoturisme",
+              "source": "ISU Botoșani, IPJ Botoșani, SDN Botoșani",
+              "personnel": "3 subofițeri ISU, 2 agenți IPJ, 1 operator SDN",
+              "vehicles": "1 șenilată ISU, 1 autofreză SDN, 1 autospecială IPJ",
+              "observedAt": "2026-10-16T09:35:00.000Z",
+              "notes": "Se intervine cu șenilata ISU și autofreza SDN pentru degajare."
+            }
+          },
+          {
+            "type": "Feature",
+            "geometry": {
+              "type": "Point",
+              "coordinates": [
+                26.5214,
+                47.7058
+              ]
+            },
+            "properties": {
+              "id": "mark-case-inzapezite-1",
+              "kind": "houses",
+              "status": "confirmed",
+              "title": "3 gospodării înzăpezite · sat Vlădeni",
+              "road": "",
+              "kmFrom": null,
+              "kmTo": null,
+              "affectedPersons": "5 persoane vârstnice monitorizate",
+              "affectedAssets": "3 gospodării înzăpezite",
+              "source": "CLSU Vlădeni / SVSU",
+              "personnel": "2 lucrători SVSU Vlădeni",
+              "vehicles": "1 buldoexcavator SVSU",
+              "observedAt": "2026-10-16T09:40:00.000Z",
+              "notes": "Căi de acces troienite; SVSU Vlădeni acționează pentru deblocare."
+            }
+          }
+        ]
+      },
+      "view": null,
+      "visible": {
+        "uat": true,
+        "places": true,
+        "road:dn": true,
+        "road:dj": true,
+        "road:dc": true,
+        "road:street": true,
+        "roadlabels": true,
+        "rail": true,
+        "water": true,
+        "rivers": true,
+        "poi:pompieri": true,
+        "poi:ambulanta": true,
+        "poi:spital": true,
+        "poi:politie": true,
+        "poi:jandarmerie": true,
+        "poi:frontiera": true
+      }
+    }
+  ]
+}

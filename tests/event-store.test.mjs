@@ -144,13 +144,26 @@ test('remove deletes events and bundled situatii.json archive imports cleanly wi
   const raw = fs.readFileSync(new URL('../web/data/situatii.json', import.meta.url), 'utf8');
   const res = store.importArchive(raw);
   assert.ok(res.imported >= 1);
-  const first = store.list()[0];
-  assert.ok(first.places.includes('Huțani'));
-  assert.equal(first.tintAreas, true);
-  assert.equal(first.features.features[0].properties.lengthKm, 3);
-  assert.equal(store.remove(first.id), true);
+  const bundled = JSON.parse(raw);
+  assert.equal(store.list().length, bundled.events.length);
+  const winter = store.load('cjsu-exemplu-iarna-dj29');
+  assert.ok(winter);
+  assert.deepEqual(winter.areas, bundled.events.find(e => e.id === winter.id).areas);
+  assert.equal(winter.tintAreas, true);
+  assert.equal(winter.features.features[0].properties.lengthKm, 3);
+  for (const event of store.list()) {
+    if (['yellow','orange','red','ro-alert'].includes(event.alert.code)) {
+      assert.equal(event.tintAreas, true);
+      assert.ok(event.areas.length || event.places.length, 'A warning needs affected geography');
+    }
+  }
+  const townHall = store.load('d3463f81-3965-403d-9ab6-8cf5b6a8ca1b');
+  assert.ok(townHall);
+  assert.equal(townHall.alert.code, '', 'Do not invent a warning for the route-only event');
+  assert.equal(townHall.features.features.find(f => f.properties.kind === 'route_backup').properties.lengthKm, 2.92);
+  assert.equal(store.remove(winter.id), true);
   assert.equal(store.remove('non-existent'), false);
-  assert.equal(store.list().length, 0);
+  assert.equal(store.list().length, bundled.events.length - 1);
 });
 
 const sessionKey = 'hb.ops.session.v1';
@@ -168,7 +181,7 @@ function legacyStorage(events, session) {
 
 test('legacy cleanup preserves the October 17 seed and exact retained geometries', async () => {
   const { readFile } = await import('node:fs/promises');
-  const seed = JSON.parse(await readFile(new URL('../web/data/situatii.json', import.meta.url), 'utf8')).events[0];
+  const seed = JSON.parse(await readFile(new URL('./fixtures/situatii-20261017.json', import.meta.url), 'utf8')).events[0];
   assert.equal(seed.createdAt.slice(0, 10), '2026-10-16');
   assert.equal(seed.updatedAt.slice(0, 10), '2026-10-17');
   const retained = cleanupEvent('retained', '2026-10-18T10:00:00.000Z');
