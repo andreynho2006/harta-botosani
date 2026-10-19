@@ -1,6 +1,6 @@
 // Stilul hărții (zi / noapte) construit din datele locale.
 import { POI } from "./config.js?v=20261018-itineraries-v2";
-import { decorateOperationalStyle } from "./operations-style.js?v=20261018-itineraries-v2";
+import { decorateOperationalStyle } from "./operations-style.js?v=20261019-alert-tint";
 
 const base = location.href.replace(/[#?].*$/, "").replace(/[^/]*$/, "");
 

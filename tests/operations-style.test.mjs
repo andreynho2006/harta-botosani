@@ -72,3 +72,33 @@ test('stale exterior mask is cleared when focus is disabled and operational labe
   assert.ok(style.layers.filter(item => item.source === 'ops-draft').every(item => item.id.startsWith('ops-draft')));
 });
 
+
+test('warning colors tint the selected areas below roads and labels with a soft boundary, in day/night/satellite and focus modes', () => {
+  for (const [code, expected] of Object.entries({yellow:'#eab308',orange:'#ea580c',red:'#dc2626'})) {
+    for (const theme of ['zi','noapte']) for (const basemap of ['harta','satelit']) for (const focused of [false,true]) {
+      const base=baseStyle(), roadBefore=structuredClone(layer(base,'roads'));
+      const style=decorateOperationalStyle(base,{theme,basemap,operations:{selection:fc([{type:'Feature',geometry:boundary,properties:{}}]),alertCode:code,tintAreas:true,focusGeometry:focused?boundary:null}});
+      const fill=layer(style,'ops-selection-fill'),glow=layer(style,'ops-selection-glow');
+      assert.equal(fill.paint['fill-color'],expected);
+      assert.ok(fill.paint['fill-opacity']>0 && fill.paint['fill-opacity']<=0.24);
+      assert.equal(glow.paint['line-color'],expected);
+      assert.equal(glow.paint['line-blur'],16);
+      assert.ok(glow.paint['line-opacity']>0);
+      const ids=style.layers.map(l=>l.id);
+      for(const id of ['roads','places','ops-features-line','ops-features-label']) {
+        assert.ok(ids.indexOf(fill.id)<ids.indexOf(id));
+        assert.ok(ids.indexOf(glow.id)<ids.indexOf(id));
+      }
+      assert.deepEqual(layer(style,'roads'),roadBefore,'Base road paint stays unchanged');
+      assert.equal(layer(style,'places').type,'symbol');
+    }
+  }
+});
+
+test('no warning or disabled area tint leaves both fill and glow invisible',()=>{
+  for(const operations of [{alertCode:'',tintAreas:true},{alertCode:'red',tintAreas:false},{alertCode:'invalid',tintAreas:true}]){
+    const style=decorateOperationalStyle(baseStyle(),{operations});
+    assert.equal(layer(style,'ops-selection-fill').paint['fill-opacity'],0);
+    assert.equal(layer(style,'ops-selection-glow').paint['line-opacity'],0);
+  }
+});

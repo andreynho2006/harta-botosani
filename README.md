@@ -85,3 +85,5 @@ web/        aplicația (MapLibre GL, fără server, fără conturi externe)
 - Fonturi: Noto Sans (licență OFL), bibliotecă hartă: MapLibre GL JS (BSD-3)
 
 Datele OpenStreetMap pot fi incomplete. Informațiile critice se verifică din surse oficiale.
+
+Codurile galben, portocaliu și roșu evidențiază localitățile selectate în **Zona afectată** printr-o tentă transparentă cu margine difuză, sub drumuri și etichete. Efectul funcționează și în prezentarea CJSU, în mod de zi/noapte și pe satelit. Pentru comune/orașe folosește conturul administrativ existent; pentru sate, zona orientativă din jurul localității. Se poate opri din opțiunea **Evidențiază zona afectată în culoarea codului**.

@@ -49,14 +49,23 @@ export function decorateOperationalStyle(style, state = {}) {
   const alertColor = ALERT_COLORS[operations.alertCode] || '#008b9e';
   const hasAlertTint = Boolean(operations.tintAreas && ALERT_COLORS[operations.alertCode]);
 
-  style.layers.push({
-    id: 'ops-selection-fill', type: 'fill', source: 'ops-selection',
-    paint: { 'fill-color': alertColor, 'fill-opacity': hasAlertTint ? (state.theme === 'noapte' ? 0.16 : 0.13) : 0 },
-  });
+  // Tint the affected geography, never blur the canvas. Both the translucent
+  // fill and soft boundary sit BELOW road casings, labels and incident marks.
+  // Reuse one GeoJSON source; no raster, extra geometry or per-frame work.
+  const tintLayers = [
+    { id: 'ops-selection-fill', type: 'fill', source: 'ops-selection',
+      paint: { 'fill-color': alertColor, 'fill-opacity': hasAlertTint ? (state.theme === 'noapte' ? 0.18 : state.basemap === 'satelit' ? 0.24 : 0.22) : 0 } },
+    { id: 'ops-selection-glow', type: 'line', source: 'ops-selection', layout: rounded,
+      paint: { 'line-color': alertColor, 'line-width': 10, 'line-blur': 16,
+        'line-opacity': hasAlertTint ? 0.24 : 0 } },
+  ];
+  const foreground = style.layers.findIndex(layer => layer.type === 'symbol' || layer.type === 'circle' ||
+    layer['source-layer'] === 'roads' || /^(roads|tracks|rail)(-|$)/.test(layer.id));
+  style.layers.splice(foreground < 0 ? style.layers.length : foreground, 0, ...tintLayers);
 
   style.layers.push(
     { id: 'ops-selection', type: 'line', source: 'ops-selection', layout: rounded,
-      paint: { 'line-color': hasAlertTint ? alertColor : '#008b9e', 'line-width': 3, 'line-dasharray': [3, 2] } },
+      paint: { 'line-color': hasAlertTint ? alertColor : '#008b9e', 'line-width': hasAlertTint ? 1.5 : 3, 'line-opacity': hasAlertTint ? 0.55 : 1, 'line-dasharray': [3, 2] } },
     { id: 'ops-features-fill', type: 'fill', source: 'ops-features', filter: isGeometry('Polygon'),
       paint: { 'fill-color': color, 'fill-opacity': ['case', resolved, 0.12, 0.24] } },
     { id: 'ops-features-boundary', type: 'line', source: 'ops-features', layout: rounded,

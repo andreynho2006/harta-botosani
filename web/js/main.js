@@ -1,6 +1,6 @@
 /* global maplibregl */
 import { POI, LAYER_GROUPS, LAYER_PRESETS, LABELS, START_VIEW, itemLabel } from "./config.js?v=20261018-itineraries-v2";
-import { buildStyle, PALETTES } from "./style.js?v=20261018-itineraries-v2";
+import { buildStyle, PALETTES } from "./style.js?v=20261019-alert-tint";
 import { buildIcons, iconDataURL } from "./icons.js";
 import { SearchIndex, typeInfo, norm } from "./search.js";
 import { ensureLogin, decryptJSON, logout } from "./auth.js";
@@ -8,7 +8,7 @@ import { renderAdmin } from "./admin.js?v=20261018-itineraries-v2";
 import { formatRestriction } from "./restrictions.js";
 import { normalizeSubunitsDoc, mergeSubunitsIntoPois, SUBUNITS_DRAFT_KEY, isNewerSubunitsDocument } from "./subunits.js?v=20261018-itineraries-v2";
 import { openCommuneMap, isCommuneMapOpen } from "./commune.js";
-import { initOperations } from "./operations.js?v=20261019-unirii-access";
+import { initOperations } from "./operations.js?v=20261019-alert-tint";
 import {
   saveSubunitsCloud, subscribeSubunits,
   saveSituationCloud, deleteSituationCloud, subscribeSituations, onCloudStatus,

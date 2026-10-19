@@ -1335,8 +1335,10 @@ export function initOperations(ctx) {
           ${(active.places || []).map(name => `<button class="ops-tag ops-tag-place" type="button" data-place-remove="${esc(name)}" title="Elimină localitatea">Sat ${esc(name)} ×</button>`).join("")}
           ${!active.areas.length && !(active.places || []).length ? `<span class="muted">Toate UAT-urile vizibile · context județean</span>` : ""}
         </div>
+        ${(active.places || []).length ? `<p class="muted">Pentru sate, evidențierea este orientativă în jurul localității. Pentru un contur administrativ exact, selectează comuna sau orașul.</p>` : ""}
         <label class="ops-check"><input type="checkbox" data-toggle="isolateArea" ${active.isolateArea ? "checked" : ""}> Izolează zona selectată (ascunde restul județului pe hartă)</label>
-        <label class="ops-check"><input type="checkbox" data-toggle="tintAreas" ${active.tintAreas !== false ? "checked" : ""}> Colorează UAT-urile selectate în culoarea codului de avertizare</label>
+        <label class="ops-check"><input type="checkbox" data-toggle="tintAreas" ${active.tintAreas !== false ? "checked" : ""}> Evidențiază zona afectată în culoarea codului (tentă difuză)</label>
+        ${!active.areas.length && !(active.places || []).length ? `<p class="muted" role="note">Pentru evidențierea codului pe hartă, adaugă mai sus comunele, orașele sau satele afectate.</p>` : ""}
         <div class="ops-actions">
           <button class="btn" type="button" data-action="area">Alege UAT-uri cu click pe hartă</button>
           <button class="btn" type="button" data-action="fit">Încadrează zona</button>
