@@ -8,7 +8,7 @@ import { renderAdmin } from "./admin.js?v=20261018-itineraries-v2";
 import { formatRestriction } from "./restrictions.js";
 import { normalizeSubunitsDoc, mergeSubunitsIntoPois, SUBUNITS_DRAFT_KEY, isNewerSubunitsDocument } from "./subunits.js?v=20261018-itineraries-v2";
 import { openCommuneMap, isCommuneMapOpen } from "./commune.js?v=20261019-multi-alerts";
-import { initOperations } from "./operations.js?v=20261025-cloud-guard";
+import { initOperations } from "./operations.js?v=20261025-cloud-state";
 import {
   saveSubunitsCloud, subscribeSubunits,
   saveSituationCloud, deleteSituationCloud, subscribeSituations, onCloudStatus,

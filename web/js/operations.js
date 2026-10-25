@@ -2,7 +2,7 @@ import { normalizeAlerts, affectedAlertLocations, resolvePlace, placeKey, placeL
 import { buildAlertGeography, buildAlertLabels, alertOutlined, attachAlertPopups } from "./operations-alert-map.js?v=20261019-multi-alerts";
 import { createAlertEditor } from "./operations-alert-editor.js?v=20261019-multi-alerts";
 import { presentationFeatures, presentationRiskGroups, presentationKindLabel } from "./operations-risks.js?v=20261018-cards";
-import { EventStore, createEvent, sanitizeEvent, cleanupLegacyArchive } from "./event-store.js?v=20261025-cloud-guard";
+import { EventStore, CloudStates, createEvent, sanitizeEvent, cleanupLegacyArchive } from "./event-store.js?v=20261025-cloud-state";
 import {
   snapToRoad, buildRoadSegment, findRoadRoute, findRoadByRef, sliceRoadByKm, sliceRoadByPlaces,
   projectPointOnRoad, roadNetworkToFeatures, roadsListOf, lineLengthKm,
@@ -373,6 +373,7 @@ export function initOperations(ctx) {
   const storage = ctx.storage ?? globalThis.localStorage;
   const SESSION_KEY = "hb.ops.session.v1";
   const db = new EventStore(storage);
+  const cloudStates = new CloudStates(storage);
   let cloudStatus = "offline";
   if (cloudDb?.onStatus) {
     cloudDb.onStatus((s) => {
@@ -402,9 +403,19 @@ export function initOperations(ctx) {
   let standaloneFocus = { areas: [], places: [], isolate: true };
   let restoring = false;
   // Edits are autosaved in this browser at once but reach other screens only when published.
-  // `unpublished` tracks that gap; `cloudBase` is the Cloud version the open situation started
-  // from, so a colleague's newer copy is told apart from the echo of our own publish.
-  let unpublished = false, cloudBase = null, cloudConflict = null, publishing = false, cloudSeen = false;
+  // Each situation's Cloud state (CloudStates) records that gap and the Cloud version its local
+  // copy started from, so a colleague's newer copy is told apart from the echo of our own publish.
+  let publishing = false, cloudSeen = false;
+  // The Cloud version this screen's copy derives from. It equals the stored base unless another
+  // tab moved the archive under this screen; a version that arrived that way is still a colleague's.
+  let screenBase = null;
+  const NO_CLOUD_STATE = Object.freeze({ base: null, unpublished: false, conflict: null, sent: [] });
+  const cloudState = () => (active && cloudStates.get(active.id)) || NO_CLOUD_STATE;
+  const setCloudState = patch => {
+    if (!active) return;
+    if (Object.hasOwn(patch, "base")) screenBase = patch.base;
+    cloudStates.update(active.id, patch);
+  };
   // Ids whose Cloud copy is still our own unconfirmed write, and the last snapshot, replayed
   // when work that held a newer version back is dropped.
   let cloudPending = new Set(), lastSnapshot = null;
@@ -412,7 +423,7 @@ export function initOperations(ctx) {
   // With a situation open, "Focalizează UAT / satul" from the map only frames the view:
   // exploring the map in a meeting must not add areas to what is saved and published.
   let viewFocus = null;
-  const cloudCopies = new Map(), sentVersions = new Set(), inFlight = new Set();
+  const cloudCopies = new Map(), inFlight = new Set();
 
   state.operations = {
     features: FC(), draft: FC(), selection: FC(), alerts: FC(), alertLabels: FC(), mask: FC(), endpoints: FC(),
@@ -441,9 +452,6 @@ export function initOperations(ctx) {
         pending,
         editingId,
         dirty,
-        unpublished,
-        cloudBase,
-        cloudConflict,
         summaryCollapsed,
         messagesCollapsed,
         legendCollapsed,
@@ -487,7 +495,8 @@ export function initOperations(ctx) {
         };
       }
       if (saved?.active && typeof saved.active === "object") {
-        const fromDb = !saved.dirty && !saved.unpublished && saved.active.id ? db.load(saved.active.id) : null;
+        const known = saved.active.id ? cloudStates.get(saved.active.id) : null;
+        const fromDb = !saved.dirty && !(known ? known.unpublished : saved.unpublished) && saved.active.id ? db.load(saved.active.id) : null;
         try {
           active = fromDb && fromDb.updatedAt > (saved.active.updatedAt || "") ? fromDb : sanitizeEvent(saved.active);
         } catch {
@@ -507,13 +516,15 @@ export function initOperations(ctx) {
         editingId = saved.editingId || null;
       }
       dirty = Boolean(saved?.dirty);
-      if (active) {
-        unpublished = Boolean(saved?.unpublished);
-        cloudBase = typeof saved?.cloudBase === "string" ? saved.cloudBase : null;
-        if (saved?.cloudConflict && typeof saved.cloudConflict === "object") {
-          try { cloudConflict = sanitizeEvent(saved.cloudConflict); } catch { cloudConflict = null; }
-        }
+      // Sessions saved before 25.10.2026 kept the Cloud state of the open situation only.
+      if (active && !cloudStates.get(active.id) && (saved.unpublished || saved.cloudBase || saved.cloudConflict)) {
+        cloudStates.update(active.id, {
+          base: typeof saved.cloudBase === "string" ? saved.cloudBase : null,
+          unpublished: Boolean(saved.unpublished),
+          conflict: saved.cloudConflict && typeof saved.cloudConflict === "object" ? saved.cloudConflict : null,
+        });
       }
+      if (active) screenBase = cloudStates.get(active.id)?.base ?? null;
     } catch (e) {
       console.warn("Nu am putut restaura sesiunea operativă", e);
     } finally {
@@ -670,7 +681,7 @@ export function initOperations(ctx) {
   }
 
   function changed() {
-    dirty = true; unpublished = true; exported = false;
+    dirty = true; setCloudState({ unpublished: true }); exported = false;
     autoSaveActiveToDb();
     persistSession();
     refreshSaveState();
@@ -685,8 +696,9 @@ export function initOperations(ctx) {
     if (!active) return "";
     if (alertEditor.rejectedDates().length) return "Interval invalid · e păstrată ultima variantă validă";
     if (dirty) return exported ? "Exportat JSON · nesalvat în browser" : "Modificări nesalvate";
+    const { unpublished, base } = cloudState();
     if (unpublished) return `Salvat în acest browser · nepublicat în Cloud · ${dateLabel(active.updatedAt)}`;
-    if (cloudBase) return `Publicat în Cloud · ${dateLabel(cloudBase)}`;
+    if (base) return `Publicat în Cloud · ${dateLabel(base)}`;
     return `Salvat în acest browser · ${dateLabel(active.updatedAt)}`;
   }
 
@@ -705,7 +717,7 @@ export function initOperations(ctx) {
     active.isolateArea = standaloneFocus.areas.length > 0 || standaloneFocus.places.length > 0 ? standaloneFocus.isolate : false;
     active.tintAreas = true;
     standaloneFocus = { areas: [], places: [], isolate: true };
-    dirty = true; unpublished = true; cloudBase = null; cloudConflict = null; exported = false;
+    dirty = true; setCloudState({ base: null, unpublished: true, conflict: null }); exported = false;
     autoSaveActiveToDb();
     persistSession();
     return active;
@@ -1233,9 +1245,10 @@ export function initOperations(ctx) {
   }
 
   function conflictHTML() {
-    if (!active || !cloudConflict) return "";
+    const { conflict, unpublished } = cloudState();
+    if (!active || !conflict) return "";
     return `<div class="ops-conflict" role="alert">
-      <p><b>Altcineva a publicat în Cloud o versiune mai nouă a acestei situații (${esc(dateLabel(cloudConflict.updatedAt))}).</b>
+      <p><b>Altcineva a publicat în Cloud o versiune mai nouă a acestei situații (${esc(dateLabel(conflict.updatedAt))}).</b>
       ${unpublished || dirty
         ? "Modificările tale sunt salvate doar în acest browser. Alege ce rămâne: versiunea din Cloud le înlocuiește pe ale tale, iar publicarea ta o înlocuiește pe cea din Cloud."
         : "Ai un marcaj, un instrument sau o dată în lucru. Dacă renunți la ele, versiunea nouă se încarcă singură; dacă le păstrezi, alegi aici ce rămâne."}</p>
@@ -1551,7 +1564,7 @@ export function initOperations(ctx) {
   }
 
   function publishToCloud(event, onLate) {
-    sentVersions.add(`${event.id}@${event.updatedAt}`);
+    cloudStates.markSent(event.id, event.updatedAt);
     inFlight.add(event.id);
     const copy = structuredClone(event);
     return cloudWrite(() => cloudDb.saveSituation(copy), onLate, () => inFlight.delete(event.id));
@@ -1589,14 +1602,13 @@ export function initOperations(ctx) {
     if (wasOpen && (pending || mode || itinerary.isPicking())) return message("Finalizează sau anulează marcajul în curs înainte de a șterge situația.");
     if (wasOpen && intervalRejected("Situația nu a fost ștearsă.")) return;
     confirmDeleteId = null;
-    const cloudCopy = cloudCopies.get(id) ?? null;
-    const openState = wasOpen ? { unpublished, cloudBase, cloudConflict } : null;
+    const cloudCopy = cloudCopies.get(id) ?? null, known = cloudStates.get(id);
     const deletion = { undone: false };
-    db.remove(id);
+    db.remove(id); cloudStates.remove(id);
     if (wasOpen) closeActive();
     render();
     offerUndo(`Situația „${local.title}” a fost ștearsă.`, () => {
-      const restored = restoreSituation(local, cloudCopy, openState);
+      const restored = restoreSituation(local, cloudCopy, known, wasOpen);
       if (restored !== false) deletion.undone = true;
       return restored;
     });
@@ -1611,31 +1623,31 @@ export function initOperations(ctx) {
 
   // Puts back the local copy at once, and the Cloud copy as it was before the deletion. That
   // copy may be a colleague's version the operator had not chosen yet, so it is written back
-  // as theirs, not marked as our own publish, and the open conflict comes back with it.
-  function restoreSituation(local, cloudCopy, openState) {
-    if (openState && !canReplaceDraft()) return false;
+  // as theirs, not marked as our own publish, and the held conflict comes back with it.
+  function restoreSituation(local, cloudCopy, known, wasOpen) {
+    if (wasOpen && !canReplaceDraft()) return false;
     try { db.put(local); }
     catch (error) { console.warn(error); message("Situația nu a putut fi pusă la loc în acest browser."); return false; }
     // Someone may have published it again meanwhile: that version stands and is weighed as usual.
     const now = cloudCopies.get(local.id);
     const republished = Boolean(now && cloudCopy && now.updatedAt !== cloudCopy.updatedAt);
     const rewrite = Boolean(cloudCopy && cloudDb?.saveSituation && !republished);
-    if (openState) {
-      setActive(local, { exact: true });
-      ({ unpublished, cloudBase, cloudConflict } = openState);
-      // Until the Cloud copy is back, the situation is not in the Cloud.
-      if (rewrite) unpublished = true;
+    // Until the Cloud copy is back, the situation is not in the Cloud.
+    const state = { ...(known ?? NO_CLOUD_STATE), ...(rewrite ? { unpublished: true } : {}) };
+    if (wasOpen) {
+      setActive(local, { cloud: state });
       persistSession(); refreshPublishState();
-    } else render();
+    } else { cloudStates.update(local.id, state); render(); }
     toast(`Situația „${local.title}” a fost pusă la loc.`);
     if (republished && lastSnapshot) syncFromCloud(...lastSnapshot);
     if (!rewrite) return true;
     const copy = structuredClone(cloudCopy);
     const landed = () => {
-      if (!openState || active?.id !== local.id) return;
-      // Back as before the deletion, unless the operator edited it meanwhile.
-      if (active.updatedAt === local.updatedAt) unpublished = openState.unpublished;
-      persistSession(); refreshPublishState();
+      // Back as before the deletion, unless it was edited or deleted again meanwhile.
+      const open = active?.id === local.id;
+      if (!cloudStates.get(local.id) || (open ? active : db.load(local.id))?.updatedAt !== local.updatedAt) return;
+      cloudStates.update(local.id, { unpublished: Boolean(known?.unpublished) });
+      if (open) { persistSession(); refreshPublishState(); }
     };
     cloudWrite(() => cloudDb.saveSituation(copy), late => late === "ok" ? landed()
       : message("Situația e pusă la loc în acest browser, dar nu și în Cloud: apasă „Publică în Cloud”.")).then(result => {
@@ -1646,14 +1658,25 @@ export function initOperations(ctx) {
   }
 
   // Our version is in the Cloud: it becomes the base, and stays unpublished only if the
-  // operator kept editing while the write was on its way.
-  function markPublished(version, overwritten = null) {
-    if (active?.id !== version.id) return;
-    cloudBase = version.updatedAt;
-    if (active.updatedAt === version.updatedAt) unpublished = false;
-    // Only the version this publish replaced; one that came later still needs a choice.
-    if (cloudConflict === overwritten) cloudConflict = null;
-    persistSession();
+  // operator kept editing while the write was on its way. `from` is the base it was sent from:
+  // a local copy that moved to a colleague's version meanwhile is not described by this answer,
+  // while one moved only by our own earlier publish still is.
+  function markPublished(version, { from = null, overwritten = null } = {}) {
+    const open = active?.id === version.id;
+    const known = cloudStates.get(version.id) ?? (open ? NO_CLOUD_STATE : null);
+    if (!known) return;
+    if (known.base !== from && known.base !== version.updatedAt && !known.sent.includes(known.base)) return;
+    // The archive copy, which another tab may have edited since: only that copy's version is published.
+    let local = open ? active : null;
+    try { local = db.load(version.id) ?? local; } catch { /* unreadable archive: weigh the screen */ }
+    if (open) screenBase = version.updatedAt;
+    cloudStates.update(version.id, {
+      base: version.updatedAt,
+      ...(local?.updatedAt === version.updatedAt ? { unpublished: false } : {}),
+      // Only the version this publish replaced; one that came later still needs a choice.
+      ...(known.conflict?.updatedAt === overwritten?.updatedAt ? { conflict: null } : {}),
+    });
+    if (open) persistSession();
   }
 
   async function save({ overwrite = false } = {}) {
@@ -1661,7 +1684,7 @@ export function initOperations(ctx) {
     try {
       if (pending || mode) return message("Finalizează adăugarea marcajului curent înainte de a publica situația.");
       if (intervalRejected("Situația nu a fost publicată.")) return;
-      if (cloudConflict && !overwrite) return message("Altcineva a publicat între timp o versiune mai nouă. Alege în caseta de sus dacă o încarci sau o înlocuiești cu varianta ta.");
+      if (cloudState().conflict && !overwrite) return message("Altcineva a publicat între timp o versiune mai nouă. Alege în caseta de sus dacă o încarci sau o înlocuiești cu varianta ta.");
       active = db.save(snapshot()); dirty = false; exported = false;
       persistSession();
     } catch (error) {
@@ -1673,7 +1696,7 @@ export function initOperations(ctx) {
       refreshPublishState(); toast(notice); return;
     }
     const version = { id: active.id, updatedAt: active.updatedAt }, title = active.title;
-    const overwritten = overwrite ? cloudConflict : null;
+    const from = cloudState().base, overwritten = overwrite ? cloudState().conflict : null;
     publishing = true; notice = "Se publică în Cloud…"; refreshPublishState();
     const result = await publishToCloud(active, late => {
       if (late !== "ok") {
@@ -1681,12 +1704,14 @@ export function initOperations(ctx) {
         notice = "Cloud-ul a refuzat publicarea: situația e salvată doar în acest browser. Apasă din nou „Publică în Cloud”.";
         refreshPublishState(); return toast(notice);
       }
-      markPublished(version, overwritten);
+      markPublished(version, { from, overwritten });
       if (active?.id !== version.id) return toast(`Situația „${title}” a ajuns în Cloud.`);
       notice = "Publicarea s-a încheiat: situația a ajuns în Cloud."; refreshPublishState(); toast(notice);
       reconsiderCloud();
     });
     publishing = false;
+    // The situation it belongs to is published even if another one is open by now.
+    if (result === "ok") markPublished(version, { from, overwritten });
     // Another situation may be open by now: its panel must not carry this answer.
     if (active?.id !== version.id) {
       notice = "";
@@ -1696,7 +1721,6 @@ export function initOperations(ctx) {
         : `Situația „${title}” nu a ajuns în Cloud. Deschide-o și apasă din nou „Publică în Cloud”.`);
     }
     if (result === "ok") {
-      markPublished(version, overwritten);
       notice = `Situația a fost publicată în Cloud (${dateLabel(version.updatedAt)}). Celelalte ecrane o primesc acum.`;
     } else if (result === "waiting") {
       notice = "Cloud-ul nu a confirmat încă publicarea. Situația e salvată în acest browser, iar publicarea se încheie singură când revine conexiunea.";
@@ -1728,7 +1752,7 @@ export function initOperations(ctx) {
     feat.properties.status = wasResolved ? "confirmed" : "resolved";
     feat.properties.observedAt = new Date().toISOString();
     try {
-      active = db.save(snapshot()); dirty = false; unpublished = true;
+      active = db.save(snapshot()); dirty = false; setCloudState({ unpublished: true });
     } catch { changed(); }
     sync();
     render();
@@ -1737,9 +1761,9 @@ export function initOperations(ctx) {
       ? `Situația „${feat.properties.title || KINDS[feat.properties.kind]}” a fost reactivată.`
       : `Situația „${feat.properties.title || KINDS[feat.properties.kind]}” a fost marcată ca REZOLVATĂ.`);
     // Resolving has always gone straight to every screen, but never over a colleague's newer version.
-    if (dirty || cloudConflict || !cloudDb?.saveSituation) return;
-    const version = { id: active.id, updatedAt: active.updatedAt };
-    const done = () => { markPublished(version); refreshPublishState(); };
+    if (dirty || cloudState().conflict || !cloudDb?.saveSituation) return;
+    const version = { id: active.id, updatedAt: active.updatedAt }, from = cloudState().base;
+    const done = () => { markPublished(version, { from }); refreshPublishState(); };
     publishToCloud(active, late => late === "ok" && done()).then(result => {
       if (result === "ok") done();
       else if (result === "failed" && active?.id === version.id) message("Starea marcajului e salvată în acest browser, dar nu a ajuns în Cloud. Apasă „Publică în Cloud” când revine conexiunea.");
@@ -1760,32 +1784,40 @@ export function initOperations(ctx) {
       } catch (e) { console.warn(`Situația „${raw?.id ?? "fără id"}” din Cloud nu e validă și a fost ignorată:`, e); }
     }
     cloudSeen = true;
+    const kept = syncLeftSituations();
     const remote = active ? cloudCopies.get(active.id) : null;
     // Our own write still on its way says nothing about what the server holds.
     const settled = Boolean(remote && !cloudPending.has(remote.id));
-    if (settled && remote.updatedAt === active.updatedAt && !dirty && (!cloudBase || unpublished)) {
-      // The server holds this exact version: our publish landed, even one queued before a reload.
-      cloudBase = remote.updatedAt; unpublished = false;
+    // Another tab of this browser may have saved the situation since this screen loaded it.
+    let local = active;
+    try { local = (active && db.load(active.id)) || active; } catch { /* unreadable archive: weigh the screen */ }
+    if (settled && remote.updatedAt === local.updatedAt && !dirty && (!cloudState().base || cloudState().unpublished)) {
+      // The server holds this exact version: our publish landed, even one queued before a reload
+      // or sent from another tab.
+      setCloudState({ base: remote.updatedAt, unpublished: false });
       persistSession(); refreshSaveState();
     }
-    // A Cloud version this screen did not start from and did not send. Clocks differ between
-    // computers, so with a known base any other version counts, not only a later timestamp.
-    const ours = settled && sentVersions.has(`${remote.id}@${remote.updatedAt}`);
-    const newer = settled && !ours && remote.updatedAt !== active.updatedAt
-      && (cloudBase ? remote.updatedAt !== cloudBase : remote.updatedAt > active.updatedAt);
+    const { unpublished, conflict, sent } = cloudState();
+    // A Cloud version this screen did not start from and this browser did not send. Clocks differ
+    // between computers, so with a known base any other version counts, not only a later timestamp.
+    // One that another tab saved here and published is shown as well.
+    const behind = settled && remote.updatedAt === local.updatedAt && remote.updatedAt !== active.updatedAt;
+    const ours = settled && sent.includes(remote.updatedAt);
+    const newer = settled && remote.updatedAt !== active.updatedAt
+      && (behind || (!ours && (screenBase ? remote.updatedAt !== screenBase : remote.updatedAt > active.updatedAt)));
     // Work that is not in the Cloud yet, or still on screen only, is never replaced silently.
     const held = newer && (unpublished || dirty || busy());
     // The local copy of unpublished work stays as it is, whatever the timestamps say.
     const keepLocal = active && (held || unpublished || dirty);
-    const incoming = [...cloudCopies.values()].filter(event => !(keepLocal && event.id === active.id));
+    const incoming = [...cloudCopies.values()].filter(event => !kept.has(event.id) && !(keepLocal && event.id === active.id));
     try {
       if (incoming.length) db.importArchive({ format: "harta-botosani-events", version: 1, events: incoming });
     } catch (e) {
       console.warn("Nu s-au putut sincroniza evenimentele din cloud:", e);
     }
     if (held) {
-      const fresh = cloudConflict?.updatedAt !== remote.updatedAt;
-      cloudConflict = remote;
+      const fresh = conflict?.updatedAt !== remote.updatedAt;
+      setCloudState({ conflict: remote });
       showConflict();
       refreshArchive();
       if (fresh) toast(`Altcineva a publicat o versiune nouă a situației „${remote.title}”. Modificările tale nu au fost înlocuite.`);
@@ -1795,7 +1827,7 @@ export function initOperations(ctx) {
       // Stored exactly, so an older timestamp from another computer is not undone by a reload.
       try { active = db.put(remote); } catch (e) { console.warn(e); active = structuredClone(remote); }
       normalizeEventFeatures(active);
-      cloudBase = remote.updatedAt; unpublished = false; cloudConflict = null;
+      setCloudState({ base: remote.updatedAt, unpublished: false, conflict: null });
       dropMarkerUndo();
       persistSession();
       // Isolation, tint and warning areas are baked into the style, so rebuild it.
@@ -1806,8 +1838,36 @@ export function initOperations(ctx) {
       return;
     }
     // Gone from the Cloud, back to our base, or our own version: nothing left to choose.
-    if (cloudConflict && (!remote || settled)) { cloudConflict = null; showConflict(); }
+    if (conflict && (!remote || settled)) { setCloudState({ conflict: null }); showConflict(); }
     refreshArchive();
+  }
+
+  // Situations not on screen keep their own Cloud state: a snapshot never replaces their
+  // unpublished work, and a colleague's version waits for them as a conflict. A clean one
+  // follows the Cloud by its base, stored exactly. Returns the ids the archive must not import.
+  function syncLeftSituations() {
+    const kept = new Set();
+    let here;
+    try { here = new Map(db.list().map(event => [event.id, event])); } catch { return kept; }
+    for (const [id, known] of cloudStates.entries()) {
+      const local = here.get(id);
+      if (id === active?.id || !local) continue;
+      kept.add(id);
+      const remote = cloudCopies.get(id);
+      const settled = Boolean(remote && !cloudPending.has(id));
+      if (settled && remote.updatedAt === local.updatedAt) {
+        // Its local copy is in the Cloud: a publish that landed after the situation was left.
+        cloudStates.update(id, { base: remote.updatedAt, unpublished: false, conflict: null });
+      } else if (known.unpublished) {
+        if (!remote) cloudStates.update(id, { conflict: null });
+        else if (settled) cloudStates.update(id, { conflict: known.sent.includes(remote.updatedAt) || remote.updatedAt === known.base ? null : remote });
+      } else if (settled && remote.updatedAt !== known.base && !known.conflict) {
+        // A version held back by a screen in another tab waits for that screen to take it.
+        try { db.put(remote); cloudStates.update(id, { base: remote.updatedAt, conflict: null }); }
+        catch (e) { console.warn(e); kept.delete(id); }
+      }
+    }
+    return kept;
   }
 
   // Open forms, drawing tools, a picked itinerary point or a rejected date: work on screen only.
@@ -1817,7 +1877,8 @@ export function initOperations(ctx) {
 
   // A version held back only by work on screen applies once that work is dropped.
   function reconsiderCloud() {
-    if (cloudConflict && lastSnapshot && !unpublished && !dirty && !busy()) syncFromCloud(...lastSnapshot);
+    const { conflict, unpublished } = cloudState();
+    if (conflict && lastSnapshot && !unpublished && !dirty && !busy()) syncFromCloud(...lastSnapshot);
   }
 
   // Only the archive list follows other situations: rebuilding the panel would wipe what the
@@ -1829,18 +1890,27 @@ export function initOperations(ctx) {
     bar.outerHTML = archiveHTML(list());
   }
 
-  function setActive(event, { exact = false } = {}) {
-    // The Cloud copy wins when the archive here lags behind it, unless this very version is wanted.
-    const copy = cloudCopies.get(event.id);
-    active = structuredClone(!exact && copy && copy.updatedAt > event.updatedAt ? copy : event);
+  // `cloud` opens this very version with the given Cloud state: a version taken from the Cloud,
+  // or a deleted situation put back.
+  function setActive(event, { cloud: given = null } = {}) {
+    const copy = cloudCopies.get(event.id), known = given ?? cloudStates.get(event.id);
+    // The kept state stays as it was left when it describes this copy: unpublished work, or the
+    // base it equals. Otherwise (a first visit, an imported file) it is worked out anew.
+    const tracked = Boolean(known && (given || known.unpublished || known.base === event.updatedAt));
+    // The Cloud copy wins when the archive here lags behind it.
+    active = structuredClone(!tracked && copy && copy.updatedAt > event.updatedAt ? copy : event);
     active.places = active.places || [];
     active.isolateArea = active.isolateArea ?? false;
     active.tintAreas = active.tintAreas ?? true;
     pending = null; editingId = null; dirty = false; exported = false; notice = ""; confirmDeleteId = null; viewFocus = null;
-    // Without a Cloud copy the situation lives only here, once the Cloud has answered at all;
-    // a copy that is still our unconfirmed write is not in the Cloud yet either.
-    cloudBase = copy?.updatedAt ?? null; cloudConflict = null;
-    unpublished = copy ? active.updatedAt > copy.updatedAt || cloudPending.has(copy.id) : cloudSeen;
+    if (given) setCloudState(given);
+    else if (!tracked) {
+      // Without a Cloud copy the situation lives only here, once the Cloud has answered at all;
+      // a copy that is still our unconfirmed write is not in the Cloud yet, and is no base.
+      const confirmed = copy && !cloudPending.has(copy.id) ? copy : null;
+      setCloudState({ base: confirmed?.updatedAt ?? null, conflict: null,
+        unpublished: copy ? active.updatedAt > copy.updatedAt || !confirmed : cloudSeen });
+    } else screenBase = known.base;
     dropMarkerUndo();
     stopDrawing();
     for (const key of Object.keys(state.visible)) if (typeof active.visible[key] === "boolean") state.visible[key] = active.visible[key];
@@ -1848,11 +1918,12 @@ export function initOperations(ctx) {
     sync(true); renderLayerPanel(); render();
     if (active.view && map) map.jumpTo(active.view); else fit();
     selectTab("situatii");
+    // A version held back only by work on screen applies now that the screen starts afresh.
+    reconsiderCloud();
   }
 
   function closeActive() {
-    active = null; pending = null; editingId = null; confirmDeleteId = null; viewFocus = null;
-    unpublished = false; cloudBase = null; cloudConflict = null;
+    active = null; pending = null; editingId = null; confirmDeleteId = null; viewFocus = null; screenBase = null;
     dropMarkerUndo();
     stopDrawing(); sync(true);
   }
@@ -2166,7 +2237,7 @@ export function initOperations(ctx) {
         active.places = [];
         active.isolateArea = false;
         active.tintAreas = true;
-        dirty = true; unpublished = true; cloudBase = null; cloudConflict = null; viewFocus = null; exported = false; notice = "";
+        dirty = true; setCloudState({ base: null, unpublished: true, conflict: null }); viewFocus = null; exported = false; notice = "";
         dropMarkerUndo();
         if (applyPreset) applyPreset(type);
         // Saved after the preset, so reopening it keeps the layers it starts with.
@@ -2234,7 +2305,7 @@ export function initOperations(ctx) {
         const addedGeom = pending.geometry;
         pending = null; editingId = null;
         // Also auto-save to browser storage so the user never loses road closures
-        unpublished = true;
+        setCloudState({ unpublished: true });
         try { active = db.save(snapshot()); dirty = false; } catch { changed(); }
         sync(); render();
         fitGeometry(addedGeom);
@@ -2287,7 +2358,7 @@ export function initOperations(ctx) {
       if (index < 0) return;
       const [removed] = active.features.features.splice(index, 1);
       const eventId = active.id;
-      unpublished = true;
+      setCloudState({ unpublished: true });
       try { active = db.save(snapshot()); dirty = false; } catch { changed(); }
       sync(); render();
       offerUndo(`Marcajul „${removed.properties.title || KINDS[removed.properties.kind]}” a fost eliminat.`, () => {
@@ -2296,7 +2367,7 @@ export function initOperations(ctx) {
         if (intervalRejected("Marcajul nu a fost pus la loc.")) return false;
         const features = active.features.features;
         if (!features.some(f => f.properties.id === removed.properties.id)) features.splice(Math.min(index, features.length), 0, removed);
-        unpublished = true;
+        setCloudState({ unpublished: true });
         try { active = db.save(snapshot()); dirty = false; } catch { changed(); }
         sync(); render();
         toast("Marcajul a fost pus la loc.");
@@ -2376,13 +2447,14 @@ export function initOperations(ctx) {
       const { restore } = undo;
       if (restore() !== false) dropUndo();
     }
-    if (action === "cloud-overwrite" && active && cloudConflict) save({ overwrite: true });
-    if (action === "cloud-take" && active && cloudConflict) {
+    if (action === "cloud-overwrite" && active && cloudState().conflict) save({ overwrite: true });
+    if (action === "cloud-take" && active && cloudState().conflict) {
       // A queued write would still land after the choice and undo it.
       if (publishing || inFlight.has(active.id) || cloudPending.has(active.id)) return message("Așteaptă răspunsul Cloud-ului la publicarea în curs, apoi alege versiunea.");
       if (pending || mode || itinerary.isPicking()) return message("Finalizează sau anulează marcajul în curs înainte de a încărca versiunea din Cloud.");
       if (intervalRejected("Versiunea din Cloud nu a fost încărcată.")) return;
-      try { setActive(db.put(cloudConflict)); }
+      const taken = cloudState().conflict;
+      try { setActive(db.put(taken), { cloud: { base: taken.updatedAt, unpublished: false, conflict: null } }); }
       catch (error) { console.warn(error); return message("Versiunea din Cloud nu a putut fi salvată în acest browser."); }
       toast(`Ai încărcat versiunea din Cloud a situației „${active.title}”.`);
     }
@@ -2404,7 +2476,7 @@ export function initOperations(ctx) {
     if (action === "duplicate" && canReplaceDraft()) {
       const base = createEvent(active.title + " · copie", active.type);
       active = { ...structuredClone(active), id: base.id, title: base.title, createdAt: base.createdAt, updatedAt: base.updatedAt };
-      dirty = true; unpublished = true; cloudBase = null; cloudConflict = null; exported = false;
+      dirty = true; setCloudState({ base: null, unpublished: true, conflict: null }); exported = false;
       viewFocus = null; confirmDeleteId = null; dropMarkerUndo();
       autoSaveActiveToDb(); persistSession(); sync(true); render();
     }
