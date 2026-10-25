@@ -109,7 +109,7 @@ export function createAlertEditor({ panel, getActive, getData, onChange }) {
     if (!alert || alert[field] === value) return true;
     alert[field] = value;
     updateStatus(entry, alert);
-    onChange({ render: false, refresh: true });
+    onChange({ render: false, geography: false });
     return true;
   }
   function handleChange(target) {
@@ -124,7 +124,7 @@ export function createAlertEditor({ panel, getActive, getData, onChange }) {
     if (target.checked) selected.add(target.value); else selected.delete(target.value);
     alert[kind] = [...selected];
     updateStatus(entry, alert);
-    onChange({ render: false, refresh: true });
+    onChange({ render: false, geography: true });
     return true;
   }
   function handleClick(button) {
@@ -138,7 +138,7 @@ export function createAlertEditor({ panel, getActive, getData, onChange }) {
       const id = button.closest('[data-warning-id]')?.dataset.warningId;
       getActive().alerts = alerts.filter(alert => alert.id !== id);
     }
-    onChange({ render: true, refresh: true });
+    onChange({ render: true, geography: true });
     return true;
   }
   return { html, handleInput, handleChange, handleClick };

@@ -416,8 +416,10 @@ export function initOperations(ctx) {
 
   const alertEditor = createAlertEditor({
     panel, getActive: () => active, getData: () => state.data,
-    onChange: ({ render: rerender = false, refresh = false } = {}) => {
-      changed(); sync(refresh);
+    onChange: ({ render: rerender = false, geography = false } = {}) => {
+      // Warning layers are data-driven: setData is enough unless the isolated outline,
+      // which is baked into label filters, gains or loses a UAT.
+      changed(); sync(geography && (active?.isolateArea ?? true));
       if (rerender) render();
       if (state.operations.presenting) renderPresentationOverlay();
     },

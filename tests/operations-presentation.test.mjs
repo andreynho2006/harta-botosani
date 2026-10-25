@@ -29,7 +29,7 @@ async function browserChecks({ initOperations, createEvent }) {
     const memory = new Map([['hb.ops.session.v1', JSON.stringify({ active })]]);
     const storage = { getItem: key => memory.get(key) ?? null, setItem: (key, value) => memory.set(key, value) };
     const noop = () => {};
-    let fitCalls = 0, jumpCalls = 0, resizeCalls = 0, paddingCalls = 0;
+    let fitCalls = 0, jumpCalls = 0, resizeCalls = 0, paddingCalls = 0, styleCalls = 0;
     const map = {
       on: noop, getSource: noop, getLayer: noop,
       getCenter: () => ({ lng: 26.6, lat: 47.7 }), getZoom: () => 8, getBearing: () => 0, getPitch: () => 0,
@@ -44,7 +44,7 @@ async function browserChecks({ initOperations, createEvent }) {
     window.requestAnimationFrame = callback => { const id = ++frameId; frames.set(id, callback); return id; };
     window.cancelAnimationFrame = id => frames.delete(id);
     const state = { data: {}, visible: {}, overlays: {}, basemap: 'harta', theme: 'zi' };
-    initOperations({ map, storage, state, toast: noop, selectTab: noop, applyStyle: noop, renderLayerPanel: noop });
+    initOperations({ map, storage, state, toast: noop, selectTab: noop, applyStyle: () => styleCalls++, renderLayerPanel: noop });
     const nextFrame = async () => {
       for (let turn = 0; frames.size; turn++) {
         if (turn >= 100) throw new Error('Presentation scheduled an endless animation loop');
@@ -131,10 +131,12 @@ async function browserChecks({ initOperations, createEvent }) {
     exit.click();
     check('exitRestoresSidebar', !document.body.classList.contains('presenting') && visible(document.querySelector('.side')));
     // Text fields update on input; date fields commit on change, as in the editor.
+    const stylesBeforeTyping = styleCalls;
     for (const field of ['text', 'validFrom', 'validTo']) {
       const input = document.querySelector('[data-warning-field="' + field + '"]');
       input.value = ''; input.dispatchEvent(new Event(field === 'text' ? 'input' : 'change', { bubbles: true }));
     }
+    check('warningEditsKeepMapStyle', styleCalls === stylesBeforeTyping);
     document.querySelector('[data-action="present"]').click();
     if (!visible(panel('messages'))) toggle('messages').click();
     check('sourceOnlyVisible', panel('messages').querySelector('.ops-alert')?.textContent.includes('Warning authority'));
