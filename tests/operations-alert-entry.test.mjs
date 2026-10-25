@@ -49,9 +49,9 @@ async function browserChecks({ initOperations, createEvent }) {
   ];
   const warn = (id, areas = [], places = []) => ({ id, code: 'orange', source: 'ANM', validFrom: '', validTo: '', text: '', areas, places });
   let handlers = {};
-  const boot = ({ alerts, areas = [], data = { admin, localities }, legacy }) => {
+  const boot = ({ alerts, areas = [], places = [], data = { admin, localities }, legacy }) => {
     const active = createEvent('Introducere rapidă', 'snow');
-    Object.assign(active, { areas, places: [], alerts });
+    Object.assign(active, { areas, places, alerts });
     // An event saved before multiple warnings: one `alert` and the event's own areas, no list.
     if (legacy) { delete active.alerts; active.alert = legacy; }
     const memory = new Map([['hb.ops.session.v1', JSON.stringify({ active })]]);
@@ -221,6 +221,42 @@ Fenomene: vijelie`);
       click('[data-alert-action="parse"]');
       check('pasteWaitsForOpenMarker', !(stored().alerts || []).length && toasts.at(-1)?.startsWith('Finalizează sau anulează marcajul'));
     }
+    // "Preia UAT-urile de sub cod" adds the warnings' UATs and villages to the situation's zone.
+    // Two villages share a name, so the zone keeps the warning's `Name|UAT` key.
+    const poiana = [{ name: 'Poiana', kind: 'village', lon: 27.1, lat: 47.5, uat: 'Vlădeni' }, { name: 'Poiana', kind: 'village', lon: 26.5, lat: 47.95, uat: 'Dorohoi' }];
+    const withPoiana = { admin, localities: [...localities, ...poiana] };
+    const takeButton = () => $('button[data-action="take-alert-zone"]');
+    {
+      const { stored, toasts } = boot({ alerts: [warn('w1', ['Vlădeni', 'Curtești'], ['Agafton|Curtești', 'Poiana|Dorohoi']), warn('w2', ['Vlădeni'])], areas: ['Botoșani'], data: withPoiana });
+      check('takeZoneOffered', takeButton() && !takeButton().hidden && takeButton().title.includes('2 UAT-uri și 1 sat'));
+      click('button[data-action="take-alert-zone"]');
+      check('takeZoneAddsUats', stored().areas.join() === 'Botoșani,Vlădeni,Curtești');
+      check('takeZoneSkipsCoveredVillages', stored().places.join() === 'Poiana|Dorohoi');
+      check('takeZoneLeavesWarnings', stored().alerts[0].areas.join() === 'Vlădeni,Curtești' && stored().alerts[0].places.length === 2 && stored().alerts[1].areas.join() === 'Vlădeni');
+      check('takeZoneSaysWhatItAdded', toasts.at(-1) === 'Am adăugat în zona situației 2 UAT-uri și 1 sat de sub cod.');
+      check('takeZoneHidesOnceDone', takeButton()?.hidden);
+      const tags = $('[data-ops-card="focus"] .ops-tags')?.textContent || '';
+      check('zoneTagNamesTheVillageUat', tags.includes('Sat Poiana (Dorohoi)') && !tags.includes('|'));
+      check('focusBarNamesTheVillageUat', $('.ops-focusbar')?.textContent.includes('Poiana (Dorohoi)') && !$('.ops-focusbar').textContent.includes('|'));
+    }
+    // A village the zone already holds by its plain name is not added twice; its namesake is.
+    {
+      const { stored } = boot({ alerts: [warn('w1', [], ['Poiana|Vlădeni', 'Poiana|Dorohoi'])], places: ['Poiana'], data: withPoiana });
+      click('button[data-action="take-alert-zone"]');
+      check('takeZoneKnowsHeldVillages', stored().places.join() === 'Poiana,Poiana|Dorohoi');
+    }
+    // Ticking a warning's UAT does not redraw the panel, yet the button follows; a UAT outside the
+    // county's list is never offered.
+    {
+      boot({ alerts: [warn('w1', ['Liteni'])] });
+      check('takeZoneSkipsUnlistedUats', takeButton()?.hidden);
+      const box = entry('w1').querySelector('input[data-alert-area="areas"][value="Dorohoi"]');
+      box.checked = true;
+      box.dispatchEvent(new Event('change', { bubbles: true }));
+      check('takeZoneFollowsTicks', takeButton() && !takeButton().hidden && takeButton().title.includes('situației 1 UAT de sub cod'));
+      click('[data-warning-id="w1"] [data-alert-preset="none"]');
+      check('takeZoneFollowsPresets', takeButton()?.hidden);
+    }
   } catch (error) { result.error = error.stack + (pageErrors.length ? '\n' + pageErrors.join('\n') : ''); }
   check('noPageErrors', !pageErrors.length || (result.pageErrors = pageErrors, false));
   out.textContent = JSON.stringify(result);
@@ -241,6 +277,6 @@ test('zone presets, the map pick and a pasted message fill warnings in the real 
     assert.equal(result.error, undefined, result.error);
     const failed = Object.entries(result).filter(([, ok]) => !ok).map(([name]) => name);
     assert.deepEqual(failed, [], 'Warning entry regressions');
-    assert.ok(Object.keys(result).length >= 39, 'Every scenario reported');
+    assert.ok(Object.keys(result).length >= 51, 'Every scenario reported');
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });

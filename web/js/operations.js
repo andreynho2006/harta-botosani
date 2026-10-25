@@ -439,6 +439,7 @@ export function initOperations(ctx) {
       // which is baked into label filters, gains or loses a UAT.
       changed(); sync(geography && (active?.isolateArea ?? true));
       if (rerender) render();
+      else if (geography) refreshAlertZoneButton();
       if (state.operations.presenting) renderPresentationOverlay();
     },
     onPickMap: alertId => {
@@ -783,12 +784,53 @@ export function initOperations(ctx) {
 
   function findLocality(name) {
     if (!name) return null;
+    // A village taken from a warning keeps its `Name|UAT` key, since names repeat across UATs.
+    if (String(name).includes("|")) return resolvePlace(name, allLocalities());
     const q = String(name).trim().toLowerCase();
     // Ten names also exist across the border; like warnings, prefer the village inside the county.
     const exact = allLocalities().filter(l => l.name.toLowerCase() === q);
     if (exact.length) return exact.find(l => l.uat) || exact[0];
     const prefix = allLocalities().filter(l => l.name.toLowerCase().startsWith(q));
     return prefix.find(l => l.uat) || prefix[0] || null;
+  }
+
+  /** The warnings' UATs and villages the situation's zone still lacks; a village whose UAT is in the zone adds nothing. */
+  function alertZoneAdditions() {
+    const listed = new Set((state.data.admin?.features || []).filter(f => f.properties.kind === "uat").map(f => f.properties.name));
+    const { areas, places } = affectedAlertLocations(active);
+    const newAreas = areas.filter(name => listed.has(name) && !active.areas.includes(name));
+    const zone = new Set([...active.areas, ...newAreas]);
+    const held = new Set((active.places || []).map(findLocality));
+    const newPlaces = [];
+    for (const entry of places) {
+      const place = resolvePlace(entry, allLocalities());
+      if (!place?.uat || zone.has(place.uat) || held.has(place)) continue;
+      held.add(place);
+      newPlaces.push(placeKey(place));
+    }
+    return { areas: newAreas, places: newPlaces };
+  }
+
+  function additionsLabel({ areas, places }) {
+    return [areas.length ? countLabel(areas.length, "UAT", "UAT-uri") : "", places.length ? countLabel(places.length, "sat", "sate") : ""].filter(Boolean).join(" și ");
+  }
+
+  // Shown only while it would add something; the zone keeps its own UATs without a code.
+  function alertZoneButton(additions) {
+    return {
+      hidden: !additions.areas.length && !additions.places.length,
+      title: `Adaugă în zona situației ${additionsLabel(additions)} de sub cod`,
+    };
+  }
+  function alertZoneButtonHTML() {
+    const { hidden, title } = alertZoneButton(alertZoneAdditions());
+    return `<button class="btn" type="button" data-action="take-alert-zone" title="${esc(title)}" ${hidden ? "hidden" : ""}>Preia UAT-urile de sub cod</button>`;
+  }
+  // Ticking a warning's UATs does not redraw the panel, so the button follows on its own.
+  function refreshAlertZoneButton() {
+    const button = panel.querySelector('button[data-action="take-alert-zone"]');
+    if (!button || !active) return;
+    Object.assign(button, alertZoneButton(alertZoneAdditions()));
   }
 
   function selectedGeometry(alerts = buildAlertGeography(active, state.data)) {
@@ -826,7 +868,7 @@ export function initOperations(ctx) {
     }
     const tags = [
       ...areas.map(a => `<button type="button" class="ops-fchip" data-fremove-uat="${esc(a)}" title="Elimină UAT din focalizare">UAT ${esc(a)} ×</button>`),
-      ...places.map(p => `<button type="button" class="ops-fchip" data-fremove-place="${esc(p)}" title="Elimină localitatea din focalizare">${esc(p)} ×</button>`),
+      ...places.map(p => `<button type="button" class="ops-fchip" data-fremove-place="${esc(p)}" title="Elimină localitatea din focalizare">${esc(placeLabel(p))} ×</button>`),
     ].join("");
     focusbar.innerHTML = `
       <div class="ops-fbar-chips"><strong>${viewFocus ? "Vizualizare:" : "Focus:"}</strong> ${tags}</div>
@@ -1515,7 +1557,7 @@ export function initOperations(ctx) {
         </div>
         <div class="ops-tags">
           ${active.areas.map(name => `<button class="ops-tag" type="button" data-area="${esc(name)}" title="Elimină UAT">UAT ${esc(name)} ×</button>`).join("")}
-          ${(active.places || []).map(name => `<button class="ops-tag ops-tag-place" type="button" data-place-remove="${esc(name)}" title="Elimină localitatea">Sat ${esc(name)} ×</button>`).join("")}
+          ${(active.places || []).map(name => `<button class="ops-tag ops-tag-place" type="button" data-place-remove="${esc(name)}" title="Elimină localitatea">Sat ${esc(placeLabel(name))} ×</button>`).join("")}
           ${!active.areas.length && !(active.places || []).length ? `<span class="muted">Toate UAT-urile vizibile · context județean</span>` : ""}
         </div>
         ${(active.places || []).length ? `<p class="muted">Pentru sate, evidențierea este orientativă în jurul localității. Pentru un contur administrativ exact, selectează comuna sau orașul.</p>` : ""}
@@ -1524,6 +1566,7 @@ export function initOperations(ctx) {
         ${!active.areas.length && !(active.places || []).length ? `<p class="muted" role="note">Localitățile aflate sub cod se aleg separat pentru fiecare avertizare, în cardul „Avertizări și localități sub cod”.</p>` : ""}
         <div class="ops-actions">
           <button class="btn" type="button" data-action="area">Alege UAT-uri cu click pe hartă</button>
+          ${alertZoneButtonHTML()}
           <button class="btn" type="button" data-action="fit">Încadrează zona</button>
           ${active.areas.length || (active.places || []).length ? `<button class="btn" type="button" data-action="clear-areas">Resetează la tot județul</button>` : ""}
         </div>
@@ -2126,7 +2169,7 @@ export function initOperations(ctx) {
 
     const areaText = [
       ...(active.areas.length ? [`UAT: ${active.areas.join(", ")}`] : []),
-      ...((active.places || []).length ? [`Localități: ${active.places.join(", ")}`] : []),
+      ...((active.places || []).length ? [`Localități: ${active.places.map(placeLabel).join(", ")}`] : []),
     ].join(" · ") || "Județul Botoșani";
     const hasNotes = Boolean(active.notes && String(active.notes).trim());
     // Most severe first. A village is listed only when its own UAT is not already under the same warning.
@@ -2548,6 +2591,15 @@ export function initOperations(ctx) {
       viewFocus = null;
       changed(); sync(true); render(); fit();
       return;
+    }
+    if (action === "take-alert-zone" && active) {
+      const additions = alertZoneAdditions();
+      if (!additions.areas.length && !additions.places.length) return message("Zona situației conține deja toate localitățile aflate sub cod.");
+      active.areas = [...active.areas, ...additions.areas];
+      active.places = [...(active.places || []), ...additions.places];
+      viewFocus = null;
+      changed(); sync(true); render(); fit();
+      return toast(`Am adăugat în zona situației ${additionsLabel(additions)} de sub cod.`);
     }
     if (action === "clear-areas" && active) {
       active.areas = []; active.places = []; active.isolateArea = false; viewFocus = null;

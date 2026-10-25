@@ -124,6 +124,8 @@
 .ops-cloud-pill.is-error { background: rgba(220, 38, 38, 0.12); color: #991b1b; border-color: rgba(220, 38, 38, 0.35); }
 
 .ops-focusbar { position: absolute; top: 58px; left: 12px; z-index: 5; display: flex; align-items: center; flex-wrap: wrap; gap: 8px; max-width: min(640px, calc(100vw - 24px)); padding: 7px 11px; border: 1px solid var(--line-2); border-radius: 10px; background: color-mix(in srgb, var(--panel) 94%, transparent); backdrop-filter: blur(8px); color: var(--ink); box-shadow: var(--shadow); }
+/* A zone taken from county-wide warnings holds dozens of UATs: the chips scroll, the map stays free. */
+.ops-fbar-chips { max-height: 108px; overflow-y: auto; overscroll-behavior: contain; }
 .ops-focus-title { font-size: 12.5px; line-height: 1.35; margin-right: 4px; }
 .ops-focus-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 5px; }
 .ops-focusbar button { min-height: 30px; padding: 4px 9px; border: 1px solid var(--line-2); border-radius: 6px; background: var(--panel-2); color: var(--ink); font-size: 11.5px; font-weight: 550; cursor: pointer; }
@@ -267,6 +269,7 @@
   .ops-grid, .ops-grid-3, .ops-tools-grid { grid-template-columns: minmax(0, 1fr); }
   .ops .btn, .ops .lnk, .ops-tag { min-height: 44px; font-size: 13px; }
   .ops-focusbar { top: 64px; left: 10px; right: 10px; }
+  .ops-fbar-chips { max-height: 76px; }
   .ops-drawbar { top: auto; bottom: calc(var(--peek) + 12px); left: 10px; right: 10px; max-width: none; padding: 9px; }
   .ops-drawbar > span { flex-basis: 100%; font-size: 13px; }
   .ops-drawbar button { flex: 1 1 auto; min-height: 44px; }
