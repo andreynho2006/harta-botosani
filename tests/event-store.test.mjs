@@ -405,3 +405,20 @@ test('a tab whose Cloud state write failed does not erase what other tabs stored
   assert.equal(new CloudStates(storage).get('b'), null);
   assert.equal(new CloudStates(storage).get('d').unpublished, true);
 });
+
+test('an entry another tab rewrote after this tab failed to write it is not overwritten later', () => {
+  const values = new Map();
+  let full = false;
+  const storage = { getItem: key => values.get(key) ?? null, setItem: (key, value) => { if (full) throw new Error('QuotaExceededError'); values.set(key, value); } };
+  const tab = new CloudStates(storage), other = new CloudStates(storage);
+  tab.update('x', { base: '2026-10-25T10:00:00.000Z', unpublished: true });
+  full = true;
+  tab.update('x', { unpublished: false });
+  full = false;
+  other.update('x', { unpublished: true, base: '2026-10-25T11:00:00.000Z' });
+  tab.update('y', { unpublished: true });
+  const stored = new CloudStates(storage).get('x');
+  assert.equal(stored.unpublished, true, "the other tab's newer entry stands");
+  assert.equal(stored.base, '2026-10-25T11:00:00.000Z');
+  assert.equal(tab.get('x').base, '2026-10-25T11:00:00.000Z', 'this tab reads it too');
+});

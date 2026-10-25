@@ -340,8 +340,8 @@ export class CloudStates {
   constructor(storage = globalThis.localStorage) { this.storage = storage; this._raw = undefined; this._stored = new Map(); this._unsaved = new Map(); }
 
   // Reparsed only when another tab (or this one) wrote the map since the last read. Entries this
-  // tab could not write (full storage) stay on top of it, and go out with the next write that
-  // succeeds, so a failed write never rewrites what other tabs stored meanwhile.
+  // tab could not write (full storage) stay on top of it and go out with the next write that
+  // succeeds; one that another tab rewrote meanwhile is newer, and this tab's copy is dropped.
   _read() {
     let raw = null;
     try { raw = this.storage?.getItem(CLOUD_STATE_KEY) ?? null; } catch { /* unreadable storage: start empty */ }
@@ -359,13 +359,18 @@ export class CloudStates {
     }
     if (!this._unsaved.size) return this._stored;
     const states = new Map(this._stored);
-    for (const [id, state] of this._unsaved) state ? states.set(id, state) : states.delete(id);
+    for (const [id, { state, over }] of this._unsaved) {
+      if (JSON.stringify(this._stored.get(id) ?? null) !== over) { this._unsaved.delete(id); continue; }
+      if (state) states.set(id, state); else states.delete(id);
+    }
     return states;
   }
 
   // `state` null removes the situation's entry.
   _write(id, state) {
-    this._unsaved.set(id, state);
+    this._read();
+    const over = this._unsaved.get(id)?.over ?? JSON.stringify(this._stored.get(id) ?? null);
+    this._unsaved.set(id, { state, over });
     const states = this._read();
     try {
       const raw = JSON.stringify(Object.fromEntries(states));
