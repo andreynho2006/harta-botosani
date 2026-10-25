@@ -68,6 +68,7 @@ jobs:
           cp -r web/. site/
           cp -r /tmp/date/tiles /tmp/date/data site/
           rm -f site/data/hidranti.geojson   # hidranții se publică doar criptați (web/data/hidranti.enc)
+          rm -f site/data/hidrografie*.geojson   # cadastrul apelor ABA se publică doar criptat (web/data/hidrografie.enc)
           printf '/tiles/*\n  Cache-Control: public, max-age=86400\n/vendor/*\n  Cache-Control: public, max-age=604800\n/fonts/*\n  Cache-Control: public, max-age=604800\n' > site/_headers
           touch site/.nojekyll
 

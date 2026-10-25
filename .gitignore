@@ -3,3 +3,4 @@ dist/
 dist-data/
 __pycache__/
 .claude/launch.json
+hidrografie*.geojson
