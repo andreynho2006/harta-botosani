@@ -290,6 +290,9 @@
   .ops-slide-head h1 { font-size: 18px; }
   .ops-slide-eyebrow { font-size: 11px; }
   .ops-slide-head p { font-size: 13px; }
+  /* The header scrolls as a whole here, and on a narrow banner the source and interval wrap over three to five lines,
+     so a banner keeps room below them for the start of its text. */
+  .ops-slide-head .ops-alert { min-height: min(136px, 24dvh); }
   .ops-slide-controls { grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); }
   .ops-legend { gap: 6px; }
   .ops-legend > span { padding: 5px 7px; font-size: 12px; }

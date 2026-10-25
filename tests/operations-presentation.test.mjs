@@ -77,7 +77,8 @@ async function browserChecks({ initOperations, createEvent }) {
     const panel = name => document.querySelector('#ops-pres-' + name);
     const toggle = name => document.querySelector('.ops-pres-toggle[data-action="pres-toggle-' + name + '"]');
     const openPanels = () => panels.filter(name => visible(panel(name)));
-    const result = { viewport: innerWidth + 'x' + innerHeight };
+    const why = {};
+    const result = { viewport: innerWidth + 'x' + innerHeight, why };
     const check = (name, value) => { result[name] = Boolean(value); };
     document.querySelector('[data-action="present"]').click();
     await nextFrame();
@@ -317,11 +318,19 @@ async function browserChecks({ initOperations, createEvent }) {
         check('headerLeavesMapFree' + suffix, head.getBoundingClientRect().height <= innerHeight * 0.5);
       } else {
         // On phones the header scrolls as a whole, so every banner's start must be reachable by scrolling to it.
-        check('bannersReachableByScrolling' + suffix, triple.every(banner => {
+        const hidden = triple.filter(banner => {
           banner.scrollIntoView({ block: 'start' });
           const text = banner.querySelector('.ops-alert-text');
-          return shown(banner.querySelector('.ops-alert-code'), head) && shown(banner.querySelector('.ops-alert-when'), head) && shownRect(firstLine(text), text, head);
-        }));
+          return !(shown(banner.querySelector('.ops-alert-code'), head) && shown(banner.querySelector('.ops-alert-when'), head) && shownRect(firstLine(text), text, head));
+        });
+        check('bannersReachableByScrolling' + suffix, !hidden.length);
+        // Text metrics and scrollbars differ by platform, so a failure says how far the start falls and why.
+        if (hidden.length) why['bannersReachableByScrolling' + suffix] = hidden.map(banner => {
+          banner.scrollIntoView({ block: 'start' });
+          const fold = banner.getBoundingClientRect().top + banner.clientTop + banner.clientHeight;
+          return banner.dataset.code + ': first line ends ' + Math.round(firstLine(banner.querySelector('.ops-alert-text')).bottom - fold) + 'px below the fold, scrollbar '
+            + (banner.offsetWidth - banner.clientWidth - banner.clientLeft) + 'px, interval on ' + banner.querySelector('.ops-alert-when').getClientRects().length + ' lines';
+        }).join('; ');
         head.scrollTop = 0;
       }
     };
@@ -386,7 +395,7 @@ test('CJSU panels collapse independently, preserve the map, and keep full warnin
     assert.ok(match?.[1], 'Browser did not complete the presentation checks: ' + run.stderr.slice(-4000));
     const results = JSON.parse(match[1].replaceAll('&amp;', '&').replaceAll('&lt;', '<').replaceAll('&gt;', '>'));
     assert.equal(results.length, sizes.length, 'Incomplete browser results: ' + JSON.stringify(results));
-    const failures = results.flatMap(result => result.error ? [result.viewport + ': ' + result.error] : Object.entries(result).filter(([check, passed]) => check !== 'viewport' && !passed).map(([check]) => result.viewport + ': ' + check));
+    const failures = results.flatMap(result => result.error ? [result.viewport + ': ' + result.error] : Object.entries(result).filter(([check, passed]) => check !== 'viewport' && check !== 'why' && !passed).map(([check]) => result.viewport + ': ' + check + (result.why[check] ? ' (' + result.why[check] + ')' : '')));
     if (process.env.CJSU_DEBUG) console.log(run.stderr);
     assert.deepEqual(failures, [], 'Presentation regressions:\n' + failures.join('\n'));
   } finally { rmSync(dir, { recursive: true, force: true }); }
