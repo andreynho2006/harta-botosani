@@ -515,11 +515,12 @@ export function initOperations(ctx) {
         };
       }
       if (saved?.active && typeof saved.active === "object") {
-        // The archive holds the last saved copy; the session adds only edits that never reached it.
-        // Every tab writes the same session, so its copy may be another tab's older one.
+        // The archive holds the last saved copy. Every tab writes the same session, so a session
+        // copy of another version may be another tab's older one; one of the same version keeps
+        // what never reaches the archive (unsaved edits, presentation toggles).
         const fromDb = !saved.dirty && saved.active.id ? db.load(saved.active.id) : null;
         try {
-          active = fromDb ?? sanitizeEvent(saved.active);
+          active = fromDb && fromDb.updatedAt !== saved.active.updatedAt ? fromDb : sanitizeEvent(saved.active);
         } catch {
           active = fromDb || saved.active;
         }
@@ -545,7 +546,13 @@ export function initOperations(ctx) {
           conflict: saved.cloudConflict && typeof saved.cloudConflict === "object" ? saved.cloudConflict : null,
         });
       }
-      if (active) screenBase = cloudStates.get(active.id)?.base ?? null;
+      if (active) {
+        const known = cloudStates.get(active.id);
+        // A copy that differs from its Cloud base without unpublished work came from elsewhere
+        // (an imported file, the seed, an edit whose state could not be stored): it is local work.
+        if (known?.base && !known.unpublished && active.updatedAt !== known.base) cloudStates.update(active.id, { unpublished: true });
+        screenBase = known?.base ?? null;
+      }
     } catch (e) {
       console.warn("Nu am putut restaura sesiunea operativă", e);
     } finally {
@@ -1820,11 +1827,12 @@ export function initOperations(ctx) {
       setCloudState({ base: remote.updatedAt, unpublished: false });
       persistSession(); refreshSaveState();
     }
-    const { unpublished, conflict } = cloudState();
+    const { unpublished, conflict, base, sent } = cloudState();
     const newer = Boolean(newerRemote(local));
-    // The archive holds a version this screen does not show and the Cloud does not have: another
-    // tab saved it, even if its state could not be stored.
-    const elsewhere = Boolean(active && local.updatedAt !== active.updatedAt && local.updatedAt !== remote?.updatedAt);
+    // The archive holds edits this screen does not show and the Cloud does not have: another tab
+    // saved them, even if its state could not be stored. A Cloud version stored there is no work.
+    const elsewhere = Boolean(active && local.updatedAt !== active.updatedAt && local.updatedAt !== remote?.updatedAt
+      && local.updatedAt !== base && !sent.includes(local.updatedAt));
     // Work that is not in the Cloud yet, or still on screen only, is never replaced silently.
     const held = newer && (unpublished || dirty || busy() || elsewhere);
     // The local copy of unpublished work stays as it is, whatever the timestamps say.
@@ -1875,22 +1883,20 @@ export function initOperations(ctx) {
       kept.add(id);
       const remote = cloudCopies.get(id);
       const settled = Boolean(remote && !cloudPending.has(id));
-      if (settled && remote.updatedAt === local.updatedAt) {
+      // Another tab's snapshot may be older than the one a holding screen acted on, so a held
+      // version is set here but cleared only by a screen showing the situation.
+      if (settled && remote.updatedAt === local.updatedAt && (known.unpublished || remote.updatedAt !== known.base)) {
         // Its local copy is in the Cloud: a publish that landed after the situation was left.
         cloudStates.update(id, { base: remote.updatedAt, unpublished: false, conflict: null });
       } else if (known.unpublished || (known.base && local.updatedAt !== known.base)) {
         // Unpublished work, or a copy changed here outside a publish (an imported file, the seed).
         if (!known.unpublished) cloudStates.update(id, { unpublished: true });
-        if (!remote) cloudStates.update(id, { conflict: null });
-        else if (settled) cloudStates.update(id, { conflict: known.sent.includes(remote.updatedAt) || remote.updatedAt === known.base ? null : remote });
+        if (settled && !known.conflict && !known.sent.includes(remote.updatedAt) && remote.updatedAt !== known.base) cloudStates.update(id, { conflict: remote });
       } else if (!known.base) {
         // Nothing known about its Cloud copy yet: the archive merges by timestamp, as before.
         kept.delete(id);
       } else if (known.conflict) {
-        // A screen in another tab holds a colleague's version back: it waits for that screen, but
-        // stays the latest one, and goes once the Cloud is back at the base or drops its copy.
-        if (!remote || (settled && remote.updatedAt === known.base)) cloudStates.update(id, { conflict: null });
-        else if (settled) cloudStates.update(id, { conflict: remote });
+        // A screen in another tab holds a colleague's version back: it waits for that screen.
       } else if (settled && remote.updatedAt !== known.base) {
         try { db.put(remote); cloudStates.update(id, { base: remote.updatedAt, conflict: null }); }
         catch (e) { console.warn(e); kept.delete(id); }

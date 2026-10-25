@@ -658,21 +658,72 @@ async function browserChecks({ initOperations, createEvent, EventStore }) {
       check('heldVersionOpenedElsewhereLoadsHere', title() === 'Zonă, deschisă apoi · coleg' && !$('.ops-conflict'));
     }
     {
-      // Tab 1 holds a version behind an area selection; a newer one reaches the passive tab 2 first.
-      const mine = situation('Ținută, apoi alta'), other = situation('Pasivă 2');
+      // Tab 1 holds a version behind an area selection; the passive tab 2 then hears an older snapshot.
+      const mine = situation('Ținută, snapshot vechi'), other = situation('Pasivă 2');
       const first = boot({ active: mine, session: { cloudBase: mine.updatedAt } });
       first.ops.syncFromCloud([structuredClone(mine), structuredClone(other)]);
       const second = bootSecondTab(first);
       pickIn(second.panel, other.id);
       click('button[data-action="area"]');
-      const r1 = colleague(mine, 'Ținută, apoi alta · coleg 1', 1), r2 = colleague(mine, 'Ținută, apoi alta · coleg 2', 2);
-      first.ops.syncFromCloud([r1, structuredClone(other)]);
-      second.ops.syncFromCloud([r1, structuredClone(other)]);
-      second.ops.syncFromCloud([r2, structuredClone(other)]);
-      const held = () => JSON.parse(first.memory.get('hb.ops.cloud.v1'))[mine.id]?.conflict?.updatedAt;
-      check('heldVersionStaysLatestInPassiveTab', held() === r2.updatedAt);
+      first.ops.syncFromCloud([colleague(mine, 'Ținută, snapshot vechi · coleg', 1), structuredClone(other)]);
       second.ops.syncFromCloud([structuredClone(mine), structuredClone(other)]);
-      check('heldVersionGoesWhenCloudBackAtBase', !held());
+      click('.ops-drawbar button[data-action="finish"]');
+      check('olderPassiveSnapshotKeepsHeldVersion', title() === 'Ținută, snapshot vechi · coleg' && !$('.ops-conflict'));
+    }
+    {
+      // The same with unpublished edits: the older snapshot in tab 2 must not let tab 1 publish over it.
+      const mine = situation('Editată, snapshot vechi'), other = situation('Pasivă 3');
+      const first = boot({ active: mine, session: { cloudBase: mine.updatedAt } });
+      first.ops.syncFromCloud([structuredClone(mine), structuredClone(other)]);
+      const second = bootSecondTab(first);
+      pickIn(second.panel, other.id);
+      editTitle('Editată, snapshot vechi · a mea');
+      first.ops.syncFromCloud([colleague(mine, 'Editată, snapshot vechi · coleg', 1), structuredClone(other)]);
+      second.ops.syncFromCloud([structuredClone(mine), structuredClone(other)]);
+      click('[data-action="save"]'); await settle();
+      check('olderPassiveSnapshotStillGuardsPublish', !first.calls.length && notice().startsWith('Altcineva a publicat'));
+    }
+    {
+      // Tab 1 publishes; tab 2, idle on the same situation, hears a colleague's next version before
+      // it heard tab 1's: it follows live, the stored copy is a Cloud version, not work.
+      const mine = situation('Publicată în fila 1');
+      let sent;
+      const first = boot({ active: mine, session: { cloudBase: mine.updatedAt }, save: written => { sent = written; return Promise.resolve(true); } });
+      first.ops.syncFromCloud([structuredClone(mine)]);
+      const second = bootSecondTab(first);
+      second.ops.syncFromCloud([structuredClone(mine)]);
+      editTitle('Publicată în fila 1 · fila 1');
+      click('[data-action="save"]'); await settle();
+      second.ops.syncFromCloud([colleague(sent, 'Publicată în fila 1 · coleg', 1)]);
+      check('passiveTabFollowsAfterOwnBrowserPublish', second.panel.querySelector('[data-ops-card="event"] h2')?.textContent === 'Publicată în fila 1 · coleg' && !second.panel.querySelector('.ops-conflict'));
+    }
+    {
+      // The state of an edit cannot be stored, then the page reloads before a colleague's snapshot.
+      const mine = situation('Reîncărcare, stare nescrisă');
+      const first = boot({ active: mine, session: { cloudBase: mine.updatedAt } });
+      first.ops.syncFromCloud([structuredClone(mine)]);
+      first.faults.add('hb.ops.cloud.v1');
+      editTitle('Reîncărcare, stare nescrisă · editată');
+      const { ops, archive } = boot({ memory: first.memory });
+      check('reloadAfterUnstoredStateShowsUnpublished', status().includes('nepublicat în Cloud'));
+      ops.syncFromCloud([colleague(mine, 'Reîncărcare, stare nescrisă · coleg', 1)]);
+      check('reloadAfterUnstoredStateKeepsEdits', archive().find(event => event.id === mine.id)?.title === 'Reîncărcare, stare nescrisă · editată' && $('.ops-conflict'));
+    }
+    {
+      // "Izolează zona" in the presentation stays only in the session; a reload keeps it.
+      const mine = situation('Izolare în prezentare');
+      const first = boot({ active: mine, session: { cloudBase: mine.updatedAt } });
+      first.ops.syncFromCloud([structuredClone(mine)]);
+      const isolate = () => document.querySelector('.ops-presentation button[data-action="pres-isolate"]');
+      const exit = () => document.querySelector('.ops-presentation button[data-action="exit"]')?.click();
+      click('button[data-action="present"]');
+      isolate()?.click();
+      const label = isolate()?.textContent;
+      exit();
+      boot({ memory: first.memory });
+      click('button[data-action="present"]');
+      check('presentationIsolateSurvivesReload', label === 'Arată tot județul' && isolate()?.textContent === label);
+      exit();
     }
     {
       // Tab 2, still on the older copy, writes the shared session; tab 1, with unpublished edits, reloads.
@@ -777,6 +828,6 @@ test('Cloud snapshots keep work in progress, publishing reports the real result,
     assert.equal(result.error, undefined, result.error);
     const failed = Object.entries(result).filter(([, ok]) => !ok).map(([name]) => name);
     assert.deepEqual(failed, [], 'Cloud guard regressions');
-    assert.ok(Object.keys(result).length >= 95, 'Every scenario reported');
+    assert.ok(Object.keys(result).length >= 99, 'Every scenario reported');
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
