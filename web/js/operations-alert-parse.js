@@ -241,8 +241,14 @@ function namesCounty(text) {
 /** A county-prefixed list for another county, "Județul Suceava:", whose names are not ours to match. */
 const otherCountyList = folded => [...folded.matchAll(/\bjud(?:etul|\.)\s*([a-z\-]+)\s*[:–-]/g)].some(m => m[1] !== 'botosani');
 
-/** Lists after "Zone afectate:", "Zona:", "Localitățile:". */
-const zoneLists = folded => [...folded.matchAll(/\b(?:zone(?:le)?\s+afectate|zona|zonele|localitatile|localitati|comunele|uat-urile)\s*:\s*/g)]
+/** The clause before a list names another county: "zona de munte a județului Suceava, respectiv zona localităților:". */
+function otherCountyClause(folded, at) {
+  const clause = folded.slice(Math.max(folded.lastIndexOf('\n', at - 1), folded.lastIndexOf(';', at - 1)) + 1, at);
+  return [...clause.matchAll(/\bjudetului\s+([a-z\-]+)/g)].some(m => m[1] !== 'botosani');
+}
+
+/** Lists after "Zone afectate:", "Zona:", "Localitățile:", "zona localităților:". */
+const zoneLists = folded => [...folded.matchAll(/\b(?:zone(?:le)?\s+afectate|zona|zonele|localitatilor|localitatile|localitati|comunele|uat-urile)\s*:\s*/g)]
   .map(m => listAt(folded, m.index + m[0].length));
 
 /** UAT names anywhere in a message without counties or lists, not "ISU Botoșani" or "al județului Botoșani". */
@@ -293,57 +299,87 @@ function sourceOf(folded) {
   return '';
 }
 
+/** The county's UATs and villages, keyed once for matching names. */
+function nameIndex(uats, localities) {
+  return {
+    uats: [...new Set(uats)].map(name => ({ name, key: nameKey(name) })),
+    villages: localities.filter(place => place?.uat && place.name).map(place => ({ place, key: nameKey(place.name) })),
+  };
+}
+
+/** What one section names in the county; `concerns` is false when it is about other counties only. */
+function zoneOf(body, index, source) {
+  const { folded, origin } = foldText(body);
+  const areas = new Set(), places = new Set(), unmatched = [], ambiguous = [];
+  let county = false, concerns = false;
+  const lists = countyLists(folded);
+  // Matched on the original text, so the report names what the message wrote.
+  const take = ({ start: from, end: to }) => {
+    if (to <= from) return;
+    for (const item of splitList(body.slice(origin[from], origin[to - 1] + 1))) {
+      const match = matchName(item, index);
+      if (!match) continue;
+      if (match.area) areas.add(match.area);
+      else if (match.place) places.add(match.place);
+      else if (match.ambiguous) ambiguous.push({ name: match.ambiguous, count: match.count });
+      else unmatched.push(match.unmatched);
+    }
+  };
+  if (lists.length) { concerns = true; lists.forEach(take); }
+  else if (namesCounty(folded)) { concerns = true; county = true; }
+  else if (!otherCountyList(folded)) {
+    const zones = zoneLists(folded).filter(list => !otherCountyClause(folded, list.start));
+    if (zones.length) zones.forEach(take);
+    // Free text is read only when it names no county at all: names repeat across counties.
+    else if (!/\bjud(?:et\w*|\.)/.test(folded)) namesInText(folded, index.uats).forEach(name => areas.add(name));
+    concerns = areas.size > 0 || places.size > 0;
+  }
+  if (county && source !== 'INHGA') index.uats.forEach(uat => areas.add(uat.name));
+  return { areas: [...areas], places: [...places], county, unmatched, ambiguous, concerns };
+}
+
+/**
+ * The county's part of a zone text, as { areas, places, county, unmatched, ambiguous, concerns }:
+ * the names of a "Județul Botoșani: …" list, every UAT for "județul Botoșani", else the names after
+ * "Zona:" in a text naming no other county. `concerns` is false for a text about other counties only.
+ */
+export const readZone = (text, { uats = [], localities = [], source = '' } = {}) =>
+  zoneOf(String(text ?? '').replace(/\r\n?/g, '\n'), nameIndex(uats, localities), source);
+
+/** Today's date in Romania. */
+function wallToday(now) {
+  const wall = localTime(now.toISOString()).match(/\d+/g).map(Number);
+  return { year: wall[0], month: wall[1], day: wall[2] };
+}
+
+/** The validity interval a text gives, as { validFrom, validTo, note } (note: '', 'partial', 'reversed' or 'none'). */
+export const readValidity = (text, { now = new Date() } = {}) => readInterval(foldText(text).folded, wallToday(now));
+
 /**
  * Every warning a pasted message holds for the county, as
  * { code, source, validFrom, validTo, text, textCut, areas, places, county, unmatched, ambiguous, interval }.
  * `county` marks a message for the whole county (its areas are then all UATs, except for INHGA,
  * whose warnings name rivers). Sections that name other counties only are left out, unless no
- * section concerns the county at all.
+ * section concerns the county at all or `all` asks for every section.
  */
-export function parseWarningText(text, { uats = [], localities = [], now = new Date() } = {}) {
+export function parseWarningText(text, { uats = [], localities = [], now = new Date(), all = false } = {}) {
   const original = String(text ?? '').replace(/\r\n?/g, '\n');
   if (!original.trim()) return [];
-  const wall = localTime(now.toISOString()).match(/\d+/g).map(Number);
-  const today = { year: wall[0], month: wall[1], day: wall[2] };
-  const uatNames = [...new Set(uats)].map(name => ({ name, key: nameKey(name) }));
-  const villages = localities.filter(place => place?.uat && place.name).map(place => ({ place, key: nameKey(place.name) }));
+  const today = wallToday(now);
+  const index = nameIndex(uats, localities);
   const wholeSource = sourceOf(foldText(original).folded);
   const { head, list } = sections(original);
   const shared = readInterval(foldText(original.slice(0, head)).folded, today);
   const results = list.map(({ code, start, end }) => {
     const body = original.slice(start, end);
-    const { folded, origin } = foldText(body);
+    const { folded } = foldText(body);
     const source = sourceOf(folded) || wholeSource;
-    const areas = new Set(), places = new Set(), unmatched = [], ambiguous = [];
-    let county = false, concerns = false;
-    const lists = countyLists(folded);
-    // Matched on the original text, so the report names what the message wrote.
-    const take = ({ start: from, end: to }) => {
-      if (to <= from) return;
-      for (const item of splitList(body.slice(origin[from], origin[to - 1] + 1))) {
-        const match = matchName(item, { uats: uatNames, villages });
-        if (!match) continue;
-        if (match.area) areas.add(match.area);
-        else if (match.place) places.add(match.place);
-        else if (match.ambiguous) ambiguous.push({ name: match.ambiguous, count: match.count });
-        else unmatched.push(match.unmatched);
-      }
-    };
-    if (lists.length) { concerns = true; lists.forEach(take); }
-    else if (namesCounty(folded)) { concerns = true; county = true; }
-    else if (!otherCountyList(folded)) {
-      const zones = zoneLists(folded);
-      if (zones.length) zones.forEach(take);
-      // Free text is read only when it names no county at all: names repeat across counties.
-      else if (!/\bjud(?:et\w*|\.)/.test(folded)) namesInText(folded, uatNames).forEach(name => areas.add(name));
-      concerns = areas.size > 0 || places.size > 0;
-    }
-    if (county && source !== 'INHGA') uatNames.forEach(uat => areas.add(uat.name));
+    const zone = zoneOf(body, index, source);
     const { text: warningText, cut } = readText(body);
     const own = readInterval(folded, today);
     const { validFrom, validTo, note } = own.note === 'none' && shared.note !== 'none' ? shared : own;
-    return { code, source, validFrom, validTo, text: warningText, textCut: cut, areas: [...areas], places: [...places], county, unmatched, ambiguous, interval: note, concerns };
+    return { code, source, validFrom, validTo, text: warningText, textCut: cut, ...zone, interval: note };
   });
-  const relevant = results.filter(result => result.concerns);
+  const relevant = all ? [] : results.filter(result => result.concerns);
   return (relevant.length ? relevant : results).map(({ concerns, ...result }) => result);
 }

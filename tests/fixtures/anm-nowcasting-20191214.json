@@ -1,0 +1,116 @@
+{
+"avertizare": [
+{
+"@attributes": {
+"tipMesaj": "2",
+"numeTipMesaj": "Atentionare nowcasting",
+"dataInceput": "2019-12-14T80:00",
+"dataSfarsit": "2019-12-14T11:00",
+"zona": "Județul Sibiu: Cisnădie, Avrig, Tălmaciu, Șelimbăr, Racovița, Turnu Roșu, Sadu, Boița;<br>",
+"semnalare": "intensificări ale vântului ce vor atinge la rafală 60...70 km/h",
+"culoare": "0",
+"numeCuloare": "galben",
+"modificat": "2019-12-14 05:54:01",
+"creat": "2019-12-14 07:54:01"
+}
+},
+{
+"@attributes": {
+"tipMesaj": "2",
+"numeTipMesaj": "Atentionare nowcasting",
+"dataInceput": "2019-12-14T70:50",
+"dataSfarsit": "2019-12-14T90:00",
+"zona": "Județul Călăraşi: Călărași, Modelu, Borcea, Dragalina, Dor Mărunt, Lehliu Gară, Roseți, Perișoru, Grădiștea, Jegălia, Cuza Voda, Independența, Lupșanu, Unirea, Ștefan cel Mare, Dragoș Vodă, Alexandru Odobescu, Lehliu, Vlad Țepeș, Ștefan Vodă, Vâlcelele, Ulmu, Dichiseni;<br>",
+"semnalare": "ceață care reduce vizibilitatea local sub 200 m",
+"culoare": "0",
+"numeCuloare": "galben",
+"modificat": "2019-12-14 05:44:01",
+"creat": "2019-12-14 07:44:01"
+}
+},
+{
+"@attributes": {
+"tipMesaj": "2",
+"numeTipMesaj": "Atentionare nowcasting",
+"dataInceput": "2019-12-14T70:40",
+"dataSfarsit": "2019-12-14T10:00",
+"zona": "Județul Constanta: zona continentala;<br>Județul Tulcea: zona continentala;<br>",
+"semnalare": "ceaţă care determină vizibilitate scăzută, local sub 200 m și izolat sub 50 m",
+"culoare": "0",
+"numeCuloare": "galben",
+"modificat": "2019-12-14 05:38:01",
+"creat": "2019-12-14 07:38:01"
+}
+},
+{
+"@attributes": {
+"tipMesaj": "2",
+"numeTipMesaj": "Atentionare nowcasting",
+"dataInceput": "2019-12-14T70:10",
+"dataSfarsit": "2019-12-14T10:00",
+"zona": "Județul Bacău: Bacău, Sascut, Răcăciuni, Cleja, Faraoani, Podu Turcului, Căiuți, Răchitoasa, Corbasca, Nicolae Bălcescu, Stănișești, Buhoci, Horgești, Letea Veche, Orbeni, Ștefan cel Mare, Glăvănești, Motoșeni, Pâncești, Urechești, Parincea, Valea Seacă, Ungureni, Gioseni, Plopana, Parava, Dealu Morii, Găiceana, Coțofănești, Huruiești, Gura Văii, Tătărăști, Traian, Filipeni, Tamași, Vultureni, Odobești, Colonești, Secuieni, Oncești, Izvoru Berheciului, Sărata;<br>Județul Botoşani;<br>Județul Suceava: Forăști, Drăgușeni;<br>Județul Galaţi: Galați, Tecuci, Liești, Pechea, Matca, Corod, Tulucești, Umbrărești, Cosmești, Munteni, Barcea, Brăhășești, Ghidigeni, Drăgănești, Măstăcani, Fârțănești, Tudor Vladimirescu, Frumușița, Ivești, Nicorești, Fundeni, Gohor, Vânători, Grivița, Foltești, Schela, Smârdan, Șendreni, Scânteiești, Cuca, Nămoloasa, Țepu, Negrilești, Buciumeni, Priponești, Rediu, Cerțești, Vlădești, Poiana, Movileni;<br>Județul Neamţ: Piatra-Neamț, Piatra Șoimului, Crăcăoani, Gârcina, Alexandru cel Bun;<br>Județul Neamţ: zona joasă;<br>Județul Vrancea: Focșani, Adjud, Mărășești, Panciu, Vulturu, Păunești, Homocea, Suraia, Măicănești, Vânători, Țifești, Tătăranu, Bolotești, Ruginești, Garoafa, Movilița, Străoane, Pufești, Milcovul, Gologanu, Fitionești, Golești, Ploscuțeni, Câmpineanca, Răstoaca, Tănăsoaia, Slobozia Ciorăști, Biliești, Corbița, Boghești, Nănești;<br>Județul Iaşi: Iași, Pașcani, Hârlău, Tomești, Holboca, Belcești, Deleni, Podu Iloaiei, Ciurea, Răducăneni, Cotnari, Scobinți, Lespezi, Hălăucești, Tătăruși, Miroslava, Lețcani, Ruginoasa, Stolniceni-Prăjescu, Valea Seacă, Popricani, Voinești, Șipote, Erbiceni, Miroslovești, Moțca, Costuleni, Vânători, Bălțați, Ceplenița, Vlădeni, Dumești, Strunga, Ion Neculce, Comarna, Sinești, Andrieșeni, Valea Lupului, Todirești, Focuri, Cristești, Schitu Duca, Butea, Mogoșești-Siret, Sirețel, Popești, Oțeleni, Ungheni, Prisăcani, Victoria, Mircești, Brăești, Probota, Țigănăși, Rediu, Rachițeni, Gropnița, Plugari, Horlești, Coarnele Caprei, Bârnova, Golăiești, Alexandru I. Cuza, Movileni, Gorban, Heleșteni, Aroneanu, Hărmănești, Țuțora, Românești, Ciohorăni, Fântânele, Grozești, Roșcani;<br>Județul Vaslui: Bârlad, Zorleni, Banca, Puiești, Vinderei, Ivănești, Dragomirești, Lipovăț, Roșiești, Iana, Muntenii de Jos, Voinești, Tutova, Perieni, Laza, Epureni, Albești, Grivița, Costești, Mălușteni, Poienești, Bogdănești, Pogana, Oltenești, Ivești, Pușcași, Gherghești, Șuletea, Deleni, Băcani, Vutcani, Coroiești, Viișoara, Dodești, Bogdana, Fruntișeni, Pochidia, Pogonești, Alexandru Vlahuță, Ibănești, Bogdănița, Ciocani;<br>",
+"semnalare": "local ceață care determină scăderea vizibilității sub 200 m, izolat sub 50 m",
+"culoare": "0",
+"numeCuloare": "galben",
+"modificat": "2019-12-14 05:00:01",
+"creat": "2019-12-14 07:00:01"
+}
+},
+{
+"@attributes": {
+"tipMesaj": "2",
+"numeTipMesaj": "Atentionare nowcasting",
+"dataInceput": "2019-12-14T60:30",
+"dataSfarsit": "2019-12-14T90:00",
+"zona": "Județul Ialomiţa;<br>",
+"semnalare": "ceață care reduce vizibilitatea local sub 200 m",
+"culoare": "0",
+"numeCuloare": "galben",
+"modificat": "2019-12-14 04:22:01",
+"creat": "2019-12-14 06:22:01"
+}
+},
+{
+"@attributes": {
+"tipMesaj": "2",
+"numeTipMesaj": "Atentionare nowcasting",
+"dataInceput": "2019-12-14T50:00",
+"dataSfarsit": "2019-12-14T90:00",
+"zona": "Județul Caraş-Severin: Moldova Nouă, Oravița, Anina, Bozovici, Pojejena, Carașova, Berzasca, Prigor, Lupac, Luncavița, Iablanița, Sichevița, Răcășdia, Grădinari, Sasca Montană, Dognecea, Lăpușnicu Mare, Bănia, Dalboșeț, Coronini, Forotic, Eftimie Murgu, Ticvaniu Mare, Ciclova Română, Gârnic, Lăpușnicel, Șopotu Nou, Vărădia, Socol, Berliște, Cărbunari, Naidăș, Vrani, Ciuchici, Ciudanovița, Văliug, Goruia, Mehadica, Brebu Nou;<br>",
+"semnalare": "intensificări temporare ale vântului cu viteze la rafală de 60-70 km/h",
+"culoare": "0",
+"numeCuloare": "galben",
+"modificat": "2019-12-14 02:54:01",
+"creat": "2019-12-14 04:54:01"
+}
+},
+{
+"@attributes": {
+"tipMesaj": "2",
+"numeTipMesaj": "Atentionare nowcasting",
+"dataInceput": "2019-12-14T50:00",
+"dataSfarsit": "2019-12-14T90:00",
+"zona": "Județul Argeş: zona joasă;<br>Județul Prahova: zona joasă;<br>Județul Giurgiu: Bolintin-Vale, Florești-Stoenești, Roata de Jos, Ulmi, Mihăilești, Adunații-Copăceni, Ghimpați, Bolintin-Deal, Găiseni, Vânătorii Mici, Ogrezeni, Crevedia Mare, Buturugeni, Bucșani, Letca Nouă, Singureni, Grădinari, Joița, Clejani, Mârșa, Iepurești, Săbăreni, Schitu, Cosoba, Bulbucata;<br>Județul Ilfov;<br>Județul Dâmboviţa: zona joasă;<br>Județul Teleorman;<br>",
+"semnalare": "ceață care reduce vizibilitatea local sub 200 m",
+"culoare": "0",
+"numeCuloare": "galben",
+"modificat": "2019-12-14 02:54:01",
+"creat": "2019-12-14 04:54:01"
+}
+},
+{
+"@attributes": {
+"tipMesaj": "2",
+"numeTipMesaj": "Atentionare nowcasting",
+"dataInceput": "2019-12-14T50:00",
+"dataSfarsit": "2019-12-14T90:00",
+"zona": "Mun. Bucureşti;<br>",
+"semnalare": "ceață care reduce vizibilitatea local sub 200 m",
+"culoare": "0",
+"numeCuloare": "galben",
+"modificat": "2019-12-14 02:56:02",
+"creat": "2019-12-14 04:56:02"
+}
+}
+]
+}

@@ -49,7 +49,7 @@ async function browserChecks({ initOperations, createEvent }) {
   ];
   const warn = (id, areas = [], places = []) => ({ id, code: 'orange', source: 'ANM', validFrom: '', validTo: '', text: '', areas, places });
   let handlers = {};
-  const boot = ({ alerts, areas = [], places = [], data = { admin, localities }, legacy }) => {
+  const boot = ({ alerts, areas = [], places = [], data = { admin, localities }, legacy, fetchAnmFeeds }) => {
     const active = createEvent('Introducere rapidă', 'snow');
     Object.assign(active, { areas, places, alerts });
     // An event saved before multiple warnings: one `alert` and the event's own areas, no list.
@@ -69,9 +69,9 @@ async function browserChecks({ initOperations, createEvent }) {
     document.querySelectorAll('.ops-drawbar, .ops-focusbar, .ops-presentation').forEach(el => el.remove());
     const toasts = [];
     const ops = initOperations({ map, storage, state, uatAt, toast: text => toasts.push(text), selectTab: noop, setSheet: noop, stopOtherTools: noop,
-      applyStyle: noop, renderLayerPanel: noop, cloudDb: { saveSituation: () => Promise.resolve(true), deleteSituation: () => Promise.resolve(true) } });
+      applyStyle: noop, renderLayerPanel: noop, cloudDb: { saveSituation: () => Promise.resolve(true), deleteSituation: () => Promise.resolve(true) }, fetchAnmFeeds });
     const stored = () => JSON.parse(memory.get('hb.ops.session.v1')).active;
-    return { ops, state, toasts, stored };
+    return { ops, state, toasts, stored, memory };
   };
   const $ = selector => document.querySelector(selector);
   const click = selector => $(selector)?.click();
@@ -257,6 +257,101 @@ Fenomene: vijelie`);
       click('[data-warning-id="w1"] [data-alert-preset="none"]');
       check('takeZoneFollowsPresets', takeButton()?.hidden);
     }
+    // "Importă din ANM" reads both feeds and adds the county's warnings, once.
+    const settle = () => new Promise(resolve => setTimeout(resolve, 5));
+    const nowcasting = (zona, extra = {}) => ({ avertizare: [{ '@attributes': { tipMesaj: '1', numeTipMesaj: 'Avertizare nowcasting', culoare: '1', numeCuloare: 'portocaliu',
+      dataInceput: '2026-07-14T90:40', dataSfarsit: '2026-07-14T10:30', creat: '2026-07-14 09:32:01', zona, semnalare: 'Vijelie.', ...extra } }] });
+    const ours = nowcasting('Județul Suceava: Liteni;<br>Județul Botoșani: Dorohoi, Curtești, Agafton;<br>');
+    const feedsOf = (nowcastingFeed, general = 'Nu exista date') => async () => ({ nowcasting: nowcastingFeed, general, errors: {} });
+    const importButton = () => $('button[data-alert-action="import-anm"]');
+    const report = () => $('[data-alert-report]')?.textContent || '';
+    {
+      let feeds = feedsOf(ours);
+      const { stored } = boot({ alerts: [warn('w1')], fetchAnmFeeds: () => feeds() });
+      check('importOffered', importButton()?.textContent.startsWith('Importă din ANM'));
+      importButton().click();
+      await settle();
+      const added = stored().alerts[1];
+      check('importAddsTheWarning', stored().alerts.length === 2 && added?.id.startsWith('anm-nc-') && added.code === 'orange' && added.source === 'ANM nowcasting' && added.text === 'Vijelie.');
+      check('importFillsTheZone', added?.areas.join() === 'Dorohoi,Curtești' && added.places.join() === 'Agafton|Curtești');
+      check('importFillsTheInterval', Date.parse(added?.validTo) - Date.parse(added?.validFrom) === 50 * 60000);
+      check('importOpensTheWarning', entry(added?.id)?.open && $('.ops-alert-paste').open);
+      check('importReports', report().includes('Am adăugat 1 avertizare din ANM') && report().includes('Cod portocaliu (ANM nowcasting): 2 UAT-uri și 1 sat'));
+      importButton().click();
+      await settle();
+      check('importOnce', stored().alerts.length === 2 && report().includes('deja în listă (1)'));
+      feeds = feedsOf(nowcasting('Județul Botoșani: Dorohoi;', { dataSfarsit: '2026-07-14T11:30' }));
+      importButton().click();
+      await settle();
+      check('importSaysUpdated', stored().alerts.length === 3 && report().includes('aceeași oră de emitere'));
+    }
+    // While the feed is read the button waits; a second click asks nothing more.
+    {
+      let release, calls = 0;
+      const { stored } = boot({ alerts: [], fetchAnmFeeds: () => { calls++; return new Promise(resolve => { release = () => resolve({ nowcasting: ours, general: 'Nu exista date', errors: {} }); }); } });
+      importButton().click();
+      await settle();
+      check('importBusy', importButton()?.disabled && importButton().textContent.startsWith('Se citesc') && report().startsWith('Se citesc'));
+      importButton().click();
+      release();
+      await settle();
+      check('importAskedOnce', calls === 1 && stored().alerts?.length === 1 && !importButton().disabled);
+    }
+    // A failed read, a feed without the county, and the whole county in a general warning.
+    {
+      const { stored } = boot({ alerts: [], fetchAnmFeeds: async () => { throw new Error('offline'); } });
+      importButton().click();
+      await settle();
+      check('importFailureSays', report().startsWith('Nu am putut citi avertizările ANM') && !(stored().alerts || []).length && !importButton().disabled);
+    }
+    {
+      const { stored } = boot({ alerts: [], fetchAnmFeeds: feedsOf(nowcasting('Județul Suceava: Liteni;'), 'Nu exista date') });
+      importButton().click();
+      await settle();
+      check('importNothingForCounty', report().includes('nicio avertizare pentru județul Botoșani') && !(stored().alerts || []).length && $('.ops-alert-paste').open);
+    }
+    {
+      const general = { avertizare: { '@attributes': { tipMesaj: '1', culoare: '0', numeCuloare: 'galben', dataAparitiei: '2026-01-10T10:00', dataExpirarii: '2026-01-11T90:00',
+        intervalul: '10 ianuarie, ora 12 – 11 ianuarie, ora 09', fenomeneVizate: 'polei', mesaj: '' }, judet: [{ '@attributes': { cod: 'SV', culoare: '2' } }, { '@attributes': { cod: 'BT', culoare: '1' } }] } };
+      const { stored } = boot({ alerts: [], fetchAnmFeeds: async () => ({ nowcasting: null, general, errors: { nowcasting: 'HTTP 500' } }) });
+      importButton().click();
+      await settle();
+      const [added] = stored().alerts || [];
+      check('importGeneralWholeCounty', added?.code === 'yellow' && added.source === 'ANM' && added.areas.length === 4 && report().includes('Cod galben (ANM): tot județul'));
+      check('importSaysWhichFeedFailed', report().startsWith('Nowcasting-ul ANM nu a putut fi citit'));
+    }
+    // A marker form opened while the feed is read would be lost to the re-render: nothing is added.
+    {
+      let release;
+      const { ops, stored } = boot({ alerts: [], fetchAnmFeeds: () => new Promise(resolve => { release = () => resolve({ nowcasting: ours, general: null, errors: {} }); }) });
+      importButton().click();
+      await settle();
+      ops.openRoadCreator();
+      release();
+      await settle();
+      check('importWaitsForOpenMarker', !(stored().alerts || []).length && report().includes('Finalizează sau anulează marcajul') && $('#ops-marker'));
+    }
+    // Another situation opened while the feed is read takes nothing, and neither does the first.
+    {
+      let release;
+      const { stored, memory } = boot({ alerts: [], fetchAnmFeeds: () => new Promise(resolve => { release = () => resolve({ nowcasting: ours, general: null, errors: {} }); }) });
+      const first = stored().id;
+      // An edit, so closing keeps the situation in the archive to reopen.
+      click('[data-alert-action="add"]');
+      importButton().click();
+      await settle();
+      click('button.lnk[data-action="new"]');
+      $('#ops-new [name="title"]').value = 'Altă situație';
+      $('#ops-new').requestSubmit();
+      release();
+      await settle();
+      check('importStaysWithItsSituation', stored().id !== first && stored().title === 'Altă situație' && !(stored().alerts || []).length
+        && ![...memory.values()].some(value => String(value).includes('anm-nc')) && !importButton().disabled);
+      const archive = $('#ops-archive');
+      archive.value = first;
+      archive.dispatchEvent(new Event('change', { bubbles: true }));
+      check('importSaysItStopped', stored()?.id === first && stored().alerts.length === 1 && report().startsWith('Importul din ANM s-a oprit'));
+    }
   } catch (error) { result.error = error.stack + (pageErrors.length ? '\n' + pageErrors.join('\n') : ''); }
   check('noPageErrors', !pageErrors.length || (result.pageErrors = pageErrors, false));
   out.textContent = JSON.stringify(result);
@@ -277,6 +372,6 @@ test('zone presets, the map pick and a pasted message fill warnings in the real 
     assert.equal(result.error, undefined, result.error);
     const failed = Object.entries(result).filter(([, ok]) => !ok).map(([name]) => name);
     assert.deepEqual(failed, [], 'Warning entry regressions');
-    assert.ok(Object.keys(result).length >= 51, 'Every scenario reported');
+    assert.ok(Object.keys(result).length >= 68, 'Every scenario reported');
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });

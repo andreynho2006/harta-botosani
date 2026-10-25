@@ -1,6 +1,7 @@
 import { normalizeAlerts, resolvePlace, placeKey, placeLabel, legacyNote, legacyNoteOverflow, notesWithLegacyNote, countLabel, ALERT_LABELS as CODES } from './operations-alerts.js?v=20261019-multi-alerts';
 import { localTime, isoTime, dateLabel } from './operations-time.js';
-import { parseWarningText } from './operations-alert-parse.js?v=20261025-alert-entry';
+import { parseWarningText } from './operations-alert-parse.js?v=20261025-anm-import';
+import { anmWarnings } from './operations-alert-feed.js?v=20261025-anm-import';
 
 const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const fold = value => String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
@@ -64,13 +65,19 @@ export function presetAreas(preset, data = {}) {
   return areas.length ? areas : null;
 }
 
-export function createAlertEditor({ panel, getActive, getData, onChange, onPickMap }) {
+/**
+ * `fetchFeeds` reads the ANM feeds (see `fetchAnmFeeds`); `blocked` says why the situation cannot
+ * take new warnings right now, such as a marker form a re-render would lose.
+ */
+export function createAlertEditor({ panel, getActive, getData, onChange, onPickMap, fetchFeeds, blocked = () => '' }) {
   // The warning drawn open at the next render: a new one, or the one just picked on the map.
   let newId = null;
   // What the last pasted message gave, shown under the paste box of that situation until the next add or removal.
   let parseReport = null;
   // Text pasted but not yet recognised: a render, such as a colleague's version arriving, keeps it.
   let pasteDraft = null;
+  // The situation whose ANM import waits for the feed; its button stays busy through a render.
+  let importing = null;
   const canonical = (kind, entry) => canonicalEntry(kind, entry, getData()?.localities || []);
   function warnings() { return normalizeAlerts(getActive()); }
   const legacyInterval = note => note.validFrom || note.validTo ? [note.validFrom, note.validTo].map(value => value ? dateLabel(value) : '…').join(' – ') : '';
@@ -141,10 +148,20 @@ export function createAlertEditor({ panel, getActive, getData, onChange, onPickM
         </div></details>`).join('')}</div>
       ${alerts.length ? '' : '<p class="muted">Nicio avertizare adăugată.</p>'}
       <button type="button" class="btn" data-alert-action="add">＋ Adaugă un cod / o avertizare</button>
+      ${importButtonHTML()}
       ${pasteHTML()}
     </section>`;
   }
   const reportHTML = lines => lines.map(line => `<p>${esc(line)}</p>`).join('');
+  const IMPORT_LABEL = 'Importă din ANM (nowcasting și avertizări generale)';
+  const importButtonHTML = () => importing && importing === getActive()?.id
+    ? `<button type="button" class="btn" data-alert-action="import-anm" disabled aria-busy="true">Se citesc avertizările ANM…</button>`
+    : `<button type="button" class="btn" data-alert-action="import-anm">${IMPORT_LABEL}</button>`;
+  function setImporting(id) {
+    importing = id;
+    const button = panel.querySelector('[data-alert-action="import-anm"]');
+    if (button) button.outerHTML = importButtonHTML();
+  }
   function pasteHTML() {
     const lines = parseReport && parseReport.id === getActive()?.id ? parseReport.lines : [];
     const draft = pasteDraft && pasteDraft.id === getActive()?.id ? pasteDraft.text : '';
@@ -158,13 +175,17 @@ export function createAlertEditor({ panel, getActive, getData, onChange, onPickM
     parseReport = { id: getActive()?.id, lines };
     const box = panel.querySelector('[data-alert-report]');
     if (box) box.innerHTML = reportHTML(lines);
+    // An import reports here too, so the box shows even while the paste section is folded.
+    const section = box?.closest('details');
+    if (section) section.open = true;
   };
   const quoted = names => names.slice(0, 8).map(name => `„${name}”`).join(', ') + (names.length > 8 ? ` și încă ${names.length - 8}` : '');
   /** What the operator must check in each warning made from the text, in the order they were added. */
-  function reportLines(found, allUats) {
-    const lines = [`Am adăugat ${countLabel(found.length, 'avertizare', 'avertizări')} din text. Verifică-le înainte de publicare.`];
+  function reportLines(found, allUats, from = 'din text') {
+    const lines = [`Am adăugat ${countLabel(found.length, 'avertizare', 'avertizări')} ${from}. Verifică-le înainte de publicare.`];
     for (const warning of found) {
-      const zone = warning.county && warning.source === 'INHGA' ? 'privește râuri din județ, nu UAT-uri: alege UAT-urile riverane cu „Alege pe hartă”'
+      const zone = warning.zoneOnly?.length ? `doar o parte a județului (${warning.zoneOnly.join(', ')}): alege UAT-urile cu „Alege pe hartă”`
+        : warning.county && warning.source === 'INHGA' ? 'privește râuri din județ, nu UAT-uri: alege UAT-urile riverane cu „Alege pe hartă”'
         : warning.county && warning.areas.length === allUats ? 'tot județul'
         : warning.areas.length || warning.places.length ? [warning.areas.length && countLabel(warning.areas.length, 'UAT', 'UAT-uri'), warning.places.length && countLabel(warning.places.length, 'sat', 'sate')].filter(Boolean).join(' și ')
         : 'nicio zonă din județ recunoscută: alege-o cu butoanele zonei';
@@ -189,11 +210,60 @@ export function createAlertEditor({ panel, getActive, getData, onChange, onPickM
     if (!found.length) { showReport(['Nu am găsit în text codul avertizării (galben, portocaliu, roșu sau RO-Alert). Nu am adăugat nimic.']); return; }
     const alerts = editableOrExplain();
     if (!alerts) return;
-    const added = found.map(warning => ({ id: crypto.randomUUID(), code: warning.code, source: warning.source, validFrom: warning.validFrom, validTo: warning.validTo, text: warning.text, areas: warning.areas, places: warning.places }));
+    const added = found.map(newWarning);
     alerts.push(...added);
     newId = added[0].id;
     pasteDraft = null;
     parseReport = { id: getActive().id, lines: reportLines(found, uats.length) };
+    onChange({ render: true, geography: true });
+  }
+  const newWarning = warning => ({ id: warning.id ?? crypto.randomUUID(), code: warning.code, source: warning.source, validFrom: warning.validFrom, validTo: warning.validTo, text: warning.text, areas: warning.areas, places: warning.places });
+  /**
+   * Adds the county's warnings ANM publishes now. One already imported, with the same content,
+   * is not added twice; a nowcasting ANM changed since is added again, and the report says so.
+   */
+  async function importFromAnm() {
+    const id = getActive()?.id;
+    if (!id || importing) return;
+    const data = getData() || {};
+    const uats = warningOptions('areas', data).map(option => option.value);
+    if (!uats.length) { showReport(['Lista UAT-urilor se încarcă odată cu harta. Încearcă din nou după încărcare.']); return; }
+    if (!editableOrExplain()) return;
+    setImporting(id);
+    showReport(['Se citesc avertizările ANM…']);
+    let feeds;
+    try { feeds = await fetchFeeds(); } catch (error) { feeds = { errors: { nowcasting: String(error), general: String(error) } }; }
+    setImporting(null);
+    // Another situation opened meanwhile: nothing is added, and this one's report no longer says "reading".
+    if (getActive()?.id !== id) {
+      if (parseReport?.id === id) parseReport = { id, lines: ['Importul din ANM s-a oprit: între timp ai deschis altă situație. Apasă din nou „Importă din ANM”.'] };
+      return;
+    }
+    const errors = feeds?.errors || {};
+    if (errors.nowcasting && errors.general) {
+      showReport(['Nu am putut citi avertizările ANM: fără conexiune sau site-ul meteoromania.ro nu răspunde. Încearcă din nou sau lipește textul mai jos.']);
+      return;
+    }
+    const notes = [errors.nowcasting && 'Nowcasting-ul ANM nu a putut fi citit; am folosit doar avertizările generale.', errors.general && 'Avertizările generale ANM nu au putut fi citite; am folosit doar nowcasting-ul.'].filter(Boolean);
+    const found = anmWarnings(feeds, { uats, localities: data.localities || [], now: new Date() });
+    if (!found.length) { showReport([...notes, 'ANM nu are acum nicio avertizare pentru județul Botoșani. Nu am adăugat nimic.']); return; }
+    const why = blocked();
+    if (why) { showReport([...notes, why]); return; }
+    const alerts = editableOrExplain();
+    if (!alerts) return;
+    const held = new Set(alerts.map(alert => alert.id));
+    const fresh = found.filter(warning => !held.has(warning.id));
+    const kept = found.length - fresh.length;
+    if (!fresh.length) { showReport([...notes, `Avertizările ANM pentru județ sunt deja în listă (${kept}). Nu am adăugat nimic.`]); return; }
+    // A nowcasting ANM updated keeps its time of issue and code, so its earlier version shares the prefix.
+    const updated = fresh.filter(warning => warning.key !== warning.id && alerts.some(alert => alert.id.startsWith(`${warning.key}-`)));
+    const added = fresh.map(newWarning);
+    alerts.push(...added);
+    newId = added[0].id;
+    const lines = reportLines(fresh, uats.length, 'din ANM');
+    for (const warning of updated) lines.push(`${CODES[warning.code]} (${warning.source}) are aceeași oră de emitere ca una importată deja: dacă ANM a actualizat-o, șterge versiunea veche.`);
+    if (kept) lines.push(`Deja în listă: ${countLabel(kept, 'avertizare ANM', 'avertizări ANM')}.`);
+    parseReport = { id, lines: [...notes, ...lines] };
     onChange({ render: true, geography: true });
   }
   function updateStatus(entry, alert) {
@@ -376,8 +446,9 @@ export function createAlertEditor({ panel, getActive, getData, onChange, onPickM
       return true;
     }
     const action = button?.dataset.alertAction;
-    if (!['add', 'remove', 'parse'].includes(action)) return false;
+    if (!['add', 'remove', 'parse', 'import-anm'].includes(action)) return false;
     if (action === 'parse') { addFromText(button); return true; }
+    if (action === 'import-anm') { importFromAnm(); return true; }
     const alerts = editableOrExplain();
     if (!alerts) return true;
     parseReport = null;

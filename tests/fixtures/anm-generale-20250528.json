@@ -1,0 +1,721 @@
+{
+"avertizare": [
+{
+"@attributes": {
+"tipMesaj": "0",
+"numeTipMesaj": "Avertizare meteorologică",
+"dataAparitiei": "2025-05-28T10:00",
+"dataExpirarii": "2025-05-29T30:00",
+"culoare": "1",
+"numeCuloare": "",
+"fenomeneVizate": "conform textelor",
+"intervalul": "28 mai, ora 10 – 29 mai, ora 03",
+"zonaAfectata": "conform textelor și hărții",
+"catre": "Preşedinţia României, Secretariatul General al Guvernului României, Departamentul pentru Situații de Urgență, Inspectoratul General pentru Situaţii de Urgenţă, Ministerul Mediului, Apelor şi Pădurilor, Ministerul Afacerilor Interne, Ministerul Transporturilor şi Infrastructurii, Ministerul Apărării Naţionale, Ministerul Agriculturii şi Dezvoltării Rurale, C.N.A.I.R, Administraţia Naţională “Apele Române”, S.N.C.F.R , mass-media",
+"mesaj": "<p style=\"text-align: center; background: white;\" align=\"center\"><span style=\"font-size: small; font-family: verdana, geneva; color: #000000;\"><strong><span lang=\"RO\">MESAJ 1 /2</span></strong></span></p>\r\n<p style=\"text-align: center; background: white;\" align=\"center\"><span style=\"font-size: small; font-family: verdana, geneva; color: #000000;\"><strong><span lang=\"RO\">AVERTIZARE METEOROLOGICĂ</span></strong></span></p>\r\n<p style=\"text-align: center; background: white;\" align=\"center\"><span style=\"color: #000000;\"><img src=\"../wp-content/plugins/meteo//admin/images/galben.gif\" alt=\"\" align=\"absmiddle\" /><span style=\"font-size: small; font-family: verdana, geneva;\"><strong><span lang=\"RO\">COD GALBEN</span></strong></span></span></p>\r\n<p style=\"text-align: center;\" align=\"center\"><span style=\"font-size: small; font-family: verdana, geneva; color: #000000;\"><strong><span lang=\"RO\">Interval de valabilitate: 28 mai, ora 10 &ndash; 29 mai, ora 03<br /></span><span lang=\"RO\">Fenomene vizate: ploi &icirc;nsemnate cantitativ<br />Zone afectate: conform textului și hărții</span></strong></span></p>\r\n<p style=\"text-align: justify;\"><span style=\"font-size: small; font-family: verdana, geneva; color: #000000;\" lang=\"RO\">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &nbsp;&Icirc;n Maramureș, cea mai mare parte a Moldovei, local &icirc;n Transilvania și nordul Munteniei va continua să plouă &icirc;nsemnat cantitativ și se vor acumula 20...40 l/mp.</span></p>\r\n<p style=\"text-align: center;\" align=\"center\"><span style=\"color: #000000;\"><img src=\"../wp-content/plugins/meteo//admin/images/portocaliu.gif\" alt=\"\" align=\"absmiddle\" /><span style=\"font-size: small; font-family: verdana, geneva;\"><span lang=\"RO\"><strong>COD PORTOCALIU <br /> Interval de valabilitate: 28 mai, ora 10 &ndash; 29 mai, ora 03<br /> Fenomene vizate:</strong> </span><strong><span lang=\"RO\">ploi importante cantitativ<br /> Zone afectate:</span></strong><strong><span lang=\"RO\"> conform textului și hărții</span></strong></span></span></p>\r\n<p><span style=\"font-size: small; font-family: verdana, geneva; color: #000000;\" lang=\"RO\">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &Icirc;n județele Suceava, Botoșani, Neamț, Harghita, Covasna și zona montană a județelor Argeș, D&acirc;mbovița, Prahova, Buzău, Vrancea, Bacău și Brașov va continua să plouă important cantitativ și se vor acumula 30...40 l/mp și izolat peste 50 l/mp.</span></p>\r\n<p>&nbsp;</p>"
+},
+"judet": [
+{
+"@attributes": {
+"cod": "MM",
+"culoare": "1"
+}
+},
+{
+"@attributes": {
+"cod": "BN",
+"culoare": "1"
+}
+},
+{
+"@attributes": {
+"cod": "MS",
+"culoare": "1"
+}
+},
+{
+"@attributes": {
+"cod": "HR",
+"culoare": "2"
+}
+},
+{
+"@attributes": {
+"cod": "SV",
+"culoare": "2"
+}
+},
+{
+"@attributes": {
+"cod": "BT",
+"culoare": "2"
+}
+},
+{
+"@attributes": {
+"cod": "NT",
+"culoare": "2"
+}
+},
+{
+"@attributes": {
+"cod": "IS",
+"culoare": "1"
+}
+},
+{
+"@attributes": {
+"cod": "VS",
+"culoare": "1"
+}
+},
+{
+"@attributes": {
+"cod": "BC",
+"culoare": "1"
+}
+},
+{
+"@attributes": {
+"cod": "VN",
+"culoare": "1"
+}
+},
+{
+"@attributes": {
+"cod": "GL",
+"culoare": "1"
+}
+},
+{
+"@attributes": {
+"cod": "BR",
+"culoare": "1"
+}
+},
+{
+"@attributes": {
+"cod": "BZ",
+"culoare": "1"
+}
+},
+{
+"@attributes": {
+"cod": "PH",
+"culoare": "1"
+}
+},
+{
+"@attributes": {
+"cod": "BV",
+"culoare": "1"
+}
+},
+{
+"@attributes": {
+"cod": "CV",
+"culoare": "2"
+}
+},
+{
+"@attributes": {
+"cod": "DB",
+"culoare": "0"
+}
+},
+{
+"@attributes": {
+"cod": "AG",
+"culoare": "0"
+}
+},
+{
+"@attributes": {
+"cod": "SB",
+"culoare": "0"
+}
+}
+],
+"zona": [
+{
+"@attributes": {
+"cod": "BC_munte",
+"culoare": "2"
+}
+},
+{
+"@attributes": {
+"cod": "VN_munte",
+"culoare": "2"
+}
+},
+{
+"@attributes": {
+"cod": "BZ_munte",
+"culoare": "2"
+}
+},
+{
+"@attributes": {
+"cod": "PH_munte",
+"culoare": "2"
+}
+},
+{
+"@attributes": {
+"cod": "BV_depresiune",
+"culoare": "2"
+}
+},
+{
+"@attributes": {
+"cod": "BV_munte_1",
+"culoare": "2"
+}
+},
+{
+"@attributes": {
+"cod": "BV_munte_2",
+"culoare": "2"
+}
+},
+{
+"@attributes": {
+"cod": "BV_munte_3",
+"culoare": "2"
+}
+},
+{
+"@attributes": {
+"cod": "DB_munte",
+"culoare": "2"
+}
+},
+{
+"@attributes": {
+"cod": "AG_munte",
+"culoare": "2"
+}
+},
+{
+"@attributes": {
+"cod": "SB_munte",
+"culoare": "1"
+}
+}
+]
+},
+{
+"@attributes": {
+"tipMesaj": "1",
+"numeTipMesaj": "Atenționare meteorologică",
+"dataAparitiei": "2025-05-28T10:00",
+"dataExpirarii": "2025-05-28T23:00",
+"culoare": "0",
+"numeCuloare": "galben",
+"fenomeneVizate": "intensificări ale vântului",
+"intervalul": "28 mai, ora 10 – 28 mai, ora 23",
+"zonaAfectata": "conform textului și hărții",
+"catre": "Preşedinţia României, Secretariatul General al Guvernului României, Departamentul pentru Situații de Urgență, Inspectoratul General pentru Situaţii de Urgenţă, Ministerul Mediului, Apelor şi Pădurilor, Ministerul Afacerilor Interne, Ministerul Transporturilor şi Infrastructurii, Ministerul Apărării Naţionale, Ministerul Agriculturii şi Dezvoltării Rurale, C.N.A.I.R, Administraţia Naţională “Apele Române”, S.N.C.F.R , mass-media",
+"mesaj": "<p style=\"text-align: center; background: white;\" align=\"center\"><span style=\"font-size: small; font-family: verdana, geneva; color: #000000;\"><strong><span lang=\"RO\">ATENȚIONARE METEOROLOGICĂ</span></strong></span></p>\r\n<p style=\"text-align: center; background: white;\" align=\"center\"><span style=\"font-size: small; font-family: verdana, geneva; color: #000000;\"><img src=\"../wp-content/plugins/meteo/admin/images/galben.gif\" alt=\"\" align=\"absmiddle\" /><strong><span lang=\"RO\">COD GALBEN</span></strong></span></p>\r\n<p style=\"text-align: center;\" align=\"center\"><span style=\"font-size: small; font-family: verdana, geneva; color: #000000;\"><strong><span lang=\"RO\">Interval de valabilitate: 28 mai, ora 10 &ndash; 28 mai, ora 23<br /></span><span lang=\"RO\">Fenomene vizate: intensificări ale v&acirc;ntului<br />Zone afectate: conform textului și hărții <br /></span></strong></span></p>\r\n<p style=\"text-align: justify;\"><span style=\"font-size: small; font-family: verdana, geneva; color: #000000;\" lang=\"RO\">&nbsp;&nbsp; &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;V&acirc;ntul va avea intensificări temporare &icirc;n jumătatea nordică a Moldovei și &icirc;n vestul și sud-vestul Olteniei, cu viteze de 50...60 km/h. &Icirc;n Carpații Meridionali și local &icirc;n Carpații Orientali vor fi rafale de 70...90 km/h, iar la peste 1800 m altitudine se vor depăși 90...120 km/h.</span></p>"
+},
+"judet": [
+{
+"@attributes": {
+"cod": "SV",
+"culoare": "1"
+}
+},
+{
+"@attributes": {
+"cod": "NT",
+"culoare": "1"
+}
+},
+{
+"@attributes": {
+"cod": "IS",
+"culoare": "1"
+}
+},
+{
+"@attributes": {
+"cod": "BT",
+"culoare": "1"
+}
+},
+{
+"@attributes": {
+"cod": "MH",
+"culoare": "1"
+}
+},
+{
+"@attributes": {
+"cod": "DJ",
+"culoare": "1"
+}
+},
+{
+"@attributes": {
+"cod": "CS",
+"culoare": "0"
+}
+},
+{
+"@attributes": {
+"cod": "HD",
+"culoare": "0"
+}
+},
+{
+"@attributes": {
+"cod": "GJ",
+"culoare": "0"
+}
+},
+{
+"@attributes": {
+"cod": "VL",
+"culoare": "0"
+}
+},
+{
+"@attributes": {
+"cod": "AB",
+"culoare": "0"
+}
+},
+{
+"@attributes": {
+"cod": "SB",
+"culoare": "0"
+}
+},
+{
+"@attributes": {
+"cod": "AG",
+"culoare": "0"
+}
+},
+{
+"@attributes": {
+"cod": "BV",
+"culoare": "0"
+}
+},
+{
+"@attributes": {
+"cod": "DB",
+"culoare": "0"
+}
+},
+{
+"@attributes": {
+"cod": "PH",
+"culoare": "0"
+}
+},
+{
+"@attributes": {
+"cod": "BZ",
+"culoare": "0"
+}
+},
+{
+"@attributes": {
+"cod": "CV",
+"culoare": "0"
+}
+},
+{
+"@attributes": {
+"cod": "VN",
+"culoare": "0"
+}
+}
+],
+"zona": [
+{
+"@attributes": {
+"cod": "MH_munte_1",
+"culoare": "-1"
+}
+},
+{
+"@attributes": {
+"cod": "MH_munte_2",
+"culoare": "1"
+}
+},
+{
+"@attributes": {
+"cod": "CS_depresiune",
+"culoare": "-1"
+}
+},
+{
+"@attributes": {
+"cod": "CS_munte_1",
+"culoare": "1"
+}
+},
+{
+"@attributes": {
+"cod": "CS_munte_2",
+"culoare": "-1"
+}
+},
+{
+"@attributes": {
+"cod": "HD_depresiune",
+"culoare": "1"
+}
+},
+{
+"@attributes": {
+"cod": "HD_munte_1",
+"culoare": "1"
+}
+},
+{
+"@attributes": {
+"cod": "HD_munte_2",
+"culoare": "-1"
+}
+},
+{
+"@attributes": {
+"cod": "GJ_munte",
+"culoare": "1"
+}
+},
+{
+"@attributes": {
+"cod": "VL_munte",
+"culoare": "1"
+}
+},
+{
+"@attributes": {
+"cod": "AB_munte_1",
+"culoare": "1"
+}
+},
+{
+"@attributes": {
+"cod": "AB_munte_2",
+"culoare": "-1"
+}
+},
+{
+"@attributes": {
+"cod": "SB_munte",
+"culoare": "1"
+}
+},
+{
+"@attributes": {
+"cod": "AG_munte",
+"culoare": "1"
+}
+},
+{
+"@attributes": {
+"cod": "BV_depresiune",
+"culoare": "-1"
+}
+},
+{
+"@attributes": {
+"cod": "BV_munte_1",
+"culoare": "1"
+}
+},
+{
+"@attributes": {
+"cod": "BV_munte_2",
+"culoare": "1"
+}
+},
+{
+"@attributes": {
+"cod": "BV_munte_3",
+"culoare": "-1"
+}
+},
+{
+"@attributes": {
+"cod": "DB_munte",
+"culoare": "1"
+}
+},
+{
+"@attributes": {
+"cod": "PH_munte",
+"culoare": "1"
+}
+},
+{
+"@attributes": {
+"cod": "BZ_munte",
+"culoare": "1"
+}
+},
+{
+"@attributes": {
+"cod": "CV_depresiune",
+"culoare": "-1"
+}
+},
+{
+"@attributes": {
+"cod": "CV_munte_1",
+"culoare": "1"
+}
+},
+{
+"@attributes": {
+"cod": "CV_munte_2",
+"culoare": "-1"
+}
+},
+{
+"@attributes": {
+"cod": "VN_munte",
+"culoare": "1"
+}
+}
+]
+},
+{
+"@attributes": {
+"tipMesaj": "1",
+"numeTipMesaj": "Atenționare meteorologică",
+"dataAparitiei": "2025-05-28T10:00",
+"dataExpirarii": "2025-05-29T23:00",
+"culoare": "0",
+"numeCuloare": "galben",
+"fenomeneVizate": "instabilitate atmosferică temporar accentuată",
+"intervalul": "29 mai, ora 03 – 29 mai, ora 23",
+"zonaAfectata": "conform textului și hărții",
+"catre": "Preşedinţia României, Secretariatul General al Guvernului României, Departamentul pentru Situații de Urgență, Inspectoratul General pentru Situaţii de Urgenţă, Ministerul Mediului, Apelor şi Pădurilor, Ministerul Afacerilor Interne, Ministerul Transporturilor şi Infrastructurii, Ministerul Apărării Naţionale, Ministerul Agriculturii şi Dezvoltării Rurale, C.N.A.I.R, Administraţia Naţională “Apele Române”, S.N.C.F.R , mass-media",
+"mesaj": "<p style=\"text-align: justify;\"><span style=\"font-size: small; font-family: verdana, geneva; color: #000000;\">&nbsp;</span></p>\r\n<p style=\"text-align: center; background: white;\" align=\"center\"><span style=\"font-size: small; font-family: verdana, geneva; color: #000000;\"><strong><span lang=\"RO\">MESAJ 2 /2</span></strong></span></p>\r\n<p style=\"text-align: center; background: white;\" align=\"center\"><span style=\"font-size: small; font-family: verdana, geneva; color: #000000;\"><strong><span lang=\"RO\">ATENȚIONARE METEOROLOGICĂ</span></strong></span></p>\r\n<p style=\"text-align: center; background: white;\" align=\"center\"><img src=\"../wp-content/plugins/meteo//admin/images/galben.gif\" alt=\"\" align=\"absmiddle\" /><span style=\"font-size: small; font-family: verdana, geneva; color: #000000;\"><strong><span lang=\"RO\">COD GALBEN</span></strong></span></p>\r\n<p style=\"text-align: center;\" align=\"center\"><span style=\"font-size: small; font-family: verdana, geneva; color: #000000;\"><strong><span lang=\"RO\">Interval de valabilitate: 29 mai, ora 03 &ndash; 29 mai, ora 23<br />Fenomene vizate: instabilitate atmosferică temporar accentuată<br />Zone afectate: conform textului și hărții <br /></span></strong></span></p>\r\n<p style=\"text-align: justify;\"><span style=\"font-size: small; font-family: verdana, geneva; color: #000000;\" lang=\"RO\">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; Vor fi perioade cu instabilitate atmosferică accentuată, ce se va manifesta prin averse torențiale, frecvente descărcări electrice și intensificări de scurtă durată ale v&acirc;ntului (rafale de 50...70 km/h) la munte, Banat, Crișana, Maramureș, Transilvania, vestul și nordul Moldovei și local &icirc;n nordul Munteniei. &Icirc;n intervale scurte de timp sau prin acumulare cantitățile de apă vor fi de 15...25 l/mp și pe arii restr&acirc;nse de 30...40 l/mp. După-amiaza și seara, pe alocuri vor fi vijelii și grindină. <br /></span></p>\r\n<p style=\"text-align: justify;\">&nbsp;</p>\r\n<p style=\"text-align: center;\" align=\"center\"><span style=\"font-size: small; font-family: verdana, geneva; color: #000000;\"><strong><em><span lang=\"RO\">&Icirc;n funcţie de evoluţia şi intensitatea fenomenelor meteorologice, Administraţia Naţională de Meteorologie va actualiza prezentul mesaj</span></em></strong><strong><em><span lang=\"RO\">.</span></em></strong></span></p>\r\n<p style=\"text-align: justify;\">&nbsp;</p>"
+},
+"judet": [
+{
+"@attributes": {
+"cod": "SM",
+"culoare": "1"
+}
+},
+{
+"@attributes": {
+"cod": "BH",
+"culoare": "1"
+}
+},
+{
+"@attributes": {
+"cod": "AR",
+"culoare": "1"
+}
+},
+{
+"@attributes": {
+"cod": "TM",
+"culoare": "1"
+}
+},
+{
+"@attributes": {
+"cod": "CS",
+"culoare": "1"
+}
+},
+{
+"@attributes": {
+"cod": "HD",
+"culoare": "1"
+}
+},
+{
+"@attributes": {
+"cod": "AB",
+"culoare": "1"
+}
+},
+{
+"@attributes": {
+"cod": "CJ",
+"culoare": "1"
+}
+},
+{
+"@attributes": {
+"cod": "SJ",
+"culoare": "1"
+}
+},
+{
+"@attributes": {
+"cod": "MM",
+"culoare": "1"
+}
+},
+{
+"@attributes": {
+"cod": "BN",
+"culoare": "1"
+}
+},
+{
+"@attributes": {
+"cod": "MS",
+"culoare": "1"
+}
+},
+{
+"@attributes": {
+"cod": "SB",
+"culoare": "1"
+}
+},
+{
+"@attributes": {
+"cod": "BV",
+"culoare": "1"
+}
+},
+{
+"@attributes": {
+"cod": "CV",
+"culoare": "1"
+}
+},
+{
+"@attributes": {
+"cod": "HR",
+"culoare": "1"
+}
+},
+{
+"@attributes": {
+"cod": "NT",
+"culoare": "1"
+}
+},
+{
+"@attributes": {
+"cod": "BC",
+"culoare": "1"
+}
+},
+{
+"@attributes": {
+"cod": "SV",
+"culoare": "1"
+}
+},
+{
+"@attributes": {
+"cod": "BT",
+"culoare": "1"
+}
+},
+{
+"@attributes": {
+"cod": "VN",
+"culoare": "1"
+}
+},
+{
+"@attributes": {
+"cod": "BZ",
+"culoare": "1"
+}
+},
+{
+"@attributes": {
+"cod": "PH",
+"culoare": "1"
+}
+},
+{
+"@attributes": {
+"cod": "MH",
+"culoare": "0"
+}
+},
+{
+"@attributes": {
+"cod": "GJ",
+"culoare": "0"
+}
+},
+{
+"@attributes": {
+"cod": "VL",
+"culoare": "0"
+}
+},
+{
+"@attributes": {
+"cod": "AG",
+"culoare": "0"
+}
+},
+{
+"@attributes": {
+"cod": "DB",
+"culoare": "0"
+}
+}
+],
+"zona": [
+{
+"@attributes": {
+"cod": "PH_munte",
+"culoare": "-1"
+}
+},
+{
+"@attributes": {
+"cod": "MH_munte_1",
+"culoare": "1"
+}
+},
+{
+"@attributes": {
+"cod": "MH_munte_2",
+"culoare": "1"
+}
+},
+{
+"@attributes": {
+"cod": "GJ_munte",
+"culoare": "1"
+}
+},
+{
+"@attributes": {
+"cod": "VL_munte",
+"culoare": "1"
+}
+},
+{
+"@attributes": {
+"cod": "AG_munte",
+"culoare": "1"
+}
+},
+{
+"@attributes": {
+"cod": "DB_munte",
+"culoare": "1"
+}
+}
+]
+}
+]
+}
