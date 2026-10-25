@@ -28,7 +28,10 @@ async function browserChecks({ initOperations, createEvent, EventStore }) {
   // `memory` from an earlier boot reloads that page: same browser storage, new instance.
   const boot = ({ active, session = {}, save, del, memory: kept } = {}) => {
     const memory = kept ?? new Map([['hb.ops.session.v1', JSON.stringify({ active, ...session })]]);
-    const storage = { getItem: key => memory.get(key) ?? null, setItem: (key, value) => memory.set(key, value), removeItem: key => memory.delete(key) };
+    // `faults` names keys whose next write fails, as a full storage does.
+    const faults = new Set();
+    const storage = { getItem: key => memory.get(key) ?? null, removeItem: key => memory.delete(key),
+      setItem: (key, value) => { if (faults.delete(key)) throw new Error('QuotaExceededError'); memory.set(key, value); } };
     const calls = [], toasts = [], deletes = [];
     const cloudDb = { saveSituation: situation => { calls.push(situation); return save ? save(situation) : Promise.resolve(true); }, deleteSituation: id => { deletes.push(id); return del ? del(id) : Promise.resolve(true); } };
     const state = { data: { admin: { features: [] }, localities: [] }, visible: {}, overlays: {}, basemap: 'harta', theme: 'zi' };
@@ -37,7 +40,7 @@ async function browserChecks({ initOperations, createEvent, EventStore }) {
     const ops = initOperations({ map, storage, state, toast: text => toasts.push(text), selectTab: noop, setSheet: noop, stopOtherTools: noop,
       applyStyle: noop, renderLayerPanel: noop, cloudDb, publishWaitMs: 40 });
     const archive = () => JSON.parse(memory.get('hb.events.v1') || '{"events":[]}').events;
-    return { ops, calls, toasts, archive, deletes, memory, storage };
+    return { ops, calls, toasts, archive, deletes, memory, storage, faults };
   };
   // A real second tab of the same browser: its own panel and map wrapper over the same storage.
   // It restores the shared session, as a tab opened later does.
@@ -613,6 +616,100 @@ async function browserChecks({ initOperations, createEvent, EventStore }) {
       check('editBetweenTabSnapshotsGuardsPublish', !first.calls.length && notice().startsWith('Altcineva a publicat'));
     }
 
+    {
+      // Tab 2 takes the colleague's version first; tab 1 publishes before its own snapshot arrives.
+      const mine = situation('Publicare înainte de snapshot'), other = situation('Alături');
+      const first = boot({ active: mine, session: { cloudBase: mine.updatedAt } });
+      first.ops.syncFromCloud([structuredClone(mine), structuredClone(other)]);
+      const second = bootSecondTab(first);
+      pickIn(second.panel, other.id);
+      second.ops.syncFromCloud([colleague(mine, 'Publicare înainte de snapshot · coleg', 1), structuredClone(other)]);
+      click('[data-action="save"]'); await settle();
+      check('publishOverVersionAnotherTabStoredRefused', !first.calls.length && $('.ops-conflict') && notice().startsWith('Altcineva a publicat'));
+    }
+    {
+      // Both tabs show the situation; tab 1 holds the colleague's version behind an area selection
+      // while tab 2, idle, takes it live.
+      const mine = situation('Zonă, ambele file');
+      const first = boot({ active: mine, session: { cloudBase: mine.updatedAt } });
+      first.ops.syncFromCloud([structuredClone(mine)]);
+      const second = bootSecondTab(first);
+      second.ops.syncFromCloud([structuredClone(mine)]);
+      click('button[data-action="area"]');
+      const theirs = colleague(mine, 'Zonă, ambele file · coleg', 1);
+      first.ops.syncFromCloud([theirs]);
+      second.ops.syncFromCloud([theirs]);
+      click('.ops-drawbar button[data-action="finish"]');
+      check('heldVersionTakenLiveElsewhereLoadsHere', title() === 'Zonă, ambele file · coleg' && !$('.ops-conflict'));
+    }
+    {
+      // Tab 1 holds the version behind an area selection; tab 2 then opens the same situation.
+      const mine = situation('Zonă, deschisă apoi'), other = situation('Prima a doua');
+      const first = boot({ active: mine, session: { cloudBase: mine.updatedAt } });
+      first.ops.syncFromCloud([structuredClone(mine), structuredClone(other)]);
+      const second = bootSecondTab(first);
+      pickIn(second.panel, other.id);
+      click('button[data-action="area"]');
+      const theirs = colleague(mine, 'Zonă, deschisă apoi · coleg', 1);
+      first.ops.syncFromCloud([theirs, structuredClone(other)]);
+      second.ops.syncFromCloud([theirs, structuredClone(other)]);
+      pickIn(second.panel, mine.id);
+      click('.ops-drawbar button[data-action="finish"]');
+      check('heldVersionOpenedElsewhereLoadsHere', title() === 'Zonă, deschisă apoi · coleg' && !$('.ops-conflict'));
+    }
+    {
+      // Tab 2, still on the older copy, writes the shared session; tab 1, with unpublished edits, reloads.
+      const mine = situation('Sesiune comună');
+      const first = boot({ active: mine, session: { cloudBase: mine.updatedAt } });
+      first.ops.syncFromCloud([structuredClone(mine)]);
+      const second = bootSecondTab(first);
+      editTitle('Sesiune comună · editată în fila 1');
+      second.ops.openRoadCreator();
+      second.panel.querySelector('button[data-action="discard-mark"]')?.click();
+      const reloaded = boot({ memory: first.memory });
+      check('reloadAfterStaleTabKeepsEdits', title() === 'Sesiune comună · editată în fila 1' && status().includes('nepublicat în Cloud'));
+      click('[data-action="save"]'); await settle();
+      check('reloadAfterStaleTabPublishesEdits', reloaded.calls[0]?.title === 'Sesiune comună · editată în fila 1');
+    }
+    {
+      // The state of an edit cannot be stored (full storage); a passive tab then gets a colleague's
+      // version with an older clock.
+      const mine = situation('Stare nescrisă'), other = situation('Pasivă');
+      const first = boot({ active: mine, session: { cloudBase: mine.updatedAt } });
+      first.ops.syncFromCloud([structuredClone(mine), structuredClone(other)]);
+      const second = bootSecondTab(first);
+      pickIn(second.panel, other.id);
+      first.faults.add('hb.ops.cloud.v1');
+      editTitle('Stare nescrisă · editată');
+      second.ops.syncFromCloud([colleague(mine, 'Stare nescrisă · coleg', -10), structuredClone(other)]);
+      check('unstoredStateStillKeepsEdits', first.archive().find(event => event.id === mine.id)?.title === 'Stare nescrisă · editată');
+    }
+    {
+      // A file brings a newer copy of a situation that is not open; the Cloud then changes it.
+      const mine = situation('Import din fișier'), other = situation('Deschisă');
+      const { ops, archive } = boot({ active: mine, session: { cloudBase: mine.updatedAt } });
+      ops.syncFromCloud([structuredClone(mine), structuredClone(other)]);
+      pick(other.id);
+      const imported = { ...structuredClone(mine), title: 'Import din fișier · din fișier', updatedAt: later(2) };
+      const input = $('#ops-import');
+      // A file whose text resolves at once: real file reads run outside Chrome's virtual time.
+      const json = JSON.stringify({ format: 'harta-botosani-events', version: 1, events: [imported] });
+      Object.defineProperty(input, 'files', { configurable: true, value: [{ name: 'arhiva.json', size: json.length, text: async () => json }] });
+      input.dispatchEvent(new Event('change', { bubbles: true })); await settle(5);
+      ops.syncFromCloud([structuredClone(mine), structuredClone(other)]);
+      ops.syncFromCloud([colleague(mine, 'Import din fișier · coleg', 1), structuredClone(other)]);
+      check('importedCopyOfLeftSituationKept', archive().find(event => event.id === mine.id)?.title === 'Import din fișier · din fișier');
+      pick(mine.id);
+      check('importedCopyReopensUnpublishedWithConflict', title() === 'Import din fișier · din fișier' && status().includes('nepublicat în Cloud') && $('.ops-conflict'));
+    }
+    {
+      // Publishing a situation with no edits is refused: the new version is not in the Cloud.
+      const mine = situation('Refuz fără editări');
+      const { ops } = boot({ active: mine, session: { cloudBase: mine.updatedAt }, save: async () => false });
+      ops.syncFromCloud([structuredClone(mine)]);
+      click('[data-action="save"]'); await settle();
+      check('refusedCleanPublishNotPublished', notice().startsWith('Situația e salvată doar în acest browser') && status().includes('nepublicat în Cloud'));
+    }
     // Ending an area selection or an itinerary pick lets the held version in, like the other tools.
     {
       const mine = situation('Zonă terminată');
@@ -663,6 +760,6 @@ test('Cloud snapshots keep work in progress, publishing reports the real result,
     assert.equal(result.error, undefined, result.error);
     const failed = Object.entries(result).filter(([, ok]) => !ok).map(([name]) => name);
     assert.deepEqual(failed, [], 'Cloud guard regressions');
-    assert.ok(Object.keys(result).length >= 84, 'Every scenario reported');
+    assert.ok(Object.keys(result).length >= 93, 'Every scenario reported');
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
