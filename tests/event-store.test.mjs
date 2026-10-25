@@ -380,3 +380,28 @@ test('a full storage keeps the Cloud state in memory for this tab', () => {
   tab.update('a', { unpublished: false });
   assert.equal(tab.get('a').unpublished, false);
 });
+
+test('a tab whose Cloud state write failed does not erase what other tabs stored meanwhile', () => {
+  const values = new Map();
+  let full = false;
+  const storage = { getItem: key => values.get(key) ?? null, setItem: (key, value) => { if (full) throw new Error('QuotaExceededError'); values.set(key, value); } };
+  const tab = new CloudStates(storage), other = new CloudStates(storage);
+  full = true;
+  tab.update('a', { unpublished: true });
+  assert.equal(tab.get('a').unpublished, true, 'kept in this tab');
+  assert.equal(other.get('a'), null, 'not in storage yet');
+  full = false;
+  other.update('b', { unpublished: true });
+  tab.update('c', { unpublished: true });
+  const stored = new CloudStates(storage);
+  assert.deepEqual(stored.entries().map(([id]) => id).sort(), ['a', 'b', 'c'], 'the next write carries the kept entry and keeps the others');
+  assert.equal(stored.get('b').unpublished, true);
+  full = true;
+  tab.remove('b');
+  full = false;
+  other.update('d', { unpublished: true });
+  assert.equal(tab.get('b'), null, 'a failed removal stays removed in this tab');
+  tab.update('e', { unpublished: true });
+  assert.equal(new CloudStates(storage).get('b'), null);
+  assert.equal(new CloudStates(storage).get('d').unpublished, true);
+});

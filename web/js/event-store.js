@@ -337,34 +337,41 @@ function cloudState(value, conflict = heldVersion(value.conflict)) {
 }
 
 export class CloudStates {
-  constructor(storage = globalThis.localStorage) { this.storage = storage; this._raw = undefined; this._states = new Map(); this._detached = false; }
+  constructor(storage = globalThis.localStorage) { this.storage = storage; this._raw = undefined; this._stored = new Map(); this._unsaved = new Map(); }
 
-  // Reparsed only when another tab (or this one) wrote the map since the last read.
+  // Reparsed only when another tab (or this one) wrote the map since the last read. Entries this
+  // tab could not write (full storage) stay on top of it, and go out with the next write that
+  // succeeds, so a failed write never rewrites what other tabs stored meanwhile.
   _read() {
-    if (this._detached) return this._states;
     let raw = null;
     try { raw = this.storage?.getItem(CLOUD_STATE_KEY) ?? null; } catch { /* unreadable storage: start empty */ }
-    if (raw === this._raw) return this._states;
-    this._raw = raw;
-    this._states = new Map();
-    try {
-      const parsed = raw === null ? {} : JSON.parse(raw);
-      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-        for (const [id, value] of Object.entries(parsed)) {
-          try { this._states.set(id, cloudState(value)); } catch { /* one bad entry does not hide the others */ }
+    if (raw !== this._raw) {
+      this._raw = raw;
+      this._stored = new Map();
+      try {
+        const parsed = raw === null ? {} : JSON.parse(raw);
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+          for (const [id, value] of Object.entries(parsed)) {
+            try { this._stored.set(id, cloudState(value)); } catch { /* one bad entry does not hide the others */ }
+          }
         }
-      }
-    } catch { /* a corrupt map starts empty */ }
-    return this._states;
+      } catch { /* a corrupt map starts empty */ }
+    }
+    if (!this._unsaved.size) return this._stored;
+    const states = new Map(this._stored);
+    for (const [id, state] of this._unsaved) state ? states.set(id, state) : states.delete(id);
+    return states;
   }
 
-  _write(states) {
-    this._states = states;
+  // `state` null removes the situation's entry.
+  _write(id, state) {
+    this._unsaved.set(id, state);
+    const states = this._read();
     try {
       const raw = JSON.stringify(Object.fromEntries(states));
       this.storage.setItem(CLOUD_STATE_KEY, raw);
-      this._raw = raw;
-    } catch { this._detached = true; } // full storage: this tab keeps the state in memory
+      this._raw = raw; this._stored = states; this._unsaved.clear();
+    } catch { /* full storage: kept in this tab until a later write succeeds */ }
   }
 
   get(id) { const state = this._read().get(id); return state ? { ...state, sent: [...state.sent] } : null; }
@@ -372,14 +379,13 @@ export class CloudStates {
 
   // Merges `patch` into the situation's state; a version is told apart by its timestamp.
   update(id, patch) {
-    const states = new Map(this._read());
+    const states = this._read();
     const old = states.get(id) ?? NO_CLOUD_STATE;
     const next = cloudState({ ...old, ...patch }, Object.hasOwn(patch, 'conflict') ? heldVersion(patch.conflict) : old.conflict);
     const same = states.has(id) && old.base === next.base && old.unpublished === next.unpublished
       && old.conflict?.updatedAt === next.conflict?.updatedAt && old.sent.join() === next.sent.join();
     if (same) return;
-    states.set(id, next);
-    this._write(states);
+    this._write(id, next);
   }
 
   markSent(id, version) {
@@ -388,7 +394,6 @@ export class CloudStates {
   }
 
   remove(id) {
-    const states = new Map(this._read());
-    if (states.delete(id)) this._write(states);
+    if (this._read().has(id)) this._write(id, null);
   }
 }
