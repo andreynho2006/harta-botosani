@@ -1215,6 +1215,8 @@ export function initOperations(ctx) {
     const routeMarks = active ? active.features.features.filter(isItinerary) : [];
     const otherMarks = active ? active.features.features.filter(f => f.geometry.type !== "LineString") : [];
 
+    // The panel is rebuilt from the stored event, which still holds the last accepted interval.
+    const rejectedDates = alertEditor.rejectedDates();
     panel.innerHTML = `<div class="ops">
       ${roadsDatalistHTML()}
       ${localitiesDatalistHTML()}
@@ -1371,6 +1373,7 @@ export function initOperations(ctx) {
 
       ${archiveHTML(events)}
     </div>`;
+    alertEditor.restoreRejectedDates(rejectedDates);
     operationCards.refresh({ markerId: pending?.properties?.id ?? null });
   }
 
@@ -1440,9 +1443,19 @@ export function initOperations(ctx) {
     return true;
   }
 
+  // The editor keeps a rejected warning date on screen while the old interval stays stored, so
+  // keeping the event now (save, export, resolve, add or remove a marker) or replacing it would
+  // drop what the operator typed behind a success message. Every such action asks this first.
+  function intervalRejected(refusal) {
+    if (!alertEditor.revealRejectedInterval()) return false;
+    message(`${refusal} Un interval de valabilitate este invalid: corectează data marcată în avertizare.`);
+    return true;
+  }
+
   function save() {
     try {
       if (pending || mode) return message("Finalizează adăugarea marcajului curent înainte de a salva situația.");
+      if (intervalRejected("Situația nu a fost salvată.")) return;
       active = db.save(snapshot()); dirty = false; exported = false;
       persistSession();
       try { cloudDb?.saveSituation?.(active); } catch (e) { console.warn(e); }
@@ -1457,6 +1470,7 @@ export function initOperations(ctx) {
   function toggleResolveFeature(featureId) {
     if (!active) return;
     if (pending) return message("Finalizează sau anulează editarea marcajului curent înainte de a schimba starea.");
+    if (intervalRejected("Starea situației nu a fost schimbată.")) return;
     const feat = active.features.features.find(f => f.properties.id === featureId);
     if (!feat) return;
     const wasResolved = feat.properties.status === "resolved";
@@ -1517,6 +1531,7 @@ export function initOperations(ctx) {
       message("Finalizează sau anulează marcajul în curs înainte de a schimba situația.");
       return false;
     }
+    if (active && intervalRejected("Situația curentă a rămas deschisă.")) return false;
     if (active && dirty) autoSaveActiveToDb();
     return true;
   }
@@ -1818,6 +1833,7 @@ export function initOperations(ctx) {
         sync(true); render();
       } catch { message("Introdu o denumire pentru situație."); }
     } else if (event.target.id === "ops-marker" && pending) {
+      if (intervalRejected("Marcajul nu a fost adăugat.")) return;
       const fields = new FormData(event.target);
       const kmFromRaw = fields.get("kmFrom");
       const kmToRaw = fields.get("kmTo");
@@ -1922,6 +1938,7 @@ export function initOperations(ctx) {
     }
     if (button.dataset.remove && active) {
       if (pending) return message("Finalizează sau anulează editarea marcajului curent.");
+      if (intervalRejected("Marcajul nu a fost eliminat.")) return;
       active.features.features = active.features.features.filter(f => f.properties.id !== button.dataset.remove);
       try { active = db.save(snapshot()); dirty = false; } catch { changed(); }
       sync(); render(); return;
@@ -2012,6 +2029,7 @@ export function initOperations(ctx) {
     if (action === "event-export") {
       try {
         if (pending || mode) return message("Finalizează marcajul curent înainte de salvare JSON.");
+        if (intervalRejected("Situația nu a fost exportată.")) return;
         const savedSnap = db.save(snapshot());
         active = savedSnap; dirty = false;
         const ok = await saveJsonFile(`situatie-${active.id}.json`, { format: "harta-botosani-events", version: 1, exportedAt: new Date().toISOString(), events: [savedSnap] });
@@ -2020,7 +2038,10 @@ export function initOperations(ctx) {
     }
     if (action === "archive-export") {
       try {
-        if (active && !pending && !mode) { active = db.save(snapshot()); dirty = false; }
+        if (active && intervalRejected("Arhiva nu a fost exportată.")) return;
+        if (active && !pending && !mode) {
+          active = db.save(snapshot()); dirty = false;
+        }
         const ok = await saveJsonFile("situatii.json", db.exportArchive());
         if (ok) { message("Baza de date cu toate situațiile (situatii.json) a fost salvată."); render(); }
       } catch { message("Arhiva locală nu poate fi exportată."); }

@@ -4,6 +4,21 @@ import { localTime, isoTime, dateLabel } from './operations-time.js';
 const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const fold = value => String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
 const dateValue = value => { try { return localTime(value); } catch { return ''; } };
+/** A displayed date as an instant: '' when empty, null when it is not a real time in Romania. */
+const displayedInstant = input => { try { return isoTime(input.value); } catch { return null; } };
+const REVERSED = 'Sfârșitul intervalului trebuie să fie după început.';
+const UNREADABLE = 'Date sau ore invalide pentru România.';
+
+/** Every warning date still showing a value the editor rejected. */
+const rejectedInputs = root => [...root.querySelectorAll('input[type="datetime-local"][data-warning-field]')].filter(input => input.validationMessage);
+
+/**
+ * The first warning date still showing a value the editor rejected. The stored interval stays
+ * the last accepted one meanwhile, so keeping the event now would drop what is on screen.
+ */
+export function rejectedInterval(root) {
+  return rejectedInputs(root)[0] || null;
+}
 
 /** Stored legacy village names map to their current `Name|UAT` key; unknown entries are kept. */
 export function canonicalEntry(kind, entry, localities = []) {
@@ -127,31 +142,93 @@ export function createAlertEditor({ panel, getActive, getData, onChange }) {
     if (!target.dataset.warningField || target.tagName === 'SELECT' || target.type === 'datetime-local') return false;
     return editField(target);
   }
+  /**
+   * An endpoint is judged against the other input as displayed, not as stored: after a rejected
+   * date the two differ, and the screen is what the operator is correcting.
+   */
+  function editInterval(entry, target, field) {
+    const stored = warnings().find(alert => alert.id === entry.dataset.warningId);
+    if (!stored) return true;
+    const otherField = field === 'validFrom' ? 'validTo' : 'validFrom';
+    const other = [...entry.querySelectorAll('input[type="datetime-local"]')]
+      .find(input => input !== target && input.dataset.warningField === otherField);
+    const reject = message => {
+      target.setCustomValidity(message);
+      target.reportValidity();
+      updateStatus(entry, stored);
+      return true;
+    };
+    const value = displayedInstant(target);
+    if (value === null) return reject(UNREADABLE);
+    // When the other input holds a time the editor cannot read, its stored value stands in.
+    const shown = other ? displayedInstant(other) : null;
+    const otherValue = shown ?? stored[otherField];
+    const [from, to] = field === 'validFrom' ? [value, otherValue] : [otherValue, value];
+    if (from && to && Date.parse(to) < Date.parse(from)) return reject(REVERSED);
+    target.setCustomValidity('');
+    const alert = editable()?.find(item => item.id === stored.id);
+    if (!alert) return true;
+    let changedValue = false;
+    const keep = (name, instant) => { if (alert[name] !== instant) { alert[name] = instant; changedValue = true; } };
+    keep(field, value);
+    // The other end was flagged against a date that has since changed: what it shows is consistent now.
+    if (other?.validationMessage === REVERSED && shown !== null) { other.setCustomValidity(''); keep(otherField, shown); }
+    updateStatus(entry, alert);
+    if (changedValue) onChange({ render: false, geography: false });
+    return true;
+  }
   function editField(target) {
     const entry = target.closest('[data-warning-id]');
     const field = target.dataset.warningField;
     if (!entry || !['code', 'source', 'validFrom', 'validTo', 'text'].includes(field)) return false;
-    let value = target.value;
+    if (field === 'validFrom' || field === 'validTo') return editInterval(entry, target, field);
+    const value = target.value;
     if (field === 'code' && !CODES[value]) return true;
-    if (field === 'validFrom' || field === 'validTo') {
-      try { value = isoTime(value); } catch { target.setCustomValidity('Date sau ore invalide pentru România.'); target.reportValidity(); return true; }
-      const current = warnings().find(alert => alert.id === entry.dataset.warningId);
-      const from = field === 'validFrom' ? value : current?.validFrom;
-      const to = field === 'validTo' ? value : current?.validTo;
-      if (from && to && Date.parse(to) < Date.parse(from)) {
-        target.setCustomValidity('Sfârșitul intervalului trebuie să fie după început.');
-        target.reportValidity();
-        entry.querySelector('[data-alert-status]').textContent = 'Interval invalid: corectează data înainte de salvare.';
-        return true;
-      }
-      entry.querySelectorAll('input[type="datetime-local"]').forEach(input => input.setCustomValidity(''));
-    }
     const alert = editable().find(item => item.id === entry.dataset.warningId);
     if (!alert || alert[field] === value) return true;
     alert[field] = value;
     updateStatus(entry, alert);
     onChange({ render: false, geography: false });
     return true;
+  }
+  /** True when a warning date is still rejected: opens that warning and points at the date. */
+  function revealRejectedInterval() {
+    const input = rejectedInterval(panel);
+    if (!input) return false;
+    const entry = input.closest('[data-warning-id]');
+    if (entry) entry.open = true;
+    input.focus?.();
+    input.reportValidity();
+    return true;
+  }
+  /**
+   * A rejected date lives only in its input while the stored interval stays the last accepted one,
+   * and a render rebuilds the panel from the stored event. Take them before and put them back
+   * after, or the typed date and the invalid status would vanish without a word.
+   */
+  function rejectedDates() {
+    return rejectedInputs(panel).flatMap(input => {
+      const id = input.closest('[data-warning-id]')?.dataset.warningId;
+      return id ? [{ id, field: input.dataset.warningField, value: input.value, message: input.validationMessage }] : [];
+    });
+  }
+  function restoreRejectedDates(dates) {
+    if (!dates?.length) return;
+    const alerts = warnings();
+    for (const entry of panel.querySelectorAll('[data-warning-id]')) {
+      const mine = dates.filter(date => date.id === entry.dataset.warningId);
+      const alert = alerts.find(item => item.id === entry.dataset.warningId);
+      if (!mine.length || !alert) continue;
+      const inputs = [...entry.querySelectorAll('input[type="datetime-local"]')];
+      for (const { field, value, message } of mine) {
+        const input = inputs.find(item => item.dataset.warningField === field);
+        if (!input) continue;
+        input.value = value;
+        input.setCustomValidity(message);
+      }
+      entry.open = true;
+      updateStatus(entry, alert);
+    }
   }
   function handleChange(target) {
     if (target.dataset.warningField) return editField(target);
@@ -190,5 +267,5 @@ export function createAlertEditor({ panel, getActive, getData, onChange }) {
     onChange({ render: true, geography: true });
     return true;
   }
-  return { html, handleInput, handleChange, handleClick };
+  return { html, handleInput, handleChange, handleClick, revealRejectedInterval, rejectedDates, restoreRejectedDates };
 }

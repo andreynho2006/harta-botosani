@@ -181,6 +181,72 @@ async function browserChecks({ initOperations, createEvent }) {
     check('resolvedReopens', visible(document.querySelector('#ops-risk-resolved')) && document.querySelector('#ops-risk-resolved').textContent.includes('Incendiu stins'));
     await nextFrame();
     check('groupTogglePreservesMap', mapView() === beforeGroupToggle);
+
+    // A warning date the editor rejected stays on screen while the stored interval is the last accepted one:
+    // every action that keeps or replaces the event must refuse, and no render may drop the typed date.
+    document.querySelector('.ops-pres-exit').click();
+    const settle = () => new Promise(resolve => setTimeout(resolve, 0));
+    const typed = (field, value) => {
+      const input = document.querySelector('[data-warning-field="' + field + '"]');
+      input.value = value; input.dispatchEvent(new Event('change', { bubbles: true }));
+    };
+    document.querySelector('[data-alert-action="add"]').click();
+    typed('validFrom', '2026-10-25T09:00'); typed('validTo', '2026-10-25T17:00');
+    typed('validFrom', '2026-10-26T10:00'); // after the end: rejected
+    const archive = () => memory.get('hb.events.v1');
+    let archiveBefore = archive();
+    const notice = () => document.querySelector('.ops-notice').textContent;
+    const refusal = text => notice().includes(text) && notice().includes('interval de valabilitate este invalid');
+    const held = () => {
+      const start = document.querySelector('[data-warning-field="validFrom"]');
+      return start.value === '2026-10-26T10:00' && Boolean(start.validationMessage)
+        && document.querySelector('[data-alert-status]').textContent.startsWith('Interval invalid')
+        && document.querySelector('[data-warning-id]').open;
+    };
+    const refused = (name, text) => check(name, refusal(text) && held() && archive() === archiveBefore);
+    const title = () => document.querySelector('[data-ops-card="event"] h2').textContent;
+    check('rejectedDateFlagged', held());
+    document.querySelector('[data-action="save"]').click();
+    refused('saveRefusedWhileDateRejected', 'Situația nu a fost salvată.');
+    document.querySelector('[data-action="event-export"]').click(); await settle();
+    refused('exportRefusedWhileDateRejected', 'Situația nu a fost exportată.');
+    document.querySelector('[data-action="archive-export"]').click(); await settle();
+    refused('archiveExportRefusedWhileDateRejected', 'Arhiva nu a fost exportată.');
+    document.querySelector('[data-resolve-mark="test-0"]').click();
+    refused('resolveRefusedWhileDateRejected', 'Starea situației nu a fost schimbată.');
+    check('resolveLeavesMarkerOpen', !document.querySelector('[data-resolve-mark="test-0"]').classList.contains('active'));
+    document.querySelector('[data-remove="test-1"]').click();
+    refused('removeRefusedWhileDateRejected', 'Marcajul nu a fost eliminat.');
+    check('removeLeavesMarker', Boolean(document.querySelector('[data-remove="test-1"]')));
+    const heading = title();
+    document.querySelector('[data-action="duplicate"]').click();
+    refused('duplicateRefusedWhileDateRejected', 'Situația curentă a rămas deschisă.');
+    check('duplicateLeavesEvent', title() === heading);
+    document.querySelector('[data-action="new"]').click();
+    refused('closeRefusedWhileDateRejected', 'Situația curentă a rămas deschisă.');
+    check('closeLeavesEvent', title() === heading);
+    const archiveSelect = document.querySelector('#ops-archive');
+    archiveSelect.value = ''; archiveSelect.dispatchEvent(new Event('change', { bubbles: true }));
+    check('openRefusedWhileDateRejected', refusal('Situația curentă a rămas deschisă.') && held() && title() === heading);
+    // Rebuilding the panel for any other reason keeps the typed date and the invalid status.
+    document.querySelector('[data-alert-action="add"]').click();
+    check('renderKeepsRejectedDate', held() && document.querySelectorAll('[data-warning-id]').length === 2);
+    document.querySelectorAll('[data-alert-action="remove"]')[1].click();
+    check('removingAnotherWarningKeepsRejectedDate', held() && document.querySelectorAll('[data-warning-id]').length === 1);
+    archiveBefore = archive(); // adding and removing a warning autosaves the last accepted interval
+    document.querySelector('[data-mark="test-2"]').click();
+    document.querySelector('#ops-marker').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    refused('markerAddRefusedWhileDateRejected', 'Marcajul nu a fost adăugat.');
+    check('markerStaysPendingWhileDateRejected', Boolean(document.querySelector('#ops-marker')));
+    document.querySelector('[data-action="archive-export"]').click(); await settle();
+    refused('archiveExportWithMarkerRefusedWhileDateRejected', 'Arhiva nu a fost exportată.');
+    document.querySelector('[data-action="discard-mark"]').click();
+    check('discardKeepsRejectedDate', held());
+    typed('validFrom', '2026-10-25T08:00');
+    check('correctedDateLiftsTheFlag', !document.querySelector('[data-warning-field="validFrom"]').validationMessage
+      && !document.querySelector('[data-alert-status]').textContent.startsWith('Interval invalid'));
+    document.querySelector('[data-action="save"]').click();
+    check('saveWorksOnceCorrected', notice().startsWith('Situația a fost salvată') && archive() !== archiveBefore);
     parent.postMessage(result, '*');
   } catch (error) { parent.postMessage({ viewport: innerWidth + 'x' + innerHeight, error: error.stack }, '*'); }
 }
