@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { decorateOperationalStyle } from '../web/js/operations-style.js';
+import { decorateOperationalStyle, scaledSize } from '../web/js/operations-style.js';
 
 const fc = features => ({ type: 'FeatureCollection', features });
 const layer = (style, id) => style.layers.find(item => item.id === id);
@@ -135,4 +135,37 @@ test('disabled area tint hides fill, glow, outline and labels and restores the f
   assert.equal(layer(style, 'ops-alert-label').layout.visibility, 'none');
   assert.equal(layer(style, 'ops-alert-label-place').layout.visibility, 'none');
   assert.equal(layer(style, 'ops-selection').filter, undefined);
+});
+
+test('room scale multiplies label sizes, keeping zoom curves at the top as MapLibre requires', () => {
+  assert.equal(scaledSize(12.5, 1.5), 18.75);
+  assert.deepEqual(scaledSize(['interpolate', ['linear'], ['zoom'], 10, 11, 16, 13], 1.8), ['interpolate', ['linear'], ['zoom'], 10, 19.8, 16, 23.4]);
+  assert.deepEqual(scaledSize(['step', ['zoom'], 10, 12, 14], 2), ['step', ['zoom'], 20, 12, 28]);
+  assert.deepEqual(scaledSize(['match', ['get', 'kind'], 'city', 17, 11], 1.5), ['*', ['match', ['get', 'kind'], 'city', 17, 11], 1.5]);
+});
+
+test('the room presentation scales every label and greys DN, DJ and DC only while codes are on the map', () => {
+  const roads = () => ({ version: 8, sources: {}, layers: [
+    { id: 'roads-casing', type: 'line', paint: { 'line-color': '#casing' } },
+    { id: 'roads', type: 'line', paint: { 'line-color': '#road' } },
+    { id: 'road-ref', type: 'symbol', layout: { 'text-size': 10.5, 'icon-image': ['concat', 'shield-', ['get', 'cls']] }, paint: { 'text-color': '#ref' } },
+    { id: 'places', type: 'symbol', layout: { 'text-size': ['interpolate', ['linear'], ['zoom'], 7, 12, 12, 16] } },
+  ] });
+  const codes = fc([{ type: 'Feature', geometry: boundary, properties: { code: 'orange', severity: 3 } }]);
+  const room = decorateOperationalStyle(roads(), { theme: 'zi', operations: { presenting: true, presScale: 1.5, alerts: codes } });
+  assert.equal(layer(room, 'road-ref').layout['text-size'], 15.75);
+  assert.deepEqual(layer(room, 'places').layout['text-size'], ['interpolate', ['linear'], ['zoom'], 7, 18, 12, 24]);
+  assert.equal(layer(room, 'ops-features-label').layout['text-size'], 27, 'incident labels grow with the room scale too');
+  assert.deepEqual(layer(room, 'roads').paint['line-color'], ['match', ['get', 'cls'], 'dn', '#6b7280', 'dj', '#959ba3', 'dc', '#bcc1c7', '#road']);
+  assert.equal(layer(room, 'roads-casing').paint['line-color'][3], '#4b5563');
+  assert.equal(layer(room, 'road-ref').layout['icon-image'], 'shield-neutral');
+  const night = decorateOperationalStyle(roads(), { theme: 'noapte', operations: { presenting: true, presScale: 1, alerts: codes } });
+  assert.equal(layer(night, 'roads').paint['line-color'][3], '#a3a9b1');
+  assert.equal(layer(night, 'road-ref').layout['text-size'], 10.5, 'scale 1 leaves sizes alone');
+  for (const operations of [{ presenting: false, presScale: 1.5, alerts: codes }, { presenting: true, presScale: 1.5, alerts: fc([]) }, { presenting: true, presScale: 1.5, alerts: codes, tintAreas: false }]) {
+    const style = decorateOperationalStyle(roads(), { theme: 'zi', operations });
+    assert.equal(layer(style, 'roads').paint['line-color'], '#road', JSON.stringify(operations));
+    assert.equal(layer(style, 'road-ref').layout['icon-image'][0], 'concat');
+  }
+  assert.equal(layer(decorateOperationalStyle(roads(), { operations: { presenting: false, presScale: 1.5 } }), 'road-ref').layout['text-size'], 10.5, 'no room scale outside the presentation');
 });

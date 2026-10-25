@@ -67,6 +67,7 @@ The `Site` workflow runs both suites on every push that touches `web/`, `tests/`
    - **Șterge** cere confirmare pentru situația deschisă. Eliminarea unei situații sau a unui marcaj se poate anula 15 secunde din bara de jos a panoului (**Anulează**); o situație ștearsă revine și în Cloud, așa cum era.
 4. **Mod Prezentare CJSU (`Prezintă în ședință`):**
    - Afișează harta pe tot ecranul cu antetul ședinței, avertizările (cod, sursă, interval, localități), legenda operativă și un **panou de sinteză CJSU interactiv** (clic pe orice drum blocat, zonă, forță sau UAT centrează harta pe acel element), plus comenzi rapide pentru *Hartă / Satelit*, *Zi / Noapte*, *Izolează zona* și *Încadrează*.
+   - **Pentru sală:** antetul arată „Situația operativă la …” (ora ultimei actualizări) și o plăcuță mare cu codul cel mai sever. Butonul **„Aa”** din Comenzi mărește textul panourilor și etichetele hărții la 1,5× sau 1,8× (panourile își păstrează locul; alegerea se ține minte pe dispozitiv, iar pe telefon rămâne 1×). Cât timp pe hartă sunt coduri, DN/DJ/DC se desenează în gri, ca galbenul, portocaliul și roșul să însemne doar coduri.
 
 ## Itinerare de intervenție
 

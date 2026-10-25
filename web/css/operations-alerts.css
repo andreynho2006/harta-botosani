@@ -25,13 +25,13 @@
 .ops-alert-zone { display: flex; flex-wrap: wrap; gap: 6px; }
 .ops-alert-zone > .btn { flex: 1 1 auto; justify-content: center; }
 /* One palette for every code swatch outside the map canvas; it matches operations-alerts.js. */
-:is(.ops-alert-dot, .ops-alert-popup-item, .ops-alert, .ops-legend-code) { --code: #64748b; --code-ink: #ffffff; }
-:is(.ops-alert-dot, .ops-alert-popup-item, .ops-alert, .ops-legend-code)[data-code=yellow] { --code: #eab308; --code-ink: #1c1917; }
-:is(.ops-alert-dot, .ops-alert-popup-item, .ops-alert, .ops-legend-code)[data-code=orange] { --code: #ea580c; --code-ink: #1c1917; }
-:is(.ops-alert-dot, .ops-alert-popup-item, .ops-alert, .ops-legend-code):is([data-code=red], [data-code=ro-alert]) { --code: #dc2626; --code-ink: #ffffff; }
-:root[data-theme="dark"] :is(.ops-alert-dot, .ops-alert-popup-item, .ops-alert, .ops-legend-code)[data-code=yellow] { --code: #facc15; }
-:root[data-theme="dark"] :is(.ops-alert-dot, .ops-alert-popup-item, .ops-alert, .ops-legend-code)[data-code=orange] { --code: #fb923c; }
-:root[data-theme="dark"] :is(.ops-alert-dot, .ops-alert-popup-item, .ops-alert, .ops-legend-code):is([data-code=red], [data-code=ro-alert]) { --code: #f87171; --code-ink: #1c1917; }
+:is(.ops-alert-dot, .ops-alert-popup-item, .ops-alert, .ops-legend-code, .ops-slide-code) { --code: #64748b; --code-ink: #ffffff; }
+:is(.ops-alert-dot, .ops-alert-popup-item, .ops-alert, .ops-legend-code, .ops-slide-code)[data-code=yellow] { --code: #eab308; --code-ink: #1c1917; }
+:is(.ops-alert-dot, .ops-alert-popup-item, .ops-alert, .ops-legend-code, .ops-slide-code)[data-code=orange] { --code: #ea580c; --code-ink: #1c1917; }
+:is(.ops-alert-dot, .ops-alert-popup-item, .ops-alert, .ops-legend-code, .ops-slide-code):is([data-code=red], [data-code=ro-alert]) { --code: #dc2626; --code-ink: #ffffff; }
+:root[data-theme="dark"] :is(.ops-alert-dot, .ops-alert-popup-item, .ops-alert, .ops-legend-code, .ops-slide-code)[data-code=yellow] { --code: #facc15; }
+:root[data-theme="dark"] :is(.ops-alert-dot, .ops-alert-popup-item, .ops-alert, .ops-legend-code, .ops-slide-code)[data-code=orange] { --code: #fb923c; }
+:root[data-theme="dark"] :is(.ops-alert-dot, .ops-alert-popup-item, .ops-alert, .ops-legend-code, .ops-slide-code):is([data-code=red], [data-code=ro-alert]) { --code: #f87171; --code-ink: #1c1917; }
 .ops-alert-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 5px; background: var(--code); }
 /* Warning popup on the map follows the app theme, so night mode stays readable. */
 .ops-alert-popup-wrap .maplibregl-popup-content { padding: 12px 34px 12px 14px; border: 1px solid var(--line-2); border-radius: var(--r); background: var(--panel); color: var(--ink); box-shadow: var(--shadow); font: 13px/1.45 var(--font); }
@@ -48,7 +48,8 @@
 /* Presentation: warnings sit side by side under the title, each on a tinted banner with a solid code plate.
    The grid does not scroll: when the header is short the rows shrink toward the banners' min-height and a long warning
    scrolls inside its own banner. */
-.ops-slide-head > .ops-alert-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr)); gap: 8px; }
+/* The grid is scaled with the header (--pres-scale), so its minimum column stays 280 screen px and three banners keep one row. */
+.ops-slide-head > .ops-alert-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, calc(280px / var(--pres-scale, 1))), 1fr)); gap: 8px; }
 .ops-slide-head .ops-alert { border-left-color: var(--code); background: var(--panel-2); background: color-mix(in srgb, var(--code) 13%, var(--panel-2)); }
 .ops-alert-code { display: inline-block; margin: 0 8px 2px 0; padding: 2px 8px; border-radius: 4px; background: var(--code); color: var(--code-ink); font-size: 14px; font-weight: 750; letter-spacing: 0.03em; text-transform: uppercase; }
 .ops-alert-when { color: var(--ink-2); font-size: 12.5px; }

@@ -153,8 +153,12 @@
   --pres-bottom: calc(env(safe-area-inset-bottom, 0px) + 10px);
   --pres-left: calc(env(safe-area-inset-left, 0px) + 10px);
   --pres-right: calc(env(safe-area-inset-right, 0px) + 10px);
+  /* Room scale ("Aa" in Commands): the panels keep their place and limits, their content grows. */
+  --pres-scale: 1;
+  --pres-summary: calc(300px + 180px * (var(--pres-scale) - 1));
 }
 .ops-presentation [hidden] { display: none !important; }
+.ops-presentation [data-pres-panel] > * { zoom: var(--pres-scale); }
 .ops-pres-toggle, .ops-pres-exit, .ops-presentation [data-pres-panel] {
   position: absolute; pointer-events: auto; box-sizing: border-box; min-width: 0;
   border: 1px solid var(--line-2); border-radius: 10px;
@@ -180,7 +184,7 @@
   overflow-wrap: anywhere; max-height: calc(100dvh - 148px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
 }
 .ops-slide-head {
-  top: calc(var(--pres-top) + 54px); left: calc(var(--pres-left) + 366px); right: var(--pres-right);
+  top: calc(var(--pres-top) + 54px); left: calc(var(--pres-left) + 66px + var(--pres-summary)); right: var(--pres-right);
   max-height: min(44dvh, calc(100dvh - 148px)) !important; display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto 1fr auto;
 }
 /* When the header reaches its height limit the title keeps its size and the warning banners shrink toward their start
@@ -191,13 +195,19 @@
 .ops-slide-head > #ops-pres-message-text { grid-row: 2; margin-top: 5px; min-height: 1.6em; overflow: auto; overscroll-behavior: contain; }
 .ops-slide-head > #ops-pres-message-text > p { margin: 0; }
 .ops-slide-head > .ops-alert-grid { grid-row: 3; margin-top: 10px; min-height: 0; }
+.ops-slide-title { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 14px; align-items: start; }
+.ops-slide-title > :not(.ops-slide-code) { grid-column: 1; }
 .ops-slide-eyebrow { display: block; color: var(--ink-2); font-size: 12px; line-height: 1.4; font-weight: 600; }
+.ops-slide-asof { display: block; margin-top: 3px; color: var(--ink-2); font-size: 13px; font-weight: 600; }
+/* The most severe code, readable across the room before any banner. */
+.ops-slide-code { grid-column: 2; grid-row: 1 / span 3; align-self: center; padding: 6px 14px; border-radius: 6px; background: var(--code); color: var(--code-ink);
+  font-size: 22px; font-weight: 800; letter-spacing: 0.04em; line-height: 1.15; text-transform: uppercase; white-space: nowrap; }
 .ops-slide-head h1 { display: block; margin: 4px 0 0; font-size: clamp(19px, 2vw, 25px); line-height: 1.2; font-weight: 700; }
 .ops-slide-head p { display: block; margin: 5px 0 0; color: var(--ink-2); font-size: 13px; line-height: 1.45; white-space: pre-wrap; }
 .ops-slide-head .ops-alert { min-height: min(96px, 24dvh); max-height: 24dvh; overflow: auto; overscroll-behavior: contain; margin: 0; padding: 8px 10px; border-left: 4px solid var(--warn); border-radius: 4px; background: var(--panel-2); color: var(--ink); font-weight: 550; }
 .ops-slide-summary {
   top: calc(var(--pres-top) + 54px); left: calc(var(--pres-left) + 54px); bottom: calc(var(--pres-bottom) + 54px);
-  width: 300px; display: flex; flex-direction: column; gap: 10px;
+  width: var(--pres-summary); display: flex; flex-direction: column; gap: 10px;
 }
 .ops-slide-controls {
   right: var(--pres-right); bottom: calc(var(--pres-bottom) + 54px); width: 252px;
@@ -246,7 +256,7 @@
 
 .ops-presentation[data-commands-open="true"] .ops-slide-foot { right: calc(var(--pres-right) + 264px); }
 .ops-slide-foot {
-  left: calc(var(--pres-left) + 366px); right: var(--pres-right); bottom: calc(var(--pres-bottom) + 54px);
+  left: calc(var(--pres-left) + 66px + var(--pres-summary)); right: var(--pres-right); bottom: calc(var(--pres-bottom) + 54px);
   display: grid; gap: 10px; max-height: 26dvh !important;
 }
 .ops-slide-foot > span { color: var(--ink-2); font-size: 12px; line-height: 1.4; }
@@ -289,6 +299,7 @@
   }
   .ops-slide-head h1 { font-size: 18px; }
   .ops-slide-eyebrow { font-size: 11px; }
+  .ops-slide-code { grid-column: 1; grid-row: auto; justify-self: start; margin-top: 6px; padding: 3px 10px; font-size: 15px; }
   .ops-slide-head p { font-size: 13px; }
   /* The header scrolls as a whole here, and on a narrow banner the source and interval wrap over three to five lines,
      so a banner keeps room below them for the start of its text. */

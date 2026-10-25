@@ -126,6 +126,7 @@ export function buildIcons() {
   icons["shield-dn"] = shield("#c93a31", "#ffffff");
   icons["shield-dj"] = shield("#f0a23a", "#8a5410");
   icons["shield-dc"] = shield("#f7dc6f", "#8a7a1c");
+  icons["shield-neutral"] = shield("#4b5563", "#ffffff"); // drumuri în prezentare, când există coduri
   return icons;
 }
 

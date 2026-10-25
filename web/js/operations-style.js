@@ -22,6 +22,36 @@ const isCounty = ['==', ['get', 'kind'], 'county'];
 const covered = ['to-boolean', ['get', 'covered']];
 
 /** Decorate a freshly built base style with operational incident overlays. */
+// Room presentation: the basemap's own reds, oranges and yellows (DN/DJ/DC) would read as warning codes.
+const NEUTRAL_ROADS = {
+  zi: { road: { dn: '#6b7280', dj: '#959ba3', dc: '#bcc1c7' }, casing: { dn: '#4b5563', dj: '#6b7280', dc: '#8f959c' } },
+  noapte: { road: { dn: '#a3a9b1', dj: '#848b93', dc: '#68707a' }, casing: { dn: '#2b3036', dj: '#2b3036', dc: '#2b3036' } },
+};
+
+/** Multiply a text-size value; zoom curves keep their zoom input at the top, as MapLibre requires. */
+export function scaledSize(value, k) {
+  if (typeof value === 'number') return Math.round(value * k * 100) / 100;
+  if (Array.isArray(value) && (value[0] === 'interpolate' || value[0] === 'step') && JSON.stringify(value[value[0] === 'step' ? 1 : 2]) === '["zoom"]') {
+    const first = value[0] === 'step' ? 2 : 4;
+    return value.map((part, index) => index >= first && (index - first) % 2 === 0 ? scaledSize(part, k) : part);
+  }
+  return ['*', value, k];
+}
+
+function roomStyle(style, k, codes, night) {
+  for (const layer of style.layers) {
+    if (k !== 1 && layer.type === 'symbol' && layer.layout?.['text-size'] !== undefined) layer.layout['text-size'] = scaledSize(layer.layout['text-size'], k);
+  }
+  if (!codes) return;
+  const gray = NEUTRAL_ROADS[night ? 'noapte' : 'zi'];
+  const byClass = (colors, other) => ['match', ['get', 'cls'], 'dn', colors.dn, 'dj', colors.dj, 'dc', colors.dc, other];
+  for (const layer of style.layers) {
+    if (layer.id === 'roads') layer.paint['line-color'] = byClass(gray.road, layer.paint['line-color']);
+    if (layer.id === 'roads-casing') layer.paint['line-color'] = byClass(gray.casing, layer.paint['line-color']);
+    if (layer.id === 'road-ref') { layer.layout['icon-image'] = 'shield-neutral'; layer.paint['text-color'] = '#ffffff'; }
+  }
+}
+
 export function decorateOperationalStyle(style, state = {}) {
   const operations = state.operations ?? {};
   style.sources ??= {};
@@ -183,5 +213,6 @@ export function decorateOperationalStyle(style, state = {}) {
     { id: 'ops-draft-point', type: 'circle', source: 'ops-draft', filter: isGeometry('Point'),
       paint: { 'circle-radius': 7, 'circle-color': '#00bcd4', 'circle-stroke-color': '#ffffff', 'circle-stroke-width': 2 } },
   );
+  if (operations.presenting) roomStyle(style, operations.presScale || 1, tint && (operations.alerts?.features?.length ?? 0) > 0, state.theme === 'noapte');
   return style;
 }

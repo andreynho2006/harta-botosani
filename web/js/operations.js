@@ -378,6 +378,10 @@ export function initOperations(ctx) {
   const panel = document.querySelector("#tab-situatii");
   const operationCards = createOperationsCards(panel);
   const storage = ctx.storage ?? globalThis.localStorage;
+  // Room scale for the presentation ("Aa"): remembered per device, always 1 on a phone layout.
+  const PRES_SCALES = [1, 1.5, 1.8], PRES_SCALE_KEY = "hb.ops.presScale";
+  let presScale = 1;
+  try { const saved = Number(storage?.getItem(PRES_SCALE_KEY)); if (PRES_SCALES.includes(saved)) presScale = saved; } catch { /* private mode */ }
   const SESSION_KEY = "hb.ops.session.v1";
   const db = new EventStore(storage);
   const cloudStates = new CloudStates(storage);
@@ -409,6 +413,7 @@ export function initOperations(ctx) {
   const presentationCollapsedGroups = new Set();
   const isCompactViewport = () => window.innerWidth <= 760 || window.innerHeight <= 520;
   let compactPresentation = isCompactViewport(), lastOpenedPanel = "messages";
+  const roomScale = () => compactPresentation ? 1 : presScale;
   let standaloneFocus = { areas: [], places: [], isolate: true };
   let restoring = false;
   // Edits are autosaved in this browser at once but reach other screens only when published.
@@ -2211,6 +2216,7 @@ export function initOperations(ctx) {
     const note = warnings.length ? null : legacyNote(active);
     const scope = warning => [warning.areas.length ? `${warning.areas.length} UAT` : "", warning.villages.length ? countLabel(warning.villages.length, "sat", "sate") : ""].filter(Boolean).join(", ") || "fără localități";
 
+    presentation.style.setProperty("--pres-scale", String(roomScale()));
     presentation.innerHTML = `
       ${panelToggle("messages", "Mesaje", messagesCollapsed, messagesCollapsed ? "▼" : "▲")}
       ${panelToggle("summary", "Monitorizare", summaryCollapsed, summaryCollapsed ? "▶" : "◀")}
@@ -2221,6 +2227,8 @@ export function initOperations(ctx) {
         <div class="ops-slide-title">
           <span class="ops-slide-eyebrow">ȘEDINȚĂ CJSU · ${esc(TYPES[active.type] || active.type)} · ${esc(areaText)}</span>
           <h1>${esc(active.title)}</h1>
+          <span class="ops-slide-asof">Situația operativă la ${esc(dateLabel(active.updatedAt))}</span>
+          ${warnings.length ? `<b class="ops-slide-code" data-code="${esc(warnings[0].code)}">${esc(ALERT_LABELS[warnings[0].code] || warnings[0].code)}</b>` : ""}
         </div>
         ${hasNotes ? `<div id="ops-pres-message-text" tabindex="0" aria-label="Descriere"><p class="ops-slide-notes">${esc(active.notes)}</p></div>` : ""}
         ${warnings.length ? `<div class="ops-alert-grid">${warnings.map((warning, index) => `<p id="ops-pres-alert${index ? '-' + index : ''}" class="ops-alert" data-code="${esc(warning.code)}" data-pres-key="alert:${esc(warning.id)}" tabindex="0" role="note"><b class="ops-alert-code">${esc(ALERT_LABELS[warning.code] || warning.code)}</b><span class="ops-alert-when">${[warning.source, span(warning.validFrom, warning.validTo) || "Interval nespecificat"].filter(Boolean).map(esc).join(" · ")}</span>${warning.text ? `<span class="ops-alert-text">${esc(warning.text)}</span>` : ""}<span class="ops-alert-areas">${esc([...warning.areas, ...warning.villages].join(", ") || "Fără localități selectate")}</span></p>`).join("")}</div>` : note ? `<div class="ops-alert-grid"><p id="ops-pres-alert" class="ops-alert" data-code="" tabindex="0" role="note"><b class="ops-alert-code">Mesaj</b><span class="ops-alert-when">${[note.source, span(note.validFrom, note.validTo)].filter(Boolean).map(esc).join(" · ")}</span>${note.text ? `<span class="ops-alert-text">${esc(note.text)}</span>` : ""}</p></div>` : ""}
@@ -2232,6 +2240,7 @@ export function initOperations(ctx) {
         <button class="btn" type="button" data-action="pres-isolate">${active.isolateArea ? "Arată tot județul" : "Izolează zona"}</button>
         <button class="btn" type="button" data-action="pres-sat">${state.basemap === "satelit" ? "Hartă" : "Satelit"}</button>
         <button class="btn" type="button" data-action="pres-theme">${state.theme === "noapte" ? "Zi" : "Noapte"}</button>
+        ${compactPresentation ? "" : `<button class="btn" type="button" data-action="pres-scale" title="Mărimea textului pentru sală: 1×, 1,5× sau 1,8×">Aa ${String(presScale).replace(".", ",")}×</button>`}
       </nav>
       <aside id="ops-pres-summary" class="ops-slide-summary" data-pres-panel="summary" data-pres-edge="left" ${summaryCollapsed ? "hidden" : ""} aria-label="Monitorizare situații operative">
           <div class="ops-sum-top">
@@ -2303,6 +2312,7 @@ export function initOperations(ctx) {
     state.overlays = { sel: FC(), analysis: FC(), measure: FC(), pin: FC() };
     state.operations.presenting = true;
     state.operations.labelSize = compactPresentation ? 14 : 18;
+    state.operations.presScale = roomScale();
     sync(false);
     renderPresentationOverlay();
     presentation.hidden = false;
@@ -2788,6 +2798,12 @@ export function initOperations(ctx) {
     else if (act === "pres-sat") {
       state.basemap = state.basemap === "satelit" ? "harta" : "satelit";
       applyStyle(); renderPresentationOverlay();
+    } else if (act === "pres-scale") {
+      presScale = PRES_SCALES[(PRES_SCALES.indexOf(presScale) + 1) % PRES_SCALES.length];
+      try { storage?.setItem(PRES_SCALE_KEY, String(presScale)); } catch { /* private mode */ }
+      state.operations.presScale = roomScale();
+      applyStyle(); renderPresentationOverlay();
+      presentation.querySelector('[data-action="pres-scale"]')?.focus({ preventScroll: true });
     } else if (act === "pres-theme") {
       state.theme = state.theme === "noapte" ? "zi" : "noapte";
       document.documentElement.dataset.theme = state.theme === "noapte" ? "dark" : "light";
@@ -2815,9 +2831,13 @@ export function initOperations(ctx) {
       }
       compactPresentation = nextCompact;
       state.operations.labelSize = compactPresentation ? 14 : 18;
+      const scaleChanged = state.operations.presScale !== roomScale();
+      state.operations.presScale = roomScale();
       renderPresentationOverlay();
-      for (const id of ["ops-features-label", "ops-features-label-line"]) {
-        if (map.getLayer(id)) map.setLayoutProperty(id, "text-size", state.operations.labelSize);
+      // Crossing into or out of the phone layout changes the room scale of every label.
+      if (scaleChanged) applyStyle();
+      else for (const id of ["ops-features-label", "ops-features-label-line"]) {
+        if (map.getLayer(id)) map.setLayoutProperty(id, "text-size", state.operations.labelSize * state.operations.presScale);
       }
       map.resize();
     });

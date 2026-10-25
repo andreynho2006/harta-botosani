@@ -112,6 +112,7 @@ async function browserChecks({ initOperations, createEvent }) {
         check('fullWarningAvailable', alert.textContent.includes('Warning line 59'));
         check('sourceVisible', alert.textContent.includes('Warning authority'));
         check('validityVisible', alert.textContent.includes('17.10.2026'));
+        check('maxCodePlate', panel(name).querySelector('.ops-slide-code')?.textContent === 'Cod portocaliu' && /^Situația operativă la \d\d\.\d\d\.\d{4}, \d\d:\d\d$/.test(panel(name).querySelector('.ops-slide-asof')?.textContent));
         check('sameDayIntervalOnce', alert.querySelector('.ops-alert-when')?.textContent === 'Warning authority · 17.10.2026, 09:00 – 23:00');
       }
       if (name === 'legend') check('legendReachable', inViewport(panel(name)) && panel(name).textContent.includes('Actualizat'));
@@ -306,6 +307,7 @@ async function browserChecks({ initOperations, createEvent }) {
       const grid = head.querySelector('.ops-alert-grid');
       const triple = [...head.querySelectorAll('.ops-alert')];
       check('threeWarningsRendered' + suffix, triple.length === 3 && triple.map(banner => banner.dataset.code).join() === 'red,orange,yellow');
+      check('plateShowsMostSevere' + suffix, head.querySelector('.ops-slide-code')?.dataset.code === 'red' && head.querySelector('.ops-slide-code').textContent === 'Cod roșu');
       check('descriptionAsConfigured' + suffix, Boolean(head.querySelector('.ops-slide-notes')) === (suffix === ''));
       check('titleNotClipped' + suffix, shown(head.querySelector('.ops-slide-eyebrow'), head) && shown(head.querySelector('h1'), head));
       check('threeWarningsHeaderInViewport' + suffix, inViewport(head));
@@ -363,6 +365,36 @@ async function browserChecks({ initOperations, createEvent }) {
     const moved = [...document.querySelectorAll('.ops-alert')].find(banner => banner.textContent.includes('Long warning line 39'));
     check('scrolledWarningChangedRank', moved?.id === 'ops-pres-alert-1');
     check('bannerScrollFollowsWarning', Boolean(moved) && moved.scrollTop === scrolled['ops-pres-alert']);
+    // Room scale: "Aa" grows the panels' content, keeps the header and the legend apart and is remembered per device.
+    const scaleButton = () => document.querySelector('[data-action="pres-scale"]');
+    if (compact) check('roomScaleOnlyOffPhones', !scaleButton());
+    else {
+      await openMessages();
+      if (!visible(panel('legend'))) toggle('legend').click();
+      if (!visible(panel('summary'))) toggle('summary').click();
+      const title = () => panel('messages').querySelector('h1').getBoundingClientRect().height;
+      const scale = async () => {
+        if (!visible(panel('commands'))) toggle('commands').click();
+        scaleButton().click();
+        const label = scaleButton().textContent;
+        toggle('commands').click();
+        await nextFrame();
+        return label;
+      };
+      const base = title(), restyles = styleCalls, fits = [];
+      for (const expected of ['Aa 1,5×', 'Aa 1,8×']) {
+        const label = await scale();
+        const top = panel('messages').getBoundingClientRect(), bottom = panel('legend').getBoundingClientRect(), side = panel('summary').getBoundingClientRect();
+        const row = [...panel('messages').querySelectorAll('.ops-alert')].map(banner => Math.round(banner.getBoundingClientRect().top));
+        fits.push(label === expected && top.bottom <= bottom.top && side.right <= Math.min(top.left, bottom.left) && (innerWidth < 1900 || new Set(row).size === 1) && top.height <= innerHeight * 0.5 + 1 && document.documentElement.scrollWidth <= innerWidth && clickable(document.querySelector('.ops-pres-exit')));
+      }
+      check('roomScaleKeepsPanelsApart', fits.every(Boolean));
+      check('roomScaleGrowsText', title() > base * 1.6);
+      check('roomScaleRemembered', memory.get('hb.ops.presScale') === '1.8');
+      check('roomScaleRestylesMap', styleCalls === restyles + 2);
+      const back = await scale();
+      check('roomScaleCyclesBack', back === 'Aa 1×' && Math.abs(title() - base) < 1 && memory.get('hb.ops.presScale') === '1');
+    }
     parent.postMessage(result, '*');
   } catch (error) { parent.postMessage({ viewport: innerWidth + 'x' + innerHeight, error: error.stack }, '*'); }
 }
