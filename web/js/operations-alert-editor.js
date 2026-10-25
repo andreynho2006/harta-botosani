@@ -28,6 +28,17 @@ export function rejectedInterval(root) {
   return rejectedInputs(root)[0] || null;
 }
 
+// One list per loaded hydrography, so the parser can keep its river index between pastes.
+const riverLists = new WeakMap();
+
+/** The cadastre's courses, as the `properties` of the loaded hydrography's features; empty while it is not loaded. */
+function riverProperties(data = {}) {
+  const features = data.hydrography?.features;
+  if (!Array.isArray(features)) return [];
+  if (!riverLists.has(features)) riverLists.set(features, features.map(feature => feature.properties).filter(Boolean));
+  return riverLists.get(features);
+}
+
 /** Stored legacy village names map to their current `Name|UAT` key; unknown entries are kept. */
 export function canonicalEntry(kind, entry, localities = []) {
   if (kind !== 'places') return entry;
@@ -181,13 +192,18 @@ export function createAlertEditor({ panel, getActive, getData, onChange, onPickM
     const section = box?.closest('details');
     if (section) section.open = true;
   };
-  const quoted = names => names.slice(0, 8).map(name => `„${name}”`).join(', ') + (names.length > 8 ? ` și încă ${names.length - 8}` : '');
+  const listed = items => items.slice(0, 8).join(', ') + (items.length > 8 ? ` și încă ${items.length - 8}` : '');
+  const quoted = names => listed(names.map(name => `„${name}”`));
+  const RIVER_SCOPES = { basin: 'bazin', river: 'albie', tributaries: 'afluenți' };
+  const riverLabel = river => `${river.name} – ${RIVER_SCOPES[river.scope]}${river.after ? ` aval de ${river.after}` : ''}${river.before ? ` amonte de ${river.before}` : ''}`;
   /** What the operator must check in each warning made from the text, in the order they were added. */
-  function reportLines(found, allUats, from = 'din text') {
+  function reportLines(found, allUats, from = 'din text', riversLoaded = true) {
     const lines = [`Am adăugat ${countLabel(found.length, 'avertizare', 'avertizări')} ${from}. Verifică-le înainte de publicare.`];
     for (const warning of found) {
+      const rivers = warning.rivers || [];
       const zone = warning.zoneOnly?.length ? `doar o parte a județului (${warning.zoneOnly.join(', ')}): alege UAT-urile cu „Alege pe hartă”`
-        : warning.county && warning.source === 'INHGA' ? 'privește râuri din județ, nu UAT-uri: alege UAT-urile riverane cu „Alege pe hartă”'
+        : rivers.length ? `${countLabel(warning.areas.length, 'UAT riveran', 'UAT-uri riverane')} din cadastrul apelor (${listed(rivers.map(riverLabel))}): verifică-le cu „Alege pe hartă”`
+        : warning.county && warning.source === 'INHGA' ? `privește râuri din județ, nu UAT-uri: alege UAT-urile riverane cu „Alege pe hartă”${riversLoaded ? '' : ' (lista râurilor nu e încărcată)'}`
         : warning.county && warning.areas.length === allUats ? 'tot județul'
         : warning.areas.length || warning.places.length ? [warning.areas.length && countLabel(warning.areas.length, 'UAT', 'UAT-uri'), warning.places.length && countLabel(warning.places.length, 'sat', 'sate')].filter(Boolean).join(' și ')
         : 'nicio zonă din județ recunoscută: alege-o cu butoanele zonei';
@@ -195,6 +211,10 @@ export function createAlertEditor({ panel, getActive, getData, onChange, onPickM
         : warning.interval === 'reversed' ? 'sfârșitul intervalului era înaintea începutului, completează-l'
         : warning.validFrom || warning.validTo ? 'interval incomplet, completează-l' : 'fără interval, completează-l';
       lines.push(`${CODES[warning.code]}${warning.source ? ` (${warning.source})` : ''}: ${zone}; ${interval}.`);
+      const sectors = [...new Set(rivers.filter(river => river.sector).map(river => river.name))];
+      if (sectors.length) lines.push(`Sectorul din text e delimitat aproximativ: am luat toată albia sau toți afluenții din județ pentru ${sectors.join(', ')}.`);
+      if (warning.smallRivers) lines.push('Textul privește și „unele râuri mici” din tot județul: extinde zona dacă e cazul.');
+      for (const name of warning.riverAmbiguous || []) lines.push(`„${name}”: mai multe cursuri de apă cu acest nume; alege UAT-urile cu „Alege pe hartă”.`);
       if (warning.unmatched.length) lines.push(`Nerecunoscute: ${quoted(warning.unmatched)}.`);
       for (const { name, count } of warning.ambiguous) lines.push(`„${name}”: ${count} sate cu acest nume în județ. Alege-l din „Localități / sate”.`);
       if (warning.textCut) lines.push('Textul fenomenelor avea peste 5 000 de caractere: au rămas primele 5 000.');
@@ -208,7 +228,8 @@ export function createAlertEditor({ panel, getActive, getData, onChange, onPickM
     const data = getData() || {};
     const uats = warningOptions('areas', data).map(option => option.value);
     if (!uats.length) { showReport(['Lista UAT-urilor se încarcă odată cu harta. Încearcă din nou după încărcare.']); return; }
-    const found = parseWarningText(text, { uats, localities: data.localities || [] });
+    const rivers = riverProperties(data);
+    const found = parseWarningText(text, { uats, localities: data.localities || [], rivers });
     if (!found.length) { showReport(['Nu am găsit în text codul avertizării (galben, portocaliu, roșu sau RO-Alert). Nu am adăugat nimic.']); return; }
     const alerts = editableOrExplain();
     if (!alerts) return;
@@ -216,7 +237,7 @@ export function createAlertEditor({ panel, getActive, getData, onChange, onPickM
     alerts.push(...added);
     newId = added[0].id;
     pasteDraft = null;
-    parseReport = { id: getActive().id, lines: reportLines(found, uats.length) };
+    parseReport = { id: getActive().id, lines: reportLines(found, uats.length, 'din text', rivers.length > 0) };
     onChange({ render: true, geography: true });
   }
   const newWarning = warning => ({ id: warning.id ?? crypto.randomUUID(), code: warning.code, source: warning.source, validFrom: warning.validFrom, validTo: warning.validTo, text: warning.text, areas: warning.areas, places: warning.places });

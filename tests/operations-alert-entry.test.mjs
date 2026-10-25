@@ -47,6 +47,12 @@ async function browserChecks({ initOperations, createEvent }) {
     { name: 'Botoșani', kind: 'city', lon: 26.7, lat: 47.8, uat: 'Botoșani' }, { name: 'Dorohoi', kind: 'city', lon: 26.5, lat: 48.0, uat: 'Dorohoi' },
     { name: 'Agafton', kind: 'village', lon: 26.9, lat: 47.8, uat: 'Curtești' },
   ];
+  // An invented cadastre, with the real code scheme: the Valea Mare name belongs to two unrelated courses.
+  const course = (name, code, uats) => ({ type: 'Feature', properties: { name, aba: name.toUpperCase(), alt: [], code, parent: '', order: 1, uats }, geometry: null });
+  const hydrography = { type: 'FeatureCollection', format: 'harta-botosani-hydrography', version: 1, features: [
+    course('Prut', 'RO_XIII_1', ['Curtești']), course('Bașeu', 'RO_XIII_1.10', ['Dorohoi']), course('Jijia', 'RO_XIII_1.15', ['Botoșani', 'Vlădeni']),
+    course('Sitna', 'RO_XIII_1.15.18', ['Botoșani']), course('Valea Mare', 'RO_XIII_1.12.2', ['Dorohoi']), course('Valea Mare', 'RO_XII_1.9', ['Vlădeni']),
+  ] };
   const warn = (id, areas = [], places = []) => ({ id, code: 'orange', source: 'ANM', validFrom: '', validTo: '', text: '', areas, places });
   let handlers = {};
   const boot = ({ alerts, areas = [], places = [], data = { admin, localities }, legacy, fetchAnmFeeds }) => {
@@ -206,6 +212,37 @@ Fenomene: vijelie`);
       const alerts = stored().alerts;
       check('pasteTwoCodes', alerts.length === 2 && alerts[0].code === 'red' && alerts[0].areas.length === 4 && alerts[1].code === 'yellow');
       check('pasteSaysWholeCounty', $('[data-alert-report]')?.textContent.includes('Cod roșu: tot județul; fără interval'));
+    }
+    // An INHGA message with the cadastre loaded gets the UATs along its rivers, and the report says what to check.
+    {
+      const { stored } = boot({ alerts: [], data: { admin, localities, hydrography } });
+      const report = () => $('[data-alert-report]')?.textContent || '';
+      $('[data-alert-paste]').value = `AVERTIZARE HIDROLOGICĂ
+COD GALBEN: În intervalul 27.06.2025 ora 12:00 – 28.06.2025 ora 12:00 pe râurile din bazinele hidrografice: Jijia – bazin superior (judeţele: Botoşani şi Iaşi), Prut – afluenţii aferenţi sectorului amonte confluenţă cu râul Jijia (judeţele: Botoşani şi Iaşi), Valea Mare (judeţul Botoşani); pe unele râuri mici din judeţele: Prahova, Suceava şi Botoşani`;
+      click('[data-alert-action="parse"]');
+      const added = stored().alerts[0];
+      check('riverPasteFillsTheRiparianUats', added?.source === 'INHGA' && added.areas.join() === 'Botoșani,Dorohoi,Vlădeni' && !added.places.length);
+      check('riverPasteReportsTheRivers', report().includes('Cod galben (INHGA): 3 UAT-uri riverane din cadastrul apelor (Jijia – bazin, Prut – afluenți amonte de Jijia): verifică-le cu „Alege pe hartă”; 27.06.2025'));
+      check('riverPasteReportsSmallRivers', report().includes('Textul privește și „unele râuri mici” din tot județul: extinde zona dacă e cazul.'));
+      check('riverPasteReportsAmbiguousName', report().includes('„Valea Mare”: mai multe cursuri de apă cu acest nume; alege UAT-urile cu „Alege pe hartă”.'));
+      check('riverPasteHasNoSectorLine', !report().includes('delimitat aproximativ'));
+      $('[data-alert-paste]').value = 'Avertizare hidrologică\nCOD GALBEN: Prut – sector amonte acumularea Stânca Costeşti (judeţul Botoşani)';
+      click('[data-alert-action="parse"]');
+      check('riverSectorIsOneUat', stored().alerts[1]?.areas.join() === 'Curtești' && report().includes('1 UAT riveran din cadastrul apelor (Prut – albie)'));
+      check('riverSectorSaysApproximate', report().includes('Sectorul din text e delimitat aproximativ: am luat toată albia sau toți afluenții din județ pentru Prut.'));
+    }
+    // A river list that is not loaded is said so; a loaded one that names no river of the text says what it did before.
+    {
+      const text = 'Avertizare hidrologică\nCOD GALBEN: pe râurile din bazinul hidrografic Prut – afluenții din județul Botoșani';
+      const { stored } = boot({ alerts: [] });
+      $('[data-alert-paste]').value = text;
+      click('[data-alert-action="parse"]');
+      const report = () => $('[data-alert-report]')?.textContent || '';
+      check('noRiverListIsSaid', report().includes('privește râuri din județ, nu UAT-uri: alege UAT-urile riverane cu „Alege pe hartă” (lista râurilor nu e încărcată);') && !stored().alerts[0].areas.length);
+      boot({ alerts: [], data: { admin, localities, hydrography } });
+      $('[data-alert-paste]').value = 'Avertizare hidrologică\nCOD GALBEN: pe râul Moldova din județul Botoșani';
+      click('[data-alert-action="parse"]');
+      check('unknownRiverKeepsTheCountyMessage', report().includes('privește râuri din județ, nu UAT-uri: alege UAT-urile riverane cu „Alege pe hartă”;') && !report().includes('nu e încărcată'));
     }
     // Without the map data the names cannot be matched, so nothing is added yet.
     {
