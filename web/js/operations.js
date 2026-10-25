@@ -1,5 +1,5 @@
 import { normalizeAlerts, affectedAlertLocations, resolvePlace, placeLabel } from "./operations-alerts.js?v=20261019-multi-alerts";
-import { buildAlertGeography, attachAlertPopups } from "./operations-alert-map.js?v=20261019-multi-alerts";
+import { buildAlertGeography, buildAlertLabels, attachAlertPopups } from "./operations-alert-map.js?v=20261019-multi-alerts";
 import { createAlertEditor } from "./operations-alert-editor.js?v=20261019-multi-alerts";
 import { presentationFeatures, presentationRiskGroups, presentationKindLabel } from "./operations-risks.js?v=20261018-cards";
 import { EventStore, createEvent, sanitizeEvent, cleanupLegacyArchive } from "./event-store.js?v=20261019-multi-alerts";
@@ -410,7 +410,7 @@ export function initOperations(ctx) {
   let restoring = false;
 
   state.operations = {
-    features: FC(), draft: FC(), selection: FC(), alerts: FC(), mask: FC(), endpoints: FC(),
+    features: FC(), draft: FC(), selection: FC(), alerts: FC(), alertLabels: FC(), mask: FC(), endpoints: FC(),
     focusGeometry: null, tintAreas: true,
   };
 
@@ -711,12 +711,17 @@ export function initOperations(ctx) {
     // Focus places keep their name search; warning villages resolve by exact `Name|UAT` key.
     const focusPlaces = (active ? active.places || [] : standaloneFocus.places).map(findLocality);
     const warningPlaces = active ? warningLocations.places.map(entry => resolvePlace(entry, allLocalities())) : [];
-    const uatFeatures = (state.data.admin?.features || []).filter(f => f.properties.kind === "uat" && areaNames.has(f.properties.name));
+    // `alert` marks areas that already carry a code outline, so the focus outline can step aside.
+    const warningAreas = new Set(warningLocations.areas), warningPlaceSet = new Set(warningPlaces);
+    const uatFeatures = (state.data.admin?.features || [])
+      .filter(f => f.properties.kind === "uat" && areaNames.has(f.properties.name))
+      .map(f => active && warningAreas.has(f.properties.name) ? { ...f, properties: { ...f.properties, alert: true } } : f);
     const placeFeatures = [];
     for (const loc of new Set([...focusPlaces, ...warningPlaces])) {
       if (loc) {
         const poly = circle([loc.lon, loc.lat], 1600, 48);
-        placeFeatures.push({ type: "Feature", properties: { kind: "place-focus", name: loc.name }, geometry: poly });
+        const underAlert = warningPlaceSet.has(loc) || (loc.uat && warningAreas.has(loc.uat));
+        placeFeatures.push({ type: "Feature", properties: { kind: "place-focus", name: loc.name, alert: Boolean(underAlert) }, geometry: poly });
       }
     }
     const features = [...uatFeatures, ...placeFeatures];
@@ -767,6 +772,7 @@ export function initOperations(ctx) {
     ]);
     state.operations.selection = FC(selected.features);
     state.operations.alerts = buildAlertGeography(active, state.data);
+    state.operations.alertLabels = buildAlertLabels(state.operations.alerts);
     state.operations.focusGeometry = geometry;
     state.operations.mask = geometry ? outsideMask(geometry) : FC();
     state.operations.draft = FC(draftFeatures);
@@ -782,6 +788,7 @@ export function initOperations(ctx) {
         ["endpoints", "ops-endpoints"],
         ["selection", "ops-selection"],
         ["alerts", "ops-alerts"],
+        ["alertLabels", "ops-alert-labels"],
         ["mask", "ops-mask"],
         ["draft", "ops-draft"],
       ]) {

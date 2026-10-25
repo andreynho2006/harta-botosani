@@ -3,6 +3,11 @@ export const ALERT_CODES = Object.freeze(['yellow', 'orange', 'red', 'ro-alert']
 export const ALERT_LABELS = Object.freeze({ yellow: 'Cod galben', orange: 'Cod portocaliu', red: 'Cod roșu', 'ro-alert': 'RO-Alert' });
 export const ALERT_RANK = Object.freeze({ yellow: 1, orange: 2, red: 3, 'ro-alert': 4 });
 export const ALERT_COLORS = Object.freeze({ yellow: '#eab308', orange: '#ea580c', red: '#dc2626', 'ro-alert': '#dc2626' });
+// Night and satellite maps are dark: the day colours turn into three browns there.
+export const ALERT_COLORS_DARK = Object.freeze({ yellow: '#facc15', orange: '#fb923c', red: '#f87171', 'ro-alert': '#f87171' });
+// Label text keeps the code hue but stays readable over its halo.
+export const ALERT_INK = Object.freeze({ yellow: '#854d0e', orange: '#9a3412', red: '#991b1b', 'ro-alert': '#991b1b' });
+export const ALERT_INK_DARK = Object.freeze({ yellow: '#fde047', orange: '#fdba74', red: '#fca5a5', 'ro-alert': '#fca5a5' });
 
 /**
  * Village names repeat across UATs, so warnings store villages as `Name|UAT`.

@@ -33,7 +33,7 @@ export function buildAlertGeography(event, { admin, localities = [] } = {}) {
           }
           if (!geometry) continue;
           const label = place ? placeLabel(placeKey(place)) : name;
-          targets.set(key, { type: 'Feature', properties: { name: label, kind, code: '', color: '', alerts: [] }, geometry });
+          targets.set(key, { type: 'Feature', properties: { name: label, kind, uat: place?.uat || '', code: '', color: '', alerts: [] }, geometry });
         }
         const properties = targets.get(key).properties;
         if (!properties.alerts.some(a => a.id === warning.id)) properties.alerts.push(warning);
@@ -45,8 +45,112 @@ export function buildAlertGeography(event, { admin, localities = [] } = {}) {
       }
     }
   }
+  // A village circle inside a UAT tinted at the same or a higher level only adds a darker
+  // blotch that reads as "more severe". Its warnings move to the UAT popup instead.
+  const uats = new Map([...targets.values()].filter(f => f.properties.kind === 'uat').map(f => [f.properties.name, f.properties]));
+  for (const [key, { properties }] of targets) {
+    const parent = properties.kind === 'place' ? uats.get(properties.uat) : null;
+    if (!parent || parent.severity < properties.severity) continue;
+    for (const warning of properties.alerts) if (!parent.alerts.some(a => a.id === warning.id)) parent.alerts.push(warning);
+    targets.delete(key);
+  }
   const features = [...targets.values()].sort((a, b) => rank[a.properties.code] - rank[b.properties.code]);
   for (const feature of features) feature.properties.alerts = JSON.stringify(feature.properties.alerts);
+  return { type: 'FeatureCollection', features };
+}
+
+/**
+ * Visual centre of a polygon (pole of inaccessibility): unlike a centroid it always
+ * falls inside concave UATs such as Cristinești or Santa Mare. Longitudes are scaled
+ * by cos(latitude) so distances are close to metric at the county's latitude.
+ */
+export function labelPoint(geometry, precision = 0.0005) {
+  const polygons = geometry?.type === 'Polygon' ? [geometry.coordinates] : geometry?.type === 'MultiPolygon' ? geometry.coordinates : [];
+  let rings = null, largest = -1;
+  for (const polygon of polygons) {
+    const area = Math.abs(ringArea(polygon[0] || []));
+    if (area > largest) { largest = area; rings = polygon; }
+  }
+  if (!rings?.[0]?.length) return null;
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  for (const [x, y] of rings[0]) { minX = Math.min(minX, x); minY = Math.min(minY, y); maxX = Math.max(maxX, x); maxY = Math.max(maxY, y); }
+  const k = Math.cos((minY + maxY) / 2 * Math.PI / 180);
+  const projected = rings.map(ring => ring.map(([x, y]) => [x * k, y]));
+  const x0 = minX * k, x1 = maxX * k, size = Math.min(x1 - x0, maxY - minY);
+  if (!size) return [minX, minY];
+  const cell = (x, y, h) => { const d = signedDistance(x, y, projected); return { x, y, h, d, max: d + h * Math.SQRT2 }; };
+  const heap = [];
+  const push = c => { heap.push(c); for (let i = heap.length - 1; i;) { const p = (i - 1) >> 1; if (heap[p].max >= heap[i].max) break; [heap[p], heap[i]] = [heap[i], heap[p]]; i = p; } };
+  const pop = () => {
+    const top = heap[0], last = heap.pop();
+    if (heap.length) {
+      heap[0] = last;
+      for (let i = 0; ;) {
+        const l = 2 * i + 1, r = l + 1; let m = i;
+        if (l < heap.length && heap[l].max > heap[m].max) m = l;
+        if (r < heap.length && heap[r].max > heap[m].max) m = r;
+        if (m === i) break;
+        [heap[m], heap[i]] = [heap[i], heap[m]]; i = m;
+      }
+    }
+    return top;
+  };
+  const half = size / 2;
+  for (let x = x0; x < x1; x += size) for (let y = minY; y < maxY; y += size) push(cell(x + half, y + half, half));
+  let best = cell((x0 + x1) / 2, (minY + maxY) / 2, 0);
+  while (heap.length) {
+    const c = pop();
+    if (c.d > best.d) best = c;
+    if (c.max - best.d <= precision) continue;
+    const q = c.h / 2;
+    push(cell(c.x - q, c.y - q, q)); push(cell(c.x + q, c.y - q, q)); push(cell(c.x - q, c.y + q, q)); push(cell(c.x + q, c.y + q, q));
+  }
+  return [best.x / k, best.y];
+}
+
+function ringArea(ring) {
+  let area = 0;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) area += (ring[j][0] - ring[i][0]) * (ring[j][1] + ring[i][1]);
+  return area / 2;
+}
+
+function signedDistance(x, y, rings) {
+  let inside = false, min = Infinity;
+  for (const ring of rings) for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const [ax, ay] = ring[i], [bx, by] = ring[j];
+    if ((ay > y) !== (by > y) && x < (bx - ax) * (y - ay) / (by - ay) + ax) inside = !inside;
+    let px = ax, py = ay;
+    const dx = bx - ax, dy = by - ay;
+    if (dx || dy) {
+      const t = ((x - ax) * dx + (y - ay) * dy) / (dx * dx + dy * dy);
+      if (t > 1) { px = bx; py = by; } else if (t > 0) { px += dx * t; py += dy * t; }
+    }
+    min = Math.min(min, (x - px) ** 2 + (y - py) ** 2);
+  }
+  return (inside ? 1 : -1) * Math.sqrt(min);
+}
+
+// UAT geometries are shared admin objects, so their label point is computed once.
+const labelPoints = new WeakMap();
+
+/** One point per tinted area for the "NAME / COD …" label. */
+export function buildAlertLabels(geography) {
+  const features = [];
+  for (const feature of geography?.features || []) {
+    const p = feature.properties || {};
+    let point = labelPoints.get(feature.geometry);
+    if (!point) {
+      // Village areas are circles: their centre is the mean of the ring.
+      const ring = feature.geometry?.coordinates?.[0] || [];
+      point = p.kind === 'place' && ring.length > 1
+        ? [0, 1].map(i => ring.slice(0, -1).reduce((sum, c) => sum + c[i], 0) / (ring.length - 1))
+        : labelPoint(feature.geometry);
+      if (point && feature.geometry && typeof feature.geometry === 'object') labelPoints.set(feature.geometry, point);
+    }
+    if (!point) continue;
+    features.push({ type: 'Feature', geometry: { type: 'Point', coordinates: point },
+      properties: { name: p.name, kind: p.kind, code: p.code, severity: p.severity, codeLabel: (labels[p.code] || '').toUpperCase() } });
+  }
   return { type: 'FeatureCollection', features };
 }
 
