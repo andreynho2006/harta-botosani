@@ -1,9 +1,10 @@
-// Panoul de administrare: utilizatori și lista de hidranți.
-// Totul se face în browser; rezultatul sunt două fișiere de urcat în GitHub:
+// Panoul de administrare: utilizatori, lista de hidranți și cadastrul apelor.
+// Totul se face în browser; rezultatul sunt trei fișiere de urcat în GitHub:
 //   web/users.json            (utilizatorii și cheile lor criptate)
 //   web/data/hidranti.enc     (hidranții, criptați)
+//   web/data/hidrografie.enc  (cadastrul apelor ABA, criptat)
 import { wrapFor, encryptJSON, generatePassword, ITERATIONS } from "./auth.js";
-import { fromStereo70 } from "./geo.js";
+import { fromStereo70, distance } from "./geo.js";
 import { SUBUNIT_TYPES, normalizeSubunit, normalizeSubunitsDoc, subunitsFromOsm, parseCoordinateCandidates } from "./subunits.js?v=20261018-itineraries-v2";
 
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -156,6 +157,56 @@ export async function parseHydrants(file, uatAt) {
   });
   return { fc: { type: "FeatureCollection", features }, system, total: rows.length, outside,
     columns: Object.keys(rows[0]) };
+}
+
+// ------------------------------------------------------------------ citirea hidrografiei (cadastrul apelor ABA)
+
+const HYDROGRAPHY_FORMAT = "harta-botosani-hydrography";
+const isPosition = (p) => Array.isArray(p) && p.length >= 2 && Number.isFinite(p[0]) && Number.isFinite(p[1]) &&
+  Math.abs(p[0]) <= 180 && Math.abs(p[1]) <= 90;
+
+/** Lungimea în km a unui rând de linii (LineString sau MultiLineString); null dacă geometria nu e validă. */
+function linesKm(geometry) {
+  const lines = geometry?.type === "LineString" ? [geometry.coordinates]
+    : geometry?.type === "MultiLineString" ? geometry.coordinates : null;
+  if (!Array.isArray(lines) || !lines.length) return null;
+  let m = 0;
+  for (const line of lines) {
+    if (!Array.isArray(line) || line.length < 2 || !line.every(isPosition)) return null;
+    for (let i = 1; i < line.length; i++) m += distance(line[i - 1], line[i]);
+  }
+  return m / 1000;
+}
+
+/**
+ * Validează GeoJSON-ul de hidrografie produs de pipeline/hydrography.py.
+ * Întoarce { fc, count, km, uats, source, generated } (km = lungimea albiilor din fișier,
+ * uats = câte UAT-uri distincte sunt atinse) sau aruncă un Error cu mesaj în română.
+ */
+export function readHydrography(text) {
+  let fc;
+  try { fc = JSON.parse(text); } catch { throw new Error("Fișierul nu este JSON valid."); }
+  if (fc?.format !== HYDROGRAPHY_FORMAT) {
+    throw new Error("Nu este un fișier de hidrografie (lipsește formatul „harta-botosani-hydrography”). Folosește rezultatul pipeline/hydrography.py.");
+  }
+  if (fc.version !== 1) throw new Error(`Versiunea ${fc.version ?? "necunoscută"} nu este acceptată; aplicația citește versiunea 1.`);
+  if (!Array.isArray(fc.features) || !fc.features.length) throw new Error("Fișierul nu are niciun curs de apă.");
+  let km = 0;
+  const uats = new Set();
+  fc.features.forEach((f, i) => {
+    const p = f?.properties;
+    const at = `Cursul ${i + 1}${typeof p?.name === "string" && p.name.trim() ? ` (${p.name.trim()})` : ""}`;
+    if (f?.type !== "Feature" || !p || typeof p !== "object") throw new Error(`${at}: nu este un obiect GeoJSON valid.`);
+    if (typeof p.name !== "string" || !p.name.trim()) throw new Error(`${at}: lipsește numele.`);
+    if (typeof p.code !== "string" || !p.code.trim()) throw new Error(`${at}: lipsește codul.`);
+    if (!Array.isArray(p.uats) || !p.uats.every((u) => typeof u === "string")) throw new Error(`${at}: lista de UAT-uri nu este validă.`);
+    const len = linesKm(f.geometry);
+    if (len === null) throw new Error(`${at}: geometria nu este o linie validă.`);
+    km += len;
+    for (const u of p.uats) uats.add(u);
+  });
+  return { fc, count: fc.features.length, km, uats: uats.size,
+    source: typeof fc.source === "string" ? fc.source : "", generated: typeof fc.generated === "string" ? fc.generated : "" };
 }
 
 // ------------------------------------------------------------------ subunități ISU
@@ -346,6 +397,7 @@ export function renderAdmin(el, ctx) {
   const newPasswords = Object.create(null); // u -> parolă afișată o singură dată
   let busy = false;
   let pending = null;    // hidranți importați, încă nesalvați
+  let pendingHydro = null; // hidrografie citită din fișier, încă nesalvată
 
   const draw = () => {
     el.innerHTML = `<div class="adm">
@@ -375,8 +427,35 @@ export function renderAdmin(el, ctx) {
       <label class="btn file">Alege fișierul (Excel, CSV, GeoJSON, KML)<input type="file" id="adm-file" accept=".xlsx,.xls,.ods,.csv,.txt,.geojson,.json,.kml" hidden></label>
       <div id="adm-imp"></div>
       <p class="muted" style="margin-top:14px">Fișierul original nu părăsește calculatorul. Se urcă doar varianta criptată.</p>
+
+      <h3>Hidrografie (cadastrul apelor)</h3>
+      <p class="muted" id="adm-hyd-now">${hydroNow()}</p>
+      <label class="btn file">Alege fișierul (GeoJSON de hidrografie)<input type="file" id="adm-hydro-file" accept=".geojson,.json" hidden></label>
+      <div id="adm-hyd"></div>
+      <p class="muted" style="margin-top:14px">Fișierul clar nu părăsește calculatorul. Se urcă doar varianta criptată.</p>
     </div>`;
     subunitsEditor.mount(el.querySelector("#adm-su"));
+    drawHydro();
+  };
+
+  const hydroNow = () => `${(ctx.state.data.hydrography?.features.length ?? 0).toLocaleString("ro-RO")} râuri încărcate acum.`;
+
+  const drawHydro = (msg) => {
+    const box = el.querySelector("#adm-hyd");
+    if (!box) return;
+    if (msg) { box.innerHTML = msg; return; }
+    if (!pendingHydro) { box.innerHTML = ""; return; }
+    const h = pendingHydro;
+    box.innerHTML = `<dl class="stats">
+        <dt>Râuri (cursuri de apă)</dt><dd>${h.count.toLocaleString("ro-RO")}</dd>
+        <dt>Lungime în fișier</dt><dd>${Math.round(h.km).toLocaleString("ro-RO")} km</dd>
+        <dt>UAT-uri atinse</dt><dd>${h.uats}</dd>
+        ${h.source ? `<dt>Sursă</dt><dd>${esc(h.source)}</dd>` : ""}
+        ${h.generated ? `<dt>Generat</dt><dd>${esc(h.generated)}</dd>` : ""}
+      </dl>
+      <div class="row-btns"><button class="btn" data-act="show-hydro">Folosește în această sesiune</button>
+      <button class="btn primary" data-act="dl-hydro">Descarcă hidrografie.enc</button></div>
+      <p class="muted">Urcă <code>hidrografie.enc</code> în GitHub, în <code>web/data/</code>, sau trimite-l lui Claude.</p>`;
   };
 
   const drawImport = (msg) => {
@@ -435,6 +514,19 @@ export function renderAdmin(el, ctx) {
   };
 
   el.onchange = async (e) => {
+    if (e.target.id === "adm-hydro-file") {
+      const f = e.target.files[0];
+      if (!f) return;
+      drawHydro(`<p class="muted">Se citește ${esc(f.name)}…</p>`);
+      try {
+        pendingHydro = readHydrography(await f.text());
+        drawHydro();
+      } catch (err) {
+        pendingHydro = null;
+        drawHydro(`<p class="warnp">${esc(err.message)}</p>`);
+      }
+      return;
+    }
     if (e.target.id !== "adm-file") return;
     const f = e.target.files[0];
     if (!f) return;
@@ -474,5 +566,11 @@ export function renderAdmin(el, ctx) {
     if (b.dataset.act === "dl-users") download("users.json", users);
     if (b.dataset.act === "show" && pending) { ctx.onHydrants(pending.fc); ctx.toast(`${pending.fc.features.length} hidranți afișați (doar în această sesiune)`); }
     if (b.dataset.act === "dl-hyd" && pending) download("hidranti.enc", await encryptJSON(session.key, pending.fc));
+    if (b.dataset.act === "show-hydro" && pendingHydro) {
+      ctx.onHydrography(pendingHydro.fc);
+      el.querySelector("#adm-hyd-now").textContent = hydroNow();
+      ctx.toast(`${pendingHydro.count} râuri încărcate (doar în această sesiune)`);
+    }
+    if (b.dataset.act === "dl-hydro" && pendingHydro) download("hidrografie.enc", await encryptJSON(session.key, pendingHydro.fc));
   };
 }
