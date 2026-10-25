@@ -48,13 +48,14 @@ test('startup removes OSM hydrants from POIs and search while preserving ISU hyd
   ] };
   const rows = [['OSM hydrant', 'poi:hidrant_osm'], ['Water source', 'poi:sursa_apa']];
   const isu = { features: [{ id: 3, properties: { _label: 'ISU hydrant' } }] };
+  const rivers = { format: 'harta-botosani-hydrography', features: [] };
   const state = { data: {} };
   const added = [];
   const noop = () => {};
   const context = vm.createContext({
     ensureLogin: async () => ({ name: 'Test', role: 'user' }), session: null,
     $: () => ({ addEventListener: noop }), esc: String,
-    logout: noop, FC: () => ({ features: [] }), loadHydrants: async () => isu,
+    logout: noop, FC: () => ({ features: [] }), loadHydrants: async () => isu, loadHydrography: async () => rivers,
     loadJSON: async path => path.includes('pois') ? pois : path.includes('search') ? rows : { features: [] },
     state, prepareHydrants: fc => fc, stats: null, uatAt: null, makeUatLookup: noop,
     search: { add: items => added.push(...items) }, hydrantSearchRows: () => [['ISU hydrant', 'hid']],
@@ -67,6 +68,7 @@ test('startup removes OSM hydrants from POIs and search while preserving ISU hyd
   assert.equal(state.data.pois.features.length, 1);
   assert.equal(state.data.pois.features[0].properties.cat, 'sursa_apa');
   assert.equal(state.data.hydrants, isu);
+  assert.equal(state.data.hydrography, rivers);
   assert.equal(added.some(row => row[1] === 'poi:hidrant_osm'), false);
   assert.equal(added.some(row => row[1] === 'hid'), true);
 });

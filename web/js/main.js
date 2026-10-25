@@ -43,7 +43,7 @@ const state = {
   theme: document.documentElement.dataset.theme === "dark" ? "noapte" : "zi",
   basemap: store.get("basemap", "harta") === "satelit" ? "satelit" : "harta",
   visible: initialVisible,
-  data: { pois: FC(), hydrants: FC(), admin: FC(), roads: { roads: [] }, localities: [], initialEvents: null },
+  data: { pois: FC(), hydrants: FC(), hydrography: FC(), admin: FC(), roads: { roads: [] }, localities: [], initialEvents: null },
   overlays: { sel: FC(), analysis: FC(), measure: FC(), pin: FC() },
   hoverUat: "",
   mode: null, // null | "measure" | "pick"
@@ -92,15 +92,26 @@ let session = null;
 let geolocate = null;
 let lastPosition = null;
 
-async function loadHydrants() {
+/** Descarcă și decriptează un fișier criptat din data/; lipsa lui sau o eroare dau o colecție goală. */
+async function loadEncrypted(path, what) {
   try {
-    const r = await fetch("data/hidranti.enc", { cache: "no-cache" });
+    const r = await fetch(path, { cache: "no-cache" });
     if (!r.ok) return FC();
     return await decryptJSON(session.key, await r.json());
   } catch (e) {
-    console.warn("Nu pot decripta hidranții", e);
+    console.warn(`Nu pot decripta ${what}`, e);
     return FC();
   }
+}
+
+const loadHydrants = () => loadEncrypted("data/hidranti.enc", "hidranții");
+
+const HYDROGRAPHY_FORMAT = "harta-botosani-hydrography";
+
+/** Cadastrul apelor (ABA) se publică doar criptat; un fișier cu alt format e tratat ca lipsă. */
+async function loadHydrography() {
+  const fc = await loadEncrypted("data/hidrografie.enc", "hidrografia");
+  return fc?.format === HYDROGRAPHY_FORMAT && Array.isArray(fc.features) ? fc : FC();
 }
 
 function hydrantSearchRows() {
@@ -116,7 +127,9 @@ function hydrantSearchRows() {
 function updateDataInfo() {
   const date = stats?.generated ? new Date(stats.generated).toLocaleDateString("ro-RO", { day: "numeric", month: "long", year: "numeric" }) : "–";
   const nh = state.data.hydrants.features.length;
-  $("#data-info").textContent = `Date OSM din ${date} · ${nh ? nh.toLocaleString("ro-RO") + " hidranți" : "fără listă de hidranți"}`;
+  const nr = state.data.hydrography.features.length;
+  $("#data-info").textContent = `Date OSM din ${date} · ${nh ? nh.toLocaleString("ro-RO") + " hidranți" : "fără listă de hidranți"}` +
+    (nr ? ` · ${nr.toLocaleString("ro-RO")} râuri (cadastru ABA)` : "");
 }
 
 /** Înlocuiește hidranții afișați (folosit de panoul de administrare la import). */
@@ -127,6 +140,12 @@ function replaceHydrants(fc) {
   search.add(hydrantSearchRows());
   updateDataInfo();
   renderLayerPanel();
+}
+
+/** Înlocuiește hidrografia încărcată (folosit de panoul de administrare, doar în această sesiune). */
+function replaceHydrography(fc) {
+  state.data.hydrography = fc;
+  updateDataInfo();
 }
 
 /** Aplică lista de subunități ISU pe hartă; `draft` = păstrată local până la publicarea subunitati.json. */
@@ -169,9 +188,10 @@ async function init() {
   $("#logout").addEventListener("click", logout);
   if (session.role === "admin") $("#tb-admin").hidden = false;
 
-  const [pois, hydrants, admin, searchRows, st, roadsData, initialEvents, subunitsDoc] = await Promise.all([
+  const [pois, hydrants, hydrography, admin, searchRows, st, roadsData, initialEvents, subunitsDoc] = await Promise.all([
     loadJSON("data/pois.geojson", FC()),
     loadHydrants(),
+    loadHydrography(),
     loadJSON("data/admin.geojson", FC()),
     loadJSON("data/search.json", []),
     loadJSON("data/stats.json", null),
@@ -187,6 +207,7 @@ async function init() {
   state.data.subunitsUpdatedAt = (state.data.subunitsDraft || state.data.subunitsPublished).updatedAt;
   state.data.pois = mergeSubunitsIntoPois(state.data.osmPois, state.data.subunits);
   state.data.hydrants = prepareHydrants(hydrants);
+  state.data.hydrography = hydrography;
   state.data.admin = admin;
   state.data.roads = Array.isArray(roadsData?.roads) ? roadsData : { roads: [] };
   state.data.initialEvents = initialEvents?.format === "harta-botosani-events" ? initialEvents : null;
@@ -215,7 +236,7 @@ async function init() {
   initSearch();
   initUI();
   if (session.role === "admin") {
-    renderAdmin($("#tab-admin"), { session, state, uatAt, onHydrants: replaceHydrants, toast, copy,
+    renderAdmin($("#tab-admin"), { session, state, uatAt, onHydrants: replaceHydrants, onHydrography: replaceHydrography, toast, copy,
       onSubunits: replaceSubunits, pickPoint, flyToPoint, cloudDb: cloud });
   }
 
