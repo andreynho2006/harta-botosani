@@ -310,3 +310,85 @@ export class EventStore {
     return { imported, skipped: incoming.length - imported, total: events.length };
   }
 }
+
+// What this browser knows about each situation's Cloud copy, kept per situation and shared by
+// every tab, so leaving a situation, reloading or a second tab never loses track of it:
+// `base` is the Cloud version the local copy started from, `unpublished` says the local copy
+// holds edits not yet in the Cloud, `conflict` is a colleague's version held back from them,
+// and `sent` lists the versions this browser published, so their echo is never a conflict.
+export const CLOUD_STATE_KEY = 'hb.ops.cloud.v1';
+const MAX_SENT = 10;
+const NO_CLOUD_STATE = Object.freeze({ base: null, unpublished: false, conflict: null, sent: Object.freeze([]) });
+
+// A held version that no longer validates is dropped; the next snapshot brings it back.
+function heldVersion(value) {
+  try { return value ? sanitizeEvent(value) : null; } catch { return null; }
+}
+
+function cloudState(value, conflict = heldVersion(value.conflict)) {
+  object(value, 'Cloud state');
+  const version = item => typeof item === 'string' && item.length <= 40 && Number.isFinite(Date.parse(item));
+  return {
+    base: version(value.base) ? value.base : null,
+    unpublished: value.unpublished === true,
+    conflict,
+    sent: Array.isArray(value.sent) ? value.sent.filter(version).slice(-MAX_SENT) : [],
+  };
+}
+
+export class CloudStates {
+  constructor(storage = globalThis.localStorage) { this.storage = storage; this._raw = undefined; this._states = new Map(); this._detached = false; }
+
+  // Reparsed only when another tab (or this one) wrote the map since the last read.
+  _read() {
+    if (this._detached) return this._states;
+    let raw = null;
+    try { raw = this.storage?.getItem(CLOUD_STATE_KEY) ?? null; } catch { /* unreadable storage: start empty */ }
+    if (raw === this._raw) return this._states;
+    this._raw = raw;
+    this._states = new Map();
+    try {
+      const parsed = raw === null ? {} : JSON.parse(raw);
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        for (const [id, value] of Object.entries(parsed)) {
+          try { this._states.set(id, cloudState(value)); } catch { /* one bad entry does not hide the others */ }
+        }
+      }
+    } catch { /* a corrupt map starts empty */ }
+    return this._states;
+  }
+
+  _write(states) {
+    this._states = states;
+    try {
+      const raw = JSON.stringify(Object.fromEntries(states));
+      this.storage.setItem(CLOUD_STATE_KEY, raw);
+      this._raw = raw;
+    } catch { this._detached = true; } // full storage: this tab keeps the state in memory
+  }
+
+  get(id) { const state = this._read().get(id); return state ? { ...state, sent: [...state.sent] } : null; }
+  entries() { return [...this._read().keys()].map(id => [id, this.get(id)]); }
+
+  // Merges `patch` into the situation's state; a version is told apart by its timestamp.
+  update(id, patch) {
+    const states = new Map(this._read());
+    const old = states.get(id) ?? NO_CLOUD_STATE;
+    const next = cloudState({ ...old, ...patch }, Object.hasOwn(patch, 'conflict') ? heldVersion(patch.conflict) : old.conflict);
+    const same = states.has(id) && old.base === next.base && old.unpublished === next.unpublished
+      && old.conflict?.updatedAt === next.conflict?.updatedAt && old.sent.join() === next.sent.join();
+    if (same) return;
+    states.set(id, next);
+    this._write(states);
+  }
+
+  markSent(id, version) {
+    const sent = this.get(id)?.sent ?? [];
+    if (!sent.includes(version)) this.update(id, { sent: [...sent, version] });
+  }
+
+  remove(id) {
+    const states = new Map(this._read());
+    if (states.delete(id)) this._write(states);
+  }
+}

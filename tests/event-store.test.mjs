@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { createEvent, EventStore, EVENT_STORAGE_KEY, sanitizeEvent, cleanupLegacyArchive,
+import { createEvent, EventStore, EVENT_STORAGE_KEY, sanitizeEvent, cleanupLegacyArchive, CloudStates, CLOUD_STATE_KEY,
   LEGACY_CLEANUP_KEY, LEGACY_ARCHIVE_BACKUP_KEY, LEGACY_SESSION_BACKUP_KEY } from '../web/js/event-store.js';
 
 function memoryStorage() {
@@ -323,4 +323,60 @@ test('final completion write failure rolls back and retries without overwriting 
   assert.equal(storage.getItem(LEGACY_SESSION_BACKUP_KEY), session);
   assert.equal(storage.getItem(sessionKey), null);
   assert.equal(cleanupLegacyArchive(storage).alreadyApplied, true);
+});
+
+test('the Cloud state is kept per situation and shared by every tab of the browser', () => {
+  const storage = memoryStorage();
+  const tab = new CloudStates(storage), other = new CloudStates(storage);
+  const base = '2026-10-25T10:00:00.000Z';
+  assert.equal(tab.get('a'), null);
+  tab.update('a', { base, unpublished: true });
+  assert.deepEqual(other.get('a'), { base, unpublished: true, conflict: null, sent: [] }, 'another tab reads it at once');
+  const theirs = createEvent('Coleg', 'snow');
+  other.update('a', { conflict: theirs });
+  assert.equal(tab.get('a').conflict.title, 'Coleg');
+  assert.equal(tab.get('a').unpublished, true, 'a patch keeps the other fields');
+  tab.update('b', { unpublished: true });
+  assert.equal(other.get('a').conflict.title, 'Coleg', 'one situation leaves the others alone');
+  tab.get('a').sent.push('2026-10-25T11:00:00.000Z');
+  assert.deepEqual(tab.get('a').sent, [], 'returned copies cannot change the map');
+  tab.markSent('a', theirs.updatedAt); tab.markSent('a', theirs.updatedAt);
+  assert.deepEqual(other.get('a').sent, [theirs.updatedAt]);
+  other.update('a', { conflict: null });
+  assert.equal(tab.get('a').conflict, null);
+  other.remove('a');
+  assert.equal(tab.get('a'), null);
+  assert.deepEqual(tab.entries().map(([id]) => id), ['b']);
+});
+
+test('only the last versions this browser sent are remembered', () => {
+  const tab = new CloudStates(memoryStorage());
+  const versions = Array.from({ length: 12 }, (_, i) => new Date(Date.UTC(2026, 9, 25, 10, i)).toISOString());
+  for (const version of versions) tab.markSent('a', version);
+  assert.deepEqual(tab.get('a').sent, versions.slice(-10));
+});
+
+test('a damaged Cloud state map or entry is dropped without hiding the rest', () => {
+  const storage = memoryStorage();
+  storage.setItem(CLOUD_STATE_KEY, '{nu e json');
+  assert.equal(new CloudStates(storage).get('a'), null);
+  const sent = '2026-10-25T10:00:00.000Z';
+  storage.setItem(CLOUD_STATE_KEY, JSON.stringify({
+    a: { base: 'ieri', unpublished: 'da', conflict: { id: 'a' }, sent: ['mâine', sent] },
+    b: null,
+    c: { unpublished: true },
+  }));
+  const tab = new CloudStates(storage);
+  assert.deepEqual(tab.get('a'), { base: null, unpublished: false, conflict: null, sent: [sent] });
+  assert.equal(tab.get('b'), null);
+  assert.equal(tab.get('c').unpublished, true);
+});
+
+test('a full storage keeps the Cloud state in memory for this tab', () => {
+  const storage = { getItem: () => null, setItem: () => { throw new Error('QuotaExceededError'); } };
+  const tab = new CloudStates(storage);
+  tab.update('a', { unpublished: true });
+  assert.equal(tab.get('a').unpublished, true);
+  tab.update('a', { unpublished: false });
+  assert.equal(tab.get('a').unpublished, false);
 });
