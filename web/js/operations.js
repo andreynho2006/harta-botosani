@@ -2226,9 +2226,8 @@ export function initOperations(ctx) {
       <header id="ops-pres-messages" class="ops-slide-head" data-pres-panel="messages" data-pres-edge="top" ${messagesCollapsed ? "hidden" : ""} aria-label="Mesaje și avertizări">
         <div class="ops-slide-title">
           <span class="ops-slide-eyebrow">ȘEDINȚĂ CJSU · ${esc(TYPES[active.type] || active.type)} · ${esc(areaText)}</span>
-          <h1>${esc(active.title)}</h1>
           <span class="ops-slide-asof">Situația operativă la ${esc(dateLabel(active.updatedAt))}</span>
-          ${warnings.length ? `<b class="ops-slide-code" data-code="${esc(warnings[0].code)}">${esc(ALERT_LABELS[warnings[0].code] || warnings[0].code)}</b>` : ""}
+          <h1>${warnings.length ? `<b class="ops-slide-code" data-code="${esc(warnings[0].code)}">${esc(ALERT_LABELS[warnings[0].code] || warnings[0].code)}</b> ` : ""}${esc(active.title)}</h1>
         </div>
         ${hasNotes ? `<div id="ops-pres-message-text" tabindex="0" aria-label="Descriere"><p class="ops-slide-notes">${esc(active.notes)}</p></div>` : ""}
         ${warnings.length ? `<div class="ops-alert-grid">${warnings.map((warning, index) => `<p id="ops-pres-alert${index ? '-' + index : ''}" class="ops-alert" data-code="${esc(warning.code)}" data-pres-key="alert:${esc(warning.id)}" tabindex="0" role="note"><b class="ops-alert-code">${esc(ALERT_LABELS[warning.code] || warning.code)}</b><span class="ops-alert-when">${[warning.source, span(warning.validFrom, warning.validTo) || "Interval nespecificat"].filter(Boolean).map(esc).join(" · ")}</span>${warning.text ? `<span class="ops-alert-text">${esc(warning.text)}</span>` : ""}<span class="ops-alert-areas">${esc([...warning.areas, ...warning.villages].join(", ") || "Fără localități selectate")}</span></p>`).join("")}</div>` : note ? `<div class="ops-alert-grid"><p id="ops-pres-alert" class="ops-alert" data-code="" tabindex="0" role="note"><b class="ops-alert-code">Mesaj</b><span class="ops-alert-when">${[note.source, span(note.validFrom, note.validTo)].filter(Boolean).map(esc).join(" · ")}</span>${note.text ? `<span class="ops-alert-text">${esc(note.text)}</span>` : ""}</p></div>` : ""}

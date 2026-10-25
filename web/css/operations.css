@@ -196,12 +196,14 @@
 .ops-slide-head > #ops-pres-message-text > p { margin: 0; }
 .ops-slide-head > .ops-alert-grid { grid-row: 3; margin-top: 10px; min-height: 0; }
 .ops-slide-title { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: 14px; align-items: start; }
-.ops-slide-title > :not(.ops-slide-code) { grid-column: 1; }
+/* The time sits beside the eyebrow and the plate opens the title, so neither adds a row to a header already at its limit. */
+.ops-slide-title > .ops-slide-eyebrow { grid-column: 1; grid-row: 1; }
+.ops-slide-title > h1 { grid-column: 1 / -1; grid-row: 2; }
 .ops-slide-eyebrow { display: block; color: var(--ink-2); font-size: 12px; line-height: 1.4; font-weight: 600; }
-.ops-slide-asof { display: block; margin-top: 3px; color: var(--ink-2); font-size: 13px; font-weight: 600; }
+.ops-slide-asof { grid-column: 2; grid-row: 1; justify-self: end; color: var(--ink-2); font-size: 13px; line-height: 1.3; font-weight: 650; white-space: nowrap; }
 /* The most severe code, readable across the room before any banner. */
-.ops-slide-code { grid-column: 2; grid-row: 1 / span 3; align-self: center; padding: 6px 14px; border-radius: 6px; background: var(--code); color: var(--code-ink);
-  font-size: 22px; font-weight: 800; letter-spacing: 0.04em; line-height: 1.15; text-transform: uppercase; white-space: nowrap; }
+.ops-slide-code { display: inline-block; margin-right: 6px; padding: 1px 10px; border-radius: 6px; vertical-align: 0.08em; background: var(--code); color: var(--code-ink);
+  font-size: 0.88em; font-weight: 800; letter-spacing: 0.04em; line-height: 1.15; text-transform: uppercase; white-space: nowrap; }
 .ops-slide-head h1 { display: block; margin: 4px 0 0; font-size: clamp(19px, 2vw, 25px); line-height: 1.2; font-weight: 700; }
 .ops-slide-head p { display: block; margin: 5px 0 0; color: var(--ink-2); font-size: 13px; line-height: 1.45; white-space: pre-wrap; }
 .ops-slide-head .ops-alert { min-height: min(96px, 24dvh); max-height: 24dvh; overflow: auto; overscroll-behavior: contain; margin: 0; padding: 8px 10px; border-left: 4px solid var(--warn); border-radius: 4px; background: var(--panel-2); color: var(--ink); font-weight: 550; }
@@ -299,7 +301,9 @@
   }
   .ops-slide-head h1 { font-size: 18px; }
   .ops-slide-eyebrow { font-size: 11px; }
-  .ops-slide-code { grid-column: 1; grid-row: auto; justify-self: start; margin-top: 6px; padding: 3px 10px; font-size: 15px; }
+  .ops-slide-title { grid-template-columns: minmax(0, 1fr); }
+  .ops-slide-title > *, .ops-slide-title > h1 { grid-column: 1; grid-row: auto; }
+  .ops-slide-asof { white-space: normal; }
   .ops-slide-head p { font-size: 13px; }
   /* The header scrolls as a whole here, and on a narrow banner the source and interval wrap over three to five lines,
      so a banner keeps room below them for the start of its text. */
