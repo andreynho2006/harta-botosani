@@ -666,6 +666,10 @@ export function initOperations(ctx) {
     dirty = true; unpublished = true; exported = false;
     autoSaveActiveToDb();
     persistSession();
+    refreshSaveState();
+  }
+
+  function refreshSaveState() {
     const badge = panel.querySelector("#ops-save-state");
     if (badge) badge.textContent = saveStateText();
   }
@@ -1657,8 +1661,7 @@ export function initOperations(ctx) {
   function refreshPublishState() {
     const button = panel.querySelector('[data-action="save"]');
     if (button) { button.disabled = publishing; button.textContent = publishing ? "☁️ Se publică…" : "☁️ Publică în Cloud"; }
-    const badge = panel.querySelector("#ops-save-state");
-    if (badge) badge.textContent = saveStateText();
+    refreshSaveState();
     const note = panel.querySelector(".ops-notice");
     if (note) note.textContent = notice;
     showConflict();
@@ -2015,7 +2018,8 @@ export function initOperations(ctx) {
 
   panel.onchange = async (event) => {
     const target = event.target;
-    if (alertEditor.handleChange(target)) return;
+    // A rejected date changes nothing stored, so the save line is told here.
+    if (alertEditor.handleChange(target)) return refreshSaveState();
     if (operationCards.handleChange(target)) return;
     if (itinerary.handleChange(target)) return;
     if (applyMetaInput(target)) return;

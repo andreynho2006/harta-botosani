@@ -206,6 +206,7 @@ async function browserChecks({ initOperations, createEvent }) {
     const refused = (name, text) => check(name, refusal(text) && held() && archive() === archiveBefore);
     const title = () => document.querySelector('[data-ops-card="event"] h2').textContent;
     check('rejectedDateFlagged', held());
+    check('saveLineSaysIntervalInvalid', document.querySelector('#ops-save-state').textContent.startsWith('Interval invalid'));
     document.querySelector('[data-action="save"]').click();
     refused('saveRefusedWhileDateRejected', 'Situația nu a fost publicată.');
     document.querySelector('[data-action="event-export"]').click(); await settle();
@@ -245,6 +246,7 @@ async function browserChecks({ initOperations, createEvent }) {
     typed('validFrom', '2026-10-25T08:00');
     check('correctedDateLiftsTheFlag', !document.querySelector('[data-warning-field="validFrom"]').validationMessage
       && !document.querySelector('[data-alert-status]').textContent.startsWith('Interval invalid'));
+    check('saveLineClearsOnceCorrected', !document.querySelector('#ops-save-state').textContent.startsWith('Interval invalid'));
     document.querySelector('[data-action="save"]').click();
     check('saveWorksOnceCorrected', notice().startsWith('Situația e salvată în acest browser') && archive() !== archiveBefore);
 
