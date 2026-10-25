@@ -174,9 +174,6 @@
 .ops-slide-head h1 { display: block; margin: 4px 0 0; font-size: clamp(19px, 2vw, 25px); line-height: 1.2; font-weight: 700; }
 .ops-slide-head p { display: block; margin: 5px 0 0; color: var(--ink-2); font-size: 13px; line-height: 1.45; white-space: pre-wrap; }
 .ops-slide-head .ops-alert { flex: 1 1 auto; min-height: min(80px, 18dvh); max-height: 24dvh; overflow: auto; overscroll-behavior: contain; margin: 0; padding: 8px 10px; border-left: 4px solid var(--warn); border-radius: 4px; background: var(--panel-2); color: var(--ink); font-weight: 550; }
-.ops-alert[data-code="yellow"] { border-left-color: #dfbc18; }
-.ops-alert[data-code="orange"] { border-left-color: #e47921; }
-.ops-alert[data-code="red"], .ops-alert[data-code="ro-alert"] { border-left-color: #d72e35; }
 .ops-slide-summary {
   top: calc(var(--pres-top) + 54px); left: calc(var(--pres-left) + 54px); bottom: calc(var(--pres-bottom) + 54px);
   width: 300px; display: flex; flex-direction: column; gap: 10px;

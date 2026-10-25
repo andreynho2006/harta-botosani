@@ -148,12 +148,20 @@ async function browserChecks({ initOperations, createEvent }) {
     check('villagesKeyedByUat', villages.map(input => input.value).join(';') === 'Agafton|Curtești;Poiana|Flămânzi;Poiana|Ștefănești'
       && villages.map(input => input.closest('label').textContent.trim()).join(';') === 'Agafton (Curtești);Poiana (Flămânzi);Poiana (Ștefănești)');
     villages[2].click();
+    document.querySelector('[data-alert-action="add"]').click(); // a second, yellow warning
     document.querySelector('[data-action="present"]').click();
     if (!visible(panel('messages'))) toggle('messages').click();
-    const villageWarning = panel('messages').querySelector('.ops-alert')?.textContent || '';
+    const banners = [...panel('messages').querySelectorAll('.ops-alert')];
+    const villageWarning = banners[0]?.textContent || '';
     check('chosenVillageShownWithItsUat', villageWarning.includes('Poiana (Ștefănești)') && !villageWarning.includes('Flămânzi'));
+    check('mostSevereWarningFirst', banners.map(banner => banner.dataset.code).join() === 'orange,yellow');
+    check('codePlateShown', banners[0]?.querySelector('.ops-alert-code')?.textContent === 'Cod portocaliu');
+    check('warningsSideBySide', compact || (banners.length === 2 && Math.abs(banners[0].getBoundingClientRect().top - banners[1].getBoundingClientRect().top) < 1));
+    if (!visible(panel('legend'))) toggle('legend').click();
+    const chips = [...panel('legend').querySelectorAll('.ops-legend-code')];
+    check('legendNamesEachCode', chips.map(chip => chip.dataset.code).join() === 'orange,yellow' && chips[0].textContent.includes('Cod portocaliu') && chips[0].textContent.includes('1 sat'));
     document.querySelector('.ops-pres-exit').click();
-    document.querySelector('[data-alert-action="remove"]').click();
+    for (let i = 0; i < 2; i++) document.querySelector('[data-alert-action="remove"]').click();
     document.querySelector('[data-action="present"]').click();
     if (!visible(panel('messages'))) toggle('messages').click();
     check('emptyWarningOmitted', !panel('messages').querySelector('.ops-alert'));
@@ -180,7 +188,7 @@ async function browserChecks({ initOperations, createEvent }) {
 test('CJSU panels collapse independently, preserve the map, and keep full warnings accessible', { skip: !existsSync(chrome) }, () => {
   const dir = mkdtempSync(join(tmpdir(), 'cjsu-presentation-'));
   const web = new URL('../web/', import.meta.url).href;
-  const child = `<!doctype html><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><script src="${web}vendor/proj4.js"></script><link rel="stylesheet" href="${web}css/app.css"><link rel="stylesheet" href="${web}css/operations.css"><link rel="stylesheet" href="${web}css/operations-cards.css"><div class="app"><aside class="side"><div id="tab-situatii"></div></aside><div class="mapwrap"><div id="map" style="background:#dce6df"></div></div></div><script type="module">import { initOperations } from "${web}js/operations.js"; import { createEvent } from "${web}js/event-store.js"; (${browserChecks.toString()})({ initOperations, createEvent })</script>`;
+  const child = `<!doctype html><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><script src="${web}vendor/proj4.js"></script><link rel="stylesheet" href="${web}css/app.css"><link rel="stylesheet" href="${web}css/operations.css"><link rel="stylesheet" href="${web}css/operations-cards.css"><link rel="stylesheet" href="${web}css/operations-alerts.css"><div class="app"><aside class="side"><div id="tab-situatii"></div></aside><div class="mapwrap"><div id="map" style="background:#dce6df"></div></div></div><script type="module">import { initOperations } from "${web}js/operations.js"; import { createEvent } from "${web}js/event-store.js"; (${browserChecks.toString()})({ initOperations, createEvent })</script>`;
   const harness = `<body style="margin:0"><pre id="results" style="position:fixed;left:-10000px"></pre><script>
     const results = [];
     const sizes = ${JSON.stringify(sizes)};

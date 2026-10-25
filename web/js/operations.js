@@ -1,4 +1,4 @@
-import { normalizeAlerts, affectedAlertLocations, resolvePlace, placeLabel } from "./operations-alerts.js?v=20261019-multi-alerts";
+import { normalizeAlerts, affectedAlertLocations, resolvePlace, placeKey, placeLabel, ALERT_LABELS, ALERT_RANK } from "./operations-alerts.js?v=20261019-multi-alerts";
 import { buildAlertGeography, buildAlertLabels, attachAlertPopups } from "./operations-alert-map.js?v=20261019-multi-alerts";
 import { createAlertEditor } from "./operations-alert-editor.js?v=20261019-multi-alerts";
 import { presentationFeatures, presentationRiskGroups, presentationKindLabel } from "./operations-risks.js?v=20261018-cards";
@@ -279,13 +279,6 @@ export const STATUSES = {
   reported: "Raportat",
   threat: "Potențial",
   resolved: "Rezolvat / Redeschis",
-};
-
-export const ALERTS = {
-  yellow: "Cod galben ANM / INHGA",
-  orange: "Cod portocaliu ANM / INHGA",
-  red: "Cod roșu ANM / INHGA",
-  "ro-alert": "RO-Alert IGSU",
 };
 
 const options = (items, selected) => Object.entries(items).map(([value, label]) => `<option value="${esc(value)}" ${selected === value ? "selected" : ""}>${esc(label)}</option>`).join("");
@@ -1597,7 +1590,20 @@ export function initOperations(ctx) {
       ...((active.places || []).length ? [`Localități: ${active.places.join(", ")}`] : []),
     ].join(" · ") || "Județul Botoșani";
     const hasNotes = Boolean(active.notes && String(active.notes).trim());
-    const warnings = normalizeAlerts(active);
+    // Most severe first. A village is listed only when its own UAT is not already under the same warning.
+    const warnings = normalizeAlerts(active).sort((a, b) => (ALERT_RANK[b.code] || 0) - (ALERT_RANK[a.code] || 0)).map(warning => {
+      const areas = new Set(warning.areas);
+      const villages = warning.places.map(entry => {
+        const place = resolvePlace(entry, allLocalities());
+        return !place ? placeLabel(entry) : areas.has(place.uat) ? null : placeLabel(placeKey(place));
+      }).filter(Boolean);
+      return { ...warning, villages: [...new Set(villages)].filter(name => !areas.has(name)) };
+    });
+    const shortTime = value => {
+      const time = Date.parse(value);
+      return Number.isFinite(time) ? new Intl.DateTimeFormat("ro-RO", { timeZone: "Europe/Bucharest", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }).format(time) : "…";
+    };
+    const scope = warning => [warning.areas.length ? `${warning.areas.length} UAT` : "", warning.villages.length ? `${warning.villages.length} ${warning.villages.length === 1 ? "sat" : "sate"}` : ""].filter(Boolean).join(", ") || "fără localități";
 
     presentation.innerHTML = `
       ${panelToggle("messages", "Mesaje", messagesCollapsed, messagesCollapsed ? "▼" : "▲")}
@@ -1611,7 +1617,7 @@ export function initOperations(ctx) {
           <h1>${esc(active.title)}</h1>
           ${hasNotes ? `<p class="ops-slide-notes">${esc(active.notes)}</p>` : ""}
         </div>
-        ${warnings.map((warning, index) => `<p id="ops-pres-alert${index ? '-' + index : ''}" class="ops-alert" data-code="${esc(warning.code)}" tabindex="0" role="note"><b>${esc(ALERTS[warning.code] || warning.code)}</b> ${esc(warning.text)}${warning.source ? ` · ${esc(warning.source)}` : ""}<br>${esc([...new Set([...warning.areas, ...warning.places.map(placeLabel)])].join(", ") || "Fără localități selectate")}${warning.validFrom || warning.validTo ? ` · ${dateLabel(warning.validFrom)} – ${dateLabel(warning.validTo)}` : " · Interval nespecificat"}</p>`).join("")}
+        ${warnings.length ? `<div class="ops-alert-grid">${warnings.map((warning, index) => `<p id="ops-pres-alert${index ? '-' + index : ''}" class="ops-alert" data-code="${esc(warning.code)}" tabindex="0" role="note"><b class="ops-alert-code">${esc(ALERT_LABELS[warning.code] || warning.code)}</b><span class="ops-alert-when">${[warning.source, warning.validFrom || warning.validTo ? `${dateLabel(warning.validFrom)} – ${dateLabel(warning.validTo)}` : "Interval nespecificat"].filter(Boolean).map(esc).join(" · ")}</span>${warning.text ? `<span class="ops-alert-text">${esc(warning.text)}</span>` : ""}<span class="ops-alert-areas">${esc([...warning.areas, ...warning.villages].join(", ") || "Fără localități selectate")}</span></p>`).join("")}</div>` : ""}
 
       </header>
       <nav id="ops-pres-commands" class="ops-slide-controls" data-pres-panel="commands" data-pres-edge="right" ${commandsCollapsed ? "hidden" : ""} aria-label="Comenzi prezentare">
@@ -1653,7 +1659,7 @@ export function initOperations(ctx) {
       </aside>
 
       <footer id="ops-pres-legend" class="ops-slide-foot" data-pres-panel="legend" data-pres-edge="bottom" ${legendCollapsed ? "hidden" : ""} aria-label="Legenda situației">
-        <div class="ops-legend">${Object.entries(counts).map(([kind, count]) => `<span><i data-kind="${esc(kind)}"></i>${esc(kind === "resolved" ? "Rezolvat / Redeschis" : presentationKindLabel(kind, active.type, KINDS[kind]))}: <b>${count}</b></span>`).join("") || `<span>Toate situațiile monitorizate: <b>0 probleme active</b></span>`}</div>
+        <div class="ops-legend">${warnings.map(warning => `<span class="ops-legend-code" data-code="${esc(warning.code)}"><i aria-hidden="true"></i><b>${esc(ALERT_LABELS[warning.code] || warning.code)}</b> · ${esc(scope(warning))} · ${esc(`${shortTime(warning.validFrom)} – ${shortTime(warning.validTo)}`)}</span>`).join("")}${Object.entries(counts).map(([kind, count]) => `<span><i data-kind="${esc(kind)}"></i>${esc(kind === "resolved" ? "Rezolvat / Redeschis" : presentationKindLabel(kind, active.type, KINDS[kind]))}: <b>${count}</b></span>`).join("") || `<span>Toate situațiile monitorizate: <b>0 probleme active</b></span>`}</div>
         <span>${dirty ? "Situație în lucru" : "Actualizat " + dateLabel(active.updatedAt)}</span>
       </footer>`;
     for (const el of presentation.querySelectorAll("[data-pres-panel]")) el.scrollTop = scrollPositions.get(el.id) || 0;

@@ -14,9 +14,15 @@
 .ops-alert-options input[type=checkbox] { flex: 0 0 20px; width: 20px; height: 20px; margin: 0; }
 .ops-alert-options span { overflow-wrap: anywhere; }
 .ops-alert-picker > p { padding: 0 8px; }
-.ops-alert-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 5px; background: #eab308; }
-.ops-alert-dot[data-code=orange] { background: #ea580c; }
-.ops-alert-dot[data-code=red], .ops-alert-dot[data-code=ro-alert] { background: #dc2626; }
+/* One palette for every code swatch outside the map canvas; it matches operations-alerts.js. */
+:is(.ops-alert-dot, .ops-alert-popup-item, .ops-alert, .ops-legend-code) { --code: #64748b; --code-ink: #ffffff; }
+:is(.ops-alert-dot, .ops-alert-popup-item, .ops-alert, .ops-legend-code)[data-code=yellow] { --code: #eab308; --code-ink: #1c1917; }
+:is(.ops-alert-dot, .ops-alert-popup-item, .ops-alert, .ops-legend-code)[data-code=orange] { --code: #ea580c; --code-ink: #1c1917; }
+:is(.ops-alert-dot, .ops-alert-popup-item, .ops-alert, .ops-legend-code):is([data-code=red], [data-code=ro-alert]) { --code: #dc2626; --code-ink: #ffffff; }
+:root[data-theme="dark"] :is(.ops-alert-dot, .ops-alert-popup-item, .ops-alert, .ops-legend-code)[data-code=yellow] { --code: #facc15; }
+:root[data-theme="dark"] :is(.ops-alert-dot, .ops-alert-popup-item, .ops-alert, .ops-legend-code)[data-code=orange] { --code: #fb923c; }
+:root[data-theme="dark"] :is(.ops-alert-dot, .ops-alert-popup-item, .ops-alert, .ops-legend-code):is([data-code=red], [data-code=ro-alert]) { --code: #f87171; --code-ink: #1c1917; }
+.ops-alert-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 5px; background: var(--code); }
 /* Warning popup on the map follows the app theme, so night mode stays readable. */
 .ops-alert-popup-wrap .maplibregl-popup-content { padding: 12px 34px 12px 14px; border: 1px solid var(--line-2); border-radius: var(--r); background: var(--panel); color: var(--ink); box-shadow: var(--shadow); font: 13px/1.45 var(--font); }
 .ops-alert-popup-wrap .maplibregl-popup-close-button { width: 32px; height: 32px; font-size: 20px; color: var(--ink-2); border-radius: 0 var(--r) 0 0; }
@@ -27,14 +33,17 @@
 .ops-alert-popup-wrap.maplibregl-popup-anchor-right .maplibregl-popup-tip { border-left-color: var(--panel); }
 .ops-alert-popup { max-height: 45vh; overflow: auto; overscroll-behavior: contain; }
 .ops-alert-popup small { color: var(--ink-2); }
-.ops-alert-popup-item { margin-top: 10px; padding-left: 8px; border-left: 4px solid #64748b; }
-.ops-alert-popup-item[data-code=yellow] { border-left-color: #eab308; }
-.ops-alert-popup-item[data-code=orange] { border-left-color: #ea580c; }
-.ops-alert-popup-item[data-code=red], .ops-alert-popup-item[data-code=ro-alert] { border-left-color: #dc2626; }
-:root[data-theme="dark"] .ops-alert-popup-item[data-code=yellow] { border-left-color: #facc15; }
-:root[data-theme="dark"] .ops-alert-popup-item[data-code=orange] { border-left-color: #fb923c; }
-:root[data-theme="dark"] .ops-alert-popup-item[data-code=red], :root[data-theme="dark"] .ops-alert-popup-item[data-code=ro-alert] { border-left-color: #f87171; }
+.ops-alert-popup-item { margin-top: 10px; padding-left: 8px; border-left: 4px solid var(--code); }
 .ops-alert-popup-note { margin: 8px 0 0; }
+/* Presentation: warnings sit side by side under the title, each on a tinted banner with a solid code plate. */
+.ops-slide-head > .ops-alert-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr)); gap: 8px; flex: 0 1 auto; }
+.ops-slide-head .ops-alert { border-left-color: var(--code); background: var(--panel-2); background: color-mix(in srgb, var(--code) 13%, var(--panel-2)); }
+.ops-alert-code { display: inline-block; margin: 0 8px 2px 0; padding: 2px 8px; border-radius: 4px; background: var(--code); color: var(--code-ink); font-size: 14px; font-weight: 750; letter-spacing: 0.03em; text-transform: uppercase; }
+.ops-alert-when { color: var(--ink-2); font-size: 12.5px; }
+.ops-alert-text, .ops-alert-areas { display: block; margin-top: 4px; }
+.ops-alert-areas { color: var(--ink-2); font-weight: 500; }
+.ops-legend > .ops-legend-code { border-color: var(--code); background: color-mix(in srgb, var(--code) 16%, var(--panel-2)); color: var(--ink); }
+.ops-legend > .ops-legend-code i { width: 14px; height: 14px; border: 0; background: var(--code); }
 @media (max-width: 760px), (max-height: 520px) {
   .ops-alert-fields input:not([type=checkbox]), .ops-alert-fields select, .ops-alert-fields textarea { font-size: 16px; }
   .ops-alert-options { max-height: 190px; }
