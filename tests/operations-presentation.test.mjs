@@ -7,10 +7,13 @@ import { pathToFileURL } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import { chrome, skipWithoutChrome } from './chrome.mjs';
 
-const sizes = [[1920, 1080], [1366, 768], [1024, 768], [320, 568], [390, 844], [844, 390], [900, 480]];
+// Phones draw overlay scrollbars that take no room. Chrome on desktop Linux or Windows reserves 15px for each one,
+// and at 320px the header's and a banner's together push a banner's start below its fold, so phone sizes hide them.
+const sizes = [[1920, 1080], [1366, 768], [1024, 768], [320, 568, 'phone'], [390, 844, 'phone'], [844, 390, 'phone'], [900, 480]];
 
 async function browserChecks({ initOperations, createEvent }) {
   try {
+    if (window.name === 'phone') document.head.append(Object.assign(document.createElement('style'), { textContent: '::-webkit-scrollbar { width: 0; height: 0; }' }));
     const active = createEvent('Presentation warning regression', 'snow');
     active.notes = 'Operational summary: ' + 'Full details remain available. '.repeat(30);
     active.alert = {
@@ -102,7 +105,7 @@ async function browserChecks({ initOperations, createEvent }) {
         if (scroller) scroller.scrollTop = scroller.scrollHeight;
         check('warningUnclamped', style.webkitLineClamp === 'none');
         check('warningScrollable', scroller && scroller.scrollTop > 0 && scroller.scrollTop + scroller.clientHeight >= scroller.scrollHeight - 1);
-        check('warningWide', rect.width >= panel(name).getBoundingClientRect().width - 40);
+        check('warningWide', rect.width >= panel(name).clientWidth - 40); // clientWidth leaves out a classic scrollbar
         check('warningInViewport', inViewport(scroller) && inViewport(end));
         check('escapedText', !alert.querySelector('strong') && alert.textContent.includes('<strong>literal text</strong> & details.'));
         check('fullWarningAvailable', alert.textContent.includes('Warning line 59'));
@@ -363,8 +366,8 @@ test('CJSU panels collapse independently, preserve the map, and keep full warnin
     let index = 0, current;
     function next() {
       if (index === sizes.length) return;
-      const [width, height] = sizes[index++];
-      const frame = document.createElement('iframe'); frame.width = width; frame.height = height; frame.style.cssText = 'position:fixed;inset:0;border:0';
+      const [width, height, device = ''] = sizes[index++];
+      const frame = document.createElement('iframe'); frame.width = width; frame.height = height; frame.name = device; frame.style.cssText = 'position:fixed;inset:0;border:0';
       frame.srcdoc = ${JSON.stringify(child).replaceAll('<', '\\u003c')}; current = frame; document.body.append(frame);
     }
     onmessage = event => { results.push(event.data); document.querySelector('#results').textContent = JSON.stringify(results); current.remove(); next(); };
