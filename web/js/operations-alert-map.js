@@ -1,9 +1,6 @@
 /* global maplibregl */
-import { normalizeAlerts } from './operations-alerts.js?v=20261019-multi-alerts';
+import { normalizeAlerts, ALERT_COLORS as colors, ALERT_RANK as rank, ALERT_LABELS as labels } from './operations-alerts.js?v=20261019-multi-alerts';
 
-const colors = { yellow: '#eab308', orange: '#ea580c', red: '#dc2626', 'ro-alert': '#dc2626' };
-const rank = { yellow: 1, orange: 2, red: 3, 'ro-alert': 4 };
-const labels = { yellow: 'Cod galben', orange: 'Cod portocaliu', red: 'Cod roșu', 'ro-alert': 'RO-ALERT' };
 const escape = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
 // Village boundaries are not part of the frozen dataset. Keep the same clearly

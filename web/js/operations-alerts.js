@@ -1,5 +1,13 @@
 // Warning geography belongs to each warning; event geography remains its wider scope.
 export const ALERT_CODES = Object.freeze(['yellow', 'orange', 'red', 'ro-alert']);
+export const ALERT_LABELS = Object.freeze({ yellow: 'Cod galben', orange: 'Cod portocaliu', red: 'Cod roșu', 'ro-alert': 'RO-Alert' });
+export const ALERT_RANK = Object.freeze({ yellow: 1, orange: 2, red: 3, 'ro-alert': 4 });
+export const ALERT_COLORS = Object.freeze({ yellow: '#eab308', orange: '#ea580c', red: '#dc2626', 'ro-alert': '#dc2626' });
+
+/** The most severe warning; the first one wins a tie. */
+export function mostSevereAlert(alerts = []) {
+  return alerts.reduce((top, alert) => (ALERT_RANK[alert?.code] || 0) > (ALERT_RANK[top?.code] || 0) ? alert : top, null);
+}
 
 function copyAlert(alert, index, fallback = {}) {
   return {

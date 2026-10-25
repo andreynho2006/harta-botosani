@@ -282,7 +282,6 @@ export const STATUSES = {
 };
 
 export const ALERTS = {
-  "": "Fără cod",
   yellow: "Cod galben ANM / INHGA",
   orange: "Cod portocaliu ANM / INHGA",
   red: "Cod roșu ANM / INHGA",
@@ -412,7 +411,7 @@ export function initOperations(ctx) {
 
   state.operations = {
     features: FC(), draft: FC(), selection: FC(), alerts: FC(), mask: FC(), endpoints: FC(),
-    focusGeometry: null, alertCode: "", tintAreas: true,
+    focusGeometry: null, tintAreas: true,
   };
 
   const alertEditor = createAlertEditor({
@@ -767,7 +766,6 @@ export function initOperations(ctx) {
     state.operations.focusGeometry = geometry;
     state.operations.mask = geometry ? outsideMask(geometry) : FC();
     state.operations.draft = FC(draftFeatures);
-    state.operations.alertCode = active?.alert?.code || "";
     state.operations.tintAreas = active ? (active.tintAreas ?? true) : false;
 
     renderFocusBar();
@@ -1661,19 +1659,6 @@ export function initOperations(ctx) {
     if (input.dataset.field) {
       active[input.dataset.field] = input.value;
       changed();
-      return true;
-    }
-    if (input.dataset.alert) {
-      const field = input.dataset.alert;
-      try {
-        active.alert[field] = field === "validFrom" || field === "validTo" ? isoTime(input.value) : input.value;
-        input.setCustomValidity("");
-      } catch {
-        input.setCustomValidity("Alege o dată și oră validă în ora României.");
-        return true;
-      }
-      changed();
-      if (field === "code") sync(true);
       return true;
     }
     return false;

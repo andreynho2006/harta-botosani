@@ -1,9 +1,8 @@
-import { normalizeAlerts } from './operations-alerts.js?v=20261019-multi-alerts';
+import { normalizeAlerts, ALERT_LABELS as CODES } from './operations-alerts.js?v=20261019-multi-alerts';
 import { localTime, isoTime } from './operations-time.js';
 
 const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const fold = value => String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
-const CODES = { yellow: 'Cod galben', orange: 'Cod portocaliu', red: 'Cod roșu', 'ro-alert': 'RO-Alert' };
 const dateValue = value => { try { return localTime(value); } catch { return ''; } };
 
 export function createAlertEditor({ panel, getActive, getData, onChange }) {

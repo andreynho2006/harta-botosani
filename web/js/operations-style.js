@@ -13,13 +13,6 @@ const color = ['case', resolved, '#23834b', ['match', ['get', 'kind'],
 const width = (extra = 0) => ['interpolate', ['linear'], ['zoom'], 8, 4 + extra, 14, 9 + extra, 19, 22 + extra];
 const rounded = { 'line-cap': 'round', 'line-join': 'round' };
 
-const ALERT_COLORS = {
-  yellow: '#eab308',
-  orange: '#ea580c',
-  red: '#dc2626',
-  'ro-alert': '#dc2626',
-};
-
 /** Decorate a freshly built base style with operational incident overlays. */
 export function decorateOperationalStyle(style, state = {}) {
   const operations = state.operations ?? {};
@@ -46,8 +39,6 @@ export function decorateOperationalStyle(style, state = {}) {
   });
   if (operations.focusGeometry) style.layers.push(...baseSymbols);
 
-  const alertColor = ALERT_COLORS[operations.alertCode] || '#008b9e';
-  const hasAlertTint = Boolean(!operations.alerts && operations.tintAreas && ALERT_COLORS[operations.alertCode]);
   const alertOpacity = state.theme === 'noapte' ? 0.18 : state.basemap === 'satelit' ? 0.24 : 0.22;
 
   // Tint the affected geography, never blur the canvas. Both the translucent
@@ -60,11 +51,6 @@ export function decorateOperationalStyle(style, state = {}) {
     { id: 'ops-alert-glow', type: 'line', source: 'ops-alerts', layout: rounded,
       paint: { 'line-color': ['get', 'color'], 'line-width': 10, 'line-blur': 16,
         'line-opacity': operations.tintAreas === false ? 0 : 0.24 } },
-    { id: 'ops-selection-fill', type: 'fill', source: 'ops-selection',
-      paint: { 'fill-color': alertColor, 'fill-opacity': hasAlertTint ? (state.theme === 'noapte' ? 0.18 : state.basemap === 'satelit' ? 0.24 : 0.22) : 0 } },
-    { id: 'ops-selection-glow', type: 'line', source: 'ops-selection', layout: rounded,
-      paint: { 'line-color': alertColor, 'line-width': 10, 'line-blur': 16,
-        'line-opacity': hasAlertTint ? 0.24 : 0 } },
   ];
   const foreground = style.layers.findIndex(layer => layer.type === 'symbol' || layer.type === 'circle' ||
     layer['source-layer'] === 'roads' || /^(roads|tracks|rail)(-|$)/.test(layer.id));
@@ -72,7 +58,7 @@ export function decorateOperationalStyle(style, state = {}) {
 
   style.layers.push(
     { id: 'ops-selection', type: 'line', source: 'ops-selection', layout: rounded,
-      paint: { 'line-color': hasAlertTint ? alertColor : '#008b9e', 'line-width': hasAlertTint ? 1.5 : 3, 'line-opacity': hasAlertTint ? 0.55 : 1, 'line-dasharray': [3, 2] } },
+      paint: { 'line-color': '#008b9e', 'line-width': 3, 'line-dasharray': [3, 2] } },
     { id: 'ops-features-fill', type: 'fill', source: 'ops-features', filter: isGeometry('Polygon'),
       paint: { 'fill-color': color, 'fill-opacity': ['case', resolved, 0.12, 0.24] } },
     { id: 'ops-features-boundary', type: 'line', source: 'ops-features', layout: rounded,
