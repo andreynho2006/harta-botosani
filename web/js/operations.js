@@ -496,6 +496,15 @@ export function initOperations(ctx) {
     return db.save(snapshot());
   }
 
+  // Before a publish: a newer Cloud version this tab already heard is held, whatever another tab
+  // did with the shared state meanwhile.
+  function holdNewerRemote() {
+    const rival = newerRemote();
+    if (!rival || cloudState().conflict) return;
+    setCloudState({ conflict: rival });
+    showConflict();
+  }
+
   function restoreSession() {
     restoring = true;
     try {
@@ -1712,7 +1721,7 @@ export function initOperations(ctx) {
     try {
       if (pending || mode) return message("Finalizează adăugarea marcajului curent înainte de a publica situația.");
       if (intervalRejected("Situația nu a fost publicată.")) return;
-      if (!overwrite) holdMovedArchive();
+      if (!overwrite) { holdMovedArchive(); holdNewerRemote(); }
       if (cloudState().conflict && !overwrite) return message("Altcineva a publicat între timp o versiune mai nouă. Alege în caseta de sus dacă o încarci sau o înlocuiești cu varianta ta.");
       active = saveActive(); dirty = false; exported = false;
       // A new version: it is not in the Cloud until the server says so.
@@ -1792,6 +1801,7 @@ export function initOperations(ctx) {
       ? `Situația „${feat.properties.title || KINDS[feat.properties.kind]}” a fost reactivată.`
       : `Situația „${feat.properties.title || KINDS[feat.properties.kind]}” a fost marcată ca REZOLVATĂ.`);
     // Resolving has always gone straight to every screen, but never over a colleague's newer version.
+    if (!dirty) holdNewerRemote();
     if (dirty || cloudState().conflict || !cloudDb?.saveSituation) return;
     const version = { id: active.id, updatedAt: active.updatedAt }, from = cloudState().base;
     const done = () => { markPublished(version, { from }); refreshPublishState(); };
@@ -1967,7 +1977,15 @@ export function initOperations(ctx) {
       const confirmed = copy && !cloudPending.has(copy.id) ? copy : null;
       setCloudState({ base: confirmed?.updatedAt ?? null, conflict: null,
         unpublished: copy ? active.updatedAt > copy.updatedAt || !confirmed : cloudSeen });
-    } else screenBase = known.base;
+    } else {
+      screenBase = known.base;
+      // Unpublished work weighs the held version against this tab's latest snapshot: one held
+      // while the situation was away may be superseded, or gone with the Cloud back at the base.
+      if (known.unpublished && copy && !cloudPending.has(copy.id)) {
+        const rival = copy.updatedAt !== known.base && !known.sent.includes(copy.updatedAt) ? copy : null;
+        if (rival?.updatedAt !== known.conflict?.updatedAt) setCloudState({ conflict: rival });
+      }
+    }
     dropMarkerUndo();
     stopDrawing();
     for (const key of Object.keys(state.visible)) if (typeof active.visible[key] === "boolean") state.visible[key] = active.visible[key];

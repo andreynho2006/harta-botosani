@@ -726,6 +726,45 @@ async function browserChecks({ initOperations, createEvent, EventStore }) {
       exit();
     }
     {
+      // Two colleague versions arrive while unpublished work is away: reopening holds the latest.
+      const mine = situation('Două versiuni între timp'), other = situation('În față');
+      const { ops, calls } = boot({ active: mine, session: { cloudBase: mine.updatedAt } });
+      ops.syncFromCloud([structuredClone(mine), structuredClone(other)]);
+      editTitle('Două versiuni între timp · a mea');
+      pick(other.id);
+      const c1 = colleague(mine, 'Două versiuni între timp · coleg 1', 1), c2 = colleague(mine, 'Două versiuni între timp · coleg 2', 2);
+      ops.syncFromCloud([c1, structuredClone(other)]);
+      ops.syncFromCloud([c2, structuredClone(other)]);
+      pick(mine.id);
+      click('[data-action="cloud-take"]');
+      check('reopenTakesLatestHeldVersion', title() === 'Două versiuni între timp · coleg 2' && !calls.length);
+    }
+    {
+      // The colleague's version is withdrawn while unpublished work is away: no banner on return.
+      const mine = situation('Versiune retrasă'), other = situation('Între');
+      const { ops } = boot({ active: mine, session: { cloudBase: mine.updatedAt } });
+      ops.syncFromCloud([structuredClone(mine), structuredClone(other)]);
+      editTitle('Versiune retrasă · a mea');
+      pick(other.id);
+      ops.syncFromCloud([colleague(mine, 'Versiune retrasă · coleg', 1), structuredClone(other)]);
+      ops.syncFromCloud([structuredClone(mine), structuredClone(other)]);
+      pick(mine.id);
+      check('withdrawnVersionNoBannerOnReturn', title() === 'Versiune retrasă · a mea' && !$('.ops-conflict') && status().includes('nepublicat în Cloud'));
+    }
+    {
+      // Another tab rewrote the shared state without the held version: this tab's own snapshot still guards the publish.
+      const mine = situation('Stare rescrisă');
+      const first = boot({ active: mine, session: { cloudBase: mine.updatedAt } });
+      first.ops.syncFromCloud([structuredClone(mine)]);
+      editTitle('Stare rescrisă · a mea');
+      first.ops.syncFromCloud([colleague(mine, 'Stare rescrisă · coleg', 1)]);
+      const states = JSON.parse(first.memory.get('hb.ops.cloud.v1'));
+      states[mine.id].conflict = null;
+      first.memory.set('hb.ops.cloud.v1', JSON.stringify(states));
+      click('[data-action="save"]'); await settle();
+      check('ownSnapshotGuardsPublishAfterSharedRewrite', !first.calls.length && notice().startsWith('Altcineva a publicat') && $('.ops-conflict'));
+    }
+    {
       // Tab 2, still on the older copy, writes the shared session; tab 1, with unpublished edits, reloads.
       const mine = situation('Sesiune comună');
       const first = boot({ active: mine, session: { cloudBase: mine.updatedAt } });
@@ -828,6 +867,6 @@ test('Cloud snapshots keep work in progress, publishing reports the real result,
     assert.equal(result.error, undefined, result.error);
     const failed = Object.entries(result).filter(([, ok]) => !ok).map(([name]) => name);
     assert.deepEqual(failed, [], 'Cloud guard regressions');
-    assert.ok(Object.keys(result).length >= 99, 'Every scenario reported');
+    assert.ok(Object.keys(result).length >= 102, 'Every scenario reported');
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
