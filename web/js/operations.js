@@ -1,6 +1,6 @@
 import { normalizeAlerts, affectedAlertLocations, resolvePlace, placeKey, placeLabel, legacyNote, countLabel, ALERT_LABELS, ALERT_RANK } from "./operations-alerts.js?v=20261019-multi-alerts";
 import { buildAlertGeography, buildAlertLabels, alertOutlined, attachAlertPopups } from "./operations-alert-map.js?v=20261019-multi-alerts";
-import { createAlertEditor } from "./operations-alert-editor.js?v=20261019-multi-alerts";
+import { createAlertEditor } from "./operations-alert-editor.js?v=20261025-alert-entry";
 import { presentationFeatures, presentationRiskGroups, presentationKindLabel } from "./operations-risks.js?v=20261018-cards";
 import { EventStore, CloudStates, createEvent, sanitizeEvent, cleanupLegacyArchive } from "./event-store.js?v=20261025-cloud-state";
 import {
@@ -395,6 +395,8 @@ export function initOperations(ctx) {
   }
 
   let active = null, dirty = false, exported = false, mode = null, points = [], startSnap = null, roadPool = [];
+  // The warning whose UATs the "area" mode picks; null picks the situation's own zone.
+  let areaTarget = null, brushed = null;
   let pending = null, editingId = null, beforePresentation = null, previousOverlays = null;
   let archiveError = "", notice = "", resizeFrame = 0, archiveFilter = "", summaryCollapsed = false, messagesCollapsed = false, legendCollapsed = false, commandsCollapsed = true, hideResolvedInPresentation = false;
   const presentationCollapsedGroups = new Set();
@@ -438,6 +440,10 @@ export function initOperations(ctx) {
       changed(); sync(geography && (active?.isolateArea ?? true));
       if (rerender) render();
       if (state.operations.presenting) renderPresentationOverlay();
+    },
+    onPickMap: alertId => {
+      start("area");
+      if (mode === "area") { areaTarget = alertId; drawInstructions(); }
     },
   });
   // Warning popups stay quiet while any other map tool owns the pointer.
@@ -962,7 +968,7 @@ export function initOperations(ctx) {
   };
 
   function stopDrawing() {
-    mode = null; points = []; startSnap = null; roadPool = [];
+    mode = null; points = []; startSnap = null; roadPool = []; areaTarget = null; brushed = null;
     drawbar.hidden = true;
     if (map) map.getCanvas().style.cursor = "";
     sync(true);
@@ -1025,6 +1031,7 @@ export function initOperations(ctx) {
 
   function drawInstructions() {
     const text = mode === "road" ? (startSnap ? `Început ales (${startSnap.road.ref || startSnap.road.name || "drum"}). Alege capătul sectorului pe drum` : "Clic pe drum pentru începutul sectorului (sau introdu direct km în panou)")
+      : mode === "area" && areaTarget ? `Clic pe comune / orașe pentru a le adăuga sau elimina din avertizarea „${esc(alertEditor.describe(areaTarget))}”. Cu Shift apăsat, trecerea mouse-ului le adaugă.`
       : mode === "area" ? "Clic pe comune / orașe pe hartă pentru a le adăuga sau elimina din zona situației"
       : mode === "zone" ? `Contur zonă: ${points.length} puncte · minimum 3 puncte`
       : mode === "place" ? "Clic pe o localitate / sat pe hartă (sau alege din listă)"
@@ -1065,6 +1072,14 @@ export function initOperations(ctx) {
   }
 
   function finishDrawing() {
+    if (mode === "area" && areaTarget) {
+      // The picked warning is drawn open; the map stays where the operator picked.
+      const target = areaTarget;
+      stopDrawing(); render(); selectTab("situatii"); setSheet("half");
+      panel.querySelector(`[data-warning-id="${CSS.escape(target)}"]`)?.scrollIntoView({ block: "nearest" });
+      reconsiderCloud();
+      return;
+    }
     if (mode === "area") { stopDrawing(); render(); selectTab("situatii"); setSheet("half"); fit(); reconsiderCloud(); return; }
     if (mode === "zone") {
       if (points.length < 3) return message("Alege cel puțin trei puncte pe hartă pentru a închide conturul zonei.");
@@ -1072,6 +1087,31 @@ export function initOperations(ctx) {
       prepare({ type: "Polygon", coordinates: [ring] }, state.operations._defaultKind || "threat");
     }
   }
+
+  /** A UAT picked in the "area" mode, for the target warning or the situation's zone; `add` never removes. */
+  function pickArea(name, { add = false } = {}) {
+    if (areaTarget) {
+      if (!alertEditor.pickArea(areaTarget, name, { add })) {
+        if (alertEditor.describe(areaTarget)) return;
+        // The warning went away meanwhile (removed, or another version loaded).
+        cancelDrawing();
+        return message("Avertizarea aleasă nu mai există în situație. Selecția pe hartă s-a închis.");
+      }
+    } else if (active.areas.includes(name)) {
+      if (add) return;
+      active.areas = active.areas.filter(item => item !== name);
+    } else active.areas = [...active.areas, name];
+    changed(); sync(true); render(); drawInstructions();
+  }
+
+  // Holding Shift while the pointer crosses UATs adds each of them: one stroke instead of many clicks.
+  map?.on?.("mousemove", event => {
+    if (mode !== "area" || !event.originalEvent?.shiftKey || !event.lngLat) { brushed = null; return; }
+    const name = uatAt(event.lngLat.lng, event.lngLat.lat)?.name;
+    if (!name || name === brushed) return;
+    brushed = name;
+    pickArea(name, { add: true });
+  });
 
   function availableRoads() {
     const netFeatures = roadNetworkToFeatures(state.data.roads);
@@ -1100,8 +1140,7 @@ export function initOperations(ctx) {
     if (mode === "area") {
       const uat = uatAt(...coordinate);
       if (!uat) { message("Punctul ales este în afara limitelor UAT din județ."); return true; }
-      active.areas = active.areas.includes(uat.name) ? active.areas.filter(name => name !== uat.name) : [...active.areas, uat.name];
-      changed(); sync(true); render(); drawInstructions();
+      pickArea(uat.name);
     } else if (mode === "point") {
       prepare({ type: "Point", coordinates: coordinate }, state.operations._defaultKind || "command");
     } else if (mode === "place") {

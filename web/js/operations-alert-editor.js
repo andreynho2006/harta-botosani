@@ -50,7 +50,21 @@ export function warningOptions(kind, data = {}, stored = []) {
   return [...unlisted, ...options].map(option => ({ ...option, checked: selected.has(option.value) }));
 }
 
-export function createAlertEditor({ panel, getActive, getData, onChange }) {
+/** The county's municipalities and towns: the UATs holding a city or town of the index. */
+export function urbanUats(data = {}) {
+  const listed = new Set(warningOptions('areas', data).map(option => option.value));
+  return [...new Set((data.localities || []).filter(place => ['city', 'town'].includes(place.kind) && listed.has(place.uat)).map(place => place.uat))];
+}
+
+/** A preset's UAT list: null while the map data that defines it has not loaded. */
+export function presetAreas(preset, data = {}) {
+  if (preset === 'none') return [];
+  const areas = preset === 'all' ? warningOptions('areas', data).map(option => option.value) : preset === 'urban' ? urbanUats(data) : [];
+  return areas.length ? areas : null;
+}
+
+export function createAlertEditor({ panel, getActive, getData, onChange, onPickMap }) {
+  // The warning drawn open at the next render: a new one, or the one just picked on the map.
   let newId = null;
   const canonical = (kind, entry) => canonicalEntry(kind, entry, getData()?.localities || []);
   function warnings() { return normalizeAlerts(getActive()); }
@@ -110,6 +124,12 @@ export function createAlertEditor({ panel, getActive, getData, onChange }) {
           <label>Valabil până la (ora României)<input data-warning-field="validTo" type="datetime-local" value="${dateValue(alert.validTo)}"></label>
           <label>Fenomene vizate / mesaj<textarea data-warning-field="text" rows="2" maxlength="5000">${esc(alert.text)}</textarea></label>
           <p class="ops-alert-status muted" data-alert-status role="status">${esc(status(alert))}</p>
+          <div class="ops-alert-zone" role="group" aria-label="Zona avertizării">
+            <button type="button" class="btn" data-alert-preset="all">Tot județul</button>
+            <button type="button" class="btn" data-alert-preset="urban">Orașe și municipii</button>
+            <button type="button" class="btn" data-alert-preset="none">Niciunul</button>
+            <button type="button" class="btn" data-alert-pick>Alege pe hartă</button>
+          </div>
           ${listHTML(alert, 'areas', 'Comune / orașe (UAT)')}${listHTML(alert, 'places', 'Localități / sate')}
           <p class="muted">UAT-urile folosesc limitele administrative. Zonele satelor sunt orientative.</p>
           <button type="button" class="btn" data-alert-action="remove" aria-label="Șterge avertizarea ${i + 1}">Șterge avertizarea</button>
@@ -252,16 +272,52 @@ export function createAlertEditor({ panel, getActive, getData, onChange }) {
     onChange({ render: false, geography: true });
     return true;
   }
-  function handleClick(button) {
-    const action = button?.dataset.alertAction;
-    if (!['add', 'remove'].includes(action) || !getActive()) return false;
+  /** The warning list, or null after saying how much the notes must lose before a legacy event can migrate. */
+  function editableOrExplain() {
     const alerts = editable();
     if (!alerts) {
       // The notes may have grown since the last render, so say how much to shorten now.
       const note = panel.querySelector('[data-legacy-note]');
       if (note) { note.textContent = legacyText(getActive()); note.setAttribute('role', 'alert'); }
+    }
+    return alerts;
+  }
+  /** A preset replaces the warning's UATs and leaves its villages; "Niciunul" clears both. */
+  function applyPreset(entry, preset) {
+    const alert = editableOrExplain()?.find(item => item.id === entry?.dataset.warningId);
+    if (!alert) return;
+    const areas = presetAreas(preset, getData() || {});
+    const note = entry.querySelector('[data-alert-status]');
+    if (!areas) { if (note) note.textContent = 'Lista UAT-urilor se încarcă odată cu harta.'; return; }
+    const next = { areas, places: preset === 'none' ? [] : alert.places || [] };
+    const same = ['areas', 'places'].every(kind => {
+      const before = new Set((alert[kind] || []).map(item => canonical(kind, item)));
+      return before.size === next[kind].length && next[kind].every(value => before.has(canonical(kind, value)));
+    });
+    if (same) return;
+    Object.assign(alert, next);
+    // The picker lists stay as they are, open or closed: only their boxes follow.
+    for (const kind of ['areas', 'places']) {
+      const chosen = new Set(alert[kind].map(item => canonical(kind, item)));
+      for (const box of entry.querySelectorAll(`input[data-alert-area="${kind}"]`)) box.checked = chosen.has(box.value);
+    }
+    updateStatus(entry, alert);
+    onChange({ render: false, geography: true });
+  }
+  function handleClick(button) {
+    if (!getActive()) return false;
+    const entry = () => button.closest('[data-warning-id]');
+    if (button?.dataset.alertPreset) { applyPreset(entry(), button.dataset.alertPreset); return true; }
+    if (button?.dataset.alertPick !== undefined) {
+      const alert = editableOrExplain()?.find(item => item.id === entry()?.dataset.warningId);
+      // Drawn open again once the pick ends.
+      if (alert) { newId = alert.id; onPickMap?.(alert.id); }
       return true;
     }
+    const action = button?.dataset.alertAction;
+    if (!['add', 'remove'].includes(action)) return false;
+    const alerts = editableOrExplain();
+    if (!alerts) return true;
     if (action === 'add') {
       newId = crypto.randomUUID();
       alerts.push({ id: newId, code: 'yellow', source: '', validFrom: '', validTo: '', text: '', areas: [], places: [] });
@@ -272,5 +328,24 @@ export function createAlertEditor({ panel, getActive, getData, onChange }) {
     onChange({ render: true, geography: true });
     return true;
   }
-  return { html, handleInput, handleChange, handleClick, revealRejectedInterval, rejectedDates, restoreRejectedDates };
+  /**
+   * Adds or removes a UAT picked on the map for one warning; `add` only adds, for a brush stroke.
+   * False when the warning is gone or nothing changed. The caller re-renders.
+   */
+  function pickArea(id, name, { add = false } = {}) {
+    const alert = (Array.isArray(getActive()?.alerts) ? getActive().alerts : []).find(item => item.id === id);
+    if (!alert || !name) return false;
+    const areas = alert.areas || [];
+    if (areas.includes(name)) {
+      if (add) return false;
+      alert.areas = areas.filter(item => item !== name);
+    } else alert.areas = [...areas, name];
+    return true;
+  }
+  /** What the map pick says it edits; '' once the warning is gone. */
+  function describe(id) {
+    const alert = warnings().find(item => item.id === id);
+    return alert ? summaryText(alert) : '';
+  }
+  return { html, handleInput, handleChange, handleClick, revealRejectedInterval, rejectedDates, restoreRejectedDates, pickArea, describe };
 }

@@ -14,6 +14,9 @@
 .ops-alert-options input[type=checkbox] { flex: 0 0 20px; width: 20px; height: 20px; margin: 0; }
 .ops-alert-options span { overflow-wrap: anywhere; }
 .ops-alert-picker > p { padding: 0 8px; }
+/* Zone presets and the map pick: one row of wide targets, wrapping on a phone. */
+.ops-alert-zone { display: flex; flex-wrap: wrap; gap: 6px; }
+.ops-alert-zone > .btn { flex: 1 1 auto; justify-content: center; }
 /* One palette for every code swatch outside the map canvas; it matches operations-alerts.js. */
 :is(.ops-alert-dot, .ops-alert-popup-item, .ops-alert, .ops-legend-code) { --code: #64748b; --code-ink: #ffffff; }
 :is(.ops-alert-dot, .ops-alert-popup-item, .ops-alert, .ops-legend-code)[data-code=yellow] { --code: #eab308; --code-ink: #1c1917; }
