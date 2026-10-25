@@ -27,6 +27,10 @@ export function placeLabel(entry) {
   return uat && uat !== name ? `${name} (${uat})` : name;
 }
 
+/** Romanian counts: 1 sat, 2 sate, 20 de sate, 101 sate (numbers ending in 00 or 20-99 take "de"). */
+export const countLabel = (n, one, many) =>
+  n === 1 ? `1 ${one}` : `${n} ${n && (n % 100 === 0 || n % 100 >= 20) ? 'de ' : ''}${many}`;
+
 /** The most severe warning; the first one wins a tie. */
 export function mostSevereAlert(alerts = []) {
   return alerts.reduce((top, alert) => (ALERT_RANK[alert?.code] || 0) > (ALERT_RANK[top?.code] || 0) ? alert : top, null);

@@ -1,4 +1,4 @@
-import { normalizeAlerts, resolvePlace, placeKey, placeLabel, legacyNote, legacyNoteOverflow, notesWithLegacyNote, ALERT_LABELS as CODES } from './operations-alerts.js?v=20261019-multi-alerts';
+import { normalizeAlerts, resolvePlace, placeKey, placeLabel, legacyNote, legacyNoteOverflow, notesWithLegacyNote, countLabel, ALERT_LABELS as CODES } from './operations-alerts.js?v=20261019-multi-alerts';
 import { localTime, isoTime, dateLabel } from './operations-time.js';
 
 const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -49,14 +49,12 @@ export function createAlertEditor({ panel, getActive, getData, onChange }) {
   const canonical = (kind, entry) => canonicalEntry(kind, entry, getData()?.localities || []);
   function warnings() { return normalizeAlerts(getActive()); }
   const legacyInterval = note => note.validFrom || note.validTo ? [note.validFrom, note.validTo].map(value => value ? dateLabel(value) : '…').join(' – ') : '';
-  // Romanian counts from 20 (and 100, 200…) take "de": 19 caractere, 20 de caractere, 101 caractere.
-  const characters = n => n === 1 ? '1 caracter' : `${n} ${n % 100 === 0 || n % 100 >= 20 ? 'de ' : ''}caractere`;
   function legacyText(active) {
     const note = legacyNote(active);
     if (!note) return '';
     const overflow = legacyNoteOverflow(active.notes, note, legacyInterval(note));
     return `Mesaj fără cod din arhivă: „${note.text || note.source}”. Apare în prezentare; ${overflow
-      ? `„Sinteză operativă” nu mai are loc pentru el: scurteaz-o cu ${characters(overflow)}, apoi adaugă avertizarea.`
+      ? `„Sinteză operativă” nu mai are loc pentru el: scurteaz-o cu ${countLabel(overflow, 'caracter', 'caractere')}, apoi adaugă avertizarea.`
       : 'la prima avertizare adăugată, textul trece în „Sinteză operativă”.'}`;
   }
   /** The warning list, migrating a legacy event; null while its code-less message does not fit the notes. */
@@ -84,6 +82,7 @@ export function createAlertEditor({ panel, getActive, getData, onChange }) {
       ${options.length ? '' : '<p class="muted">Lista se încarcă odată cu harta.</p>'}
     </details>`;
   }
+  const summaryText = alert => `${CODES[alert.code] || 'Avertizare'} · ${countLabel((alert.areas?.length || 0) + (alert.places?.length || 0), 'zonă', 'zone')}`;
   function status(alert) {
     if (alert.validFrom && alert.validTo && Date.parse(alert.validTo) < Date.parse(alert.validFrom)) return 'Interval invalid: sfârșitul trebuie să fie după început.';
     if (!(alert.areas?.length || alert.places?.length)) return 'Selectează UAT-urile sau localitățile de mai jos pentru a colora harta.';
@@ -97,7 +96,7 @@ export function createAlertEditor({ panel, getActive, getData, onChange }) {
       <p class="muted">Fiecare cod are propria zonă și propriul interval. Poți suprapune mai multe avertizări.</p>
       ${legacyNote(getActive()) ? `<p class="muted" role="note" data-legacy-note>${esc(legacyText(getActive()))}</p>` : ''}
       <div class="ops-alert-list">${alerts.map((alert, i) => `<details class="ops-alert-entry" data-warning-id="${esc(alert.id)}" ${alerts.length === 1 || alert.id === newId ? 'open' : ''}>
-        <summary><span class="ops-alert-dot" data-code="${esc(alert.code)}" aria-hidden="true"></span><span data-alert-summary>${esc(CODES[alert.code] || 'Avertizare')} · ${(alert.areas?.length || 0) + (alert.places?.length || 0)} zone</span></summary>
+        <summary><span class="ops-alert-dot" data-code="${esc(alert.code)}" aria-hidden="true"></span><span data-alert-summary>${esc(summaryText(alert))}</span></summary>
         <div class="ops-alert-fields">
           <label>Cod / avertizare<select data-warning-field="code">${Object.entries(CODES).map(([key, label]) => `<option value="${key}" ${key === alert.code ? 'selected' : ''}>${label}</option>`).join('')}</select></label>
           <label>Sursă avertizare<input data-warning-field="source" maxlength="300" value="${esc(alert.source)}" placeholder="ANM / INHGA / IGSU"></label>
@@ -115,7 +114,7 @@ export function createAlertEditor({ panel, getActive, getData, onChange }) {
   }
   function updateStatus(entry, alert) {
     const summary = entry.querySelector('[data-alert-summary]');
-    if (summary) summary.textContent = `${CODES[alert.code] || 'Avertizare'} · ${(alert.areas?.length || 0) + (alert.places?.length || 0)} zone`;
+    if (summary) summary.textContent = summaryText(alert);
     const dot = entry.querySelector('.ops-alert-dot');
     if (dot) dot.dataset.code = alert.code;
     const note = entry.querySelector('[data-alert-status]');

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { normalizeAlerts, affectedAlertLocations, warningsForLocation, placeKey, resolvePlace, placeLabel, legacyNote, legacyNoteOverflow, notesWithLegacyNote } from '../web/js/operations-alerts.js';
+import { normalizeAlerts, affectedAlertLocations, warningsForLocation, placeKey, resolvePlace, placeLabel, legacyNote, legacyNoteOverflow, notesWithLegacyNote, countLabel } from '../web/js/operations-alerts.js';
 import { createEvent, sanitizeEvent, EventStore } from '../web/js/event-store.js';
 import { warningOptions, createAlertEditor, rejectedInterval } from '../web/js/operations-alert-editor.js';
 import { isoTime, localTime } from '../web/js/operations-time.js';
@@ -48,6 +48,12 @@ test('concurrent codes retain independent locations and validity through save, e
   assert.deepEqual(warningsForLocation(saved, 'uat', 'Agafton'), []);
   assert.deepEqual(warningsForLocation(saved, 'uat', 'Boto'), []);
   assert.deepEqual(affectedAlertLocations(saved), { areas: ['Botoșani', 'Dorohoi'], places: ['Agafton'] });
+});
+
+test('Romanian counts take "de" from 20, after round hundreds, but not after 101-119', () => {
+  const cases = [[0, '0 sate'], [1, '1 sat'], [2, '2 sate'], [19, '19 sate'], [20, '20 de sate'], [69, '69 de sate'],
+    [100, '100 de sate'], [101, '101 sate'], [119, '119 sate'], [120, '120 de sate'], [1000, '1000 de sate']];
+  for (const [n, words] of cases) assert.equal(countLabel(n, 'sat', 'sate'), words);
 });
 
 test('a code-less legacy message is kept as a note instead of disappearing', () => {

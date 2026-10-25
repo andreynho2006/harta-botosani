@@ -1,4 +1,4 @@
-import { normalizeAlerts, affectedAlertLocations, resolvePlace, placeKey, placeLabel, legacyNote, ALERT_LABELS, ALERT_RANK } from "./operations-alerts.js?v=20261019-multi-alerts";
+import { normalizeAlerts, affectedAlertLocations, resolvePlace, placeKey, placeLabel, legacyNote, countLabel, ALERT_LABELS, ALERT_RANK } from "./operations-alerts.js?v=20261019-multi-alerts";
 import { buildAlertGeography, buildAlertLabels, alertOutlined, attachAlertPopups } from "./operations-alert-map.js?v=20261019-multi-alerts";
 import { createAlertEditor } from "./operations-alert-editor.js?v=20261019-multi-alerts";
 import { presentationFeatures, presentationRiskGroups, presentationKindLabel } from "./operations-risks.js?v=20261018-cards";
@@ -1631,7 +1631,7 @@ export function initOperations(ctx) {
     const span = (from, to, format) => from && to ? `${format(from)} – ${format(to)}` : from ? `de la ${format(from)}` : to ? `până la ${format(to)}` : "";
     // A code-less message from an older archive still shows, on a neutral banner.
     const note = warnings.length ? null : legacyNote(active);
-    const scope = warning => [warning.areas.length ? `${warning.areas.length} UAT` : "", warning.villages.length ? `${warning.villages.length} ${warning.villages.length === 1 ? "sat" : "sate"}` : ""].filter(Boolean).join(", ") || "fără localități";
+    const scope = warning => [warning.areas.length ? `${warning.areas.length} UAT` : "", warning.villages.length ? countLabel(warning.villages.length, "sat", "sate") : ""].filter(Boolean).join(", ") || "fără localități";
 
     presentation.innerHTML = `
       ${panelToggle("messages", "Mesaje", messagesCollapsed, messagesCollapsed ? "▼" : "▲")}
