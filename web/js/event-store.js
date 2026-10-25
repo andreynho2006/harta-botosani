@@ -1,5 +1,5 @@
 // Local, portable incident archive. No credentials or base-map data are stored.
-import { ALERT_CODES } from './operations-alerts.js?v=20261019-multi-alerts';
+import { ALERT_CODES, mostSevereAlert } from './operations-alerts.js?v=20261019-multi-alerts';
 export const EVENT_STORAGE_KEY = 'hb.events.v1';
 export const EVENT_TYPES = Object.freeze(Object.fromEntries(['fire', 'flood', 'snow', 'storm', 'other'].map(key => [key, key])));
 export const MARK_TYPES = Object.freeze(Object.fromEntries([
@@ -161,6 +161,9 @@ export function sanitizeEvent(value, budget = { vertices: 0 }) {
     if (!Array.isArray(value.alerts) || value.alerts.length > 100) throw new Error('Invalid or oversized warning list.');
     sanitized.alerts = value.alerts.map(warning);
     if (new Set(sanitized.alerts.map(alert => alert.id)).size !== sanitized.alerts.length) throw new Error('Duplicate warning identifiers.');
+    // Older clients and exports read only `alert`: keep it as a summary of the most severe warning.
+    const top = mostSevereAlert(sanitized.alerts);
+    sanitized.alert = { code: top?.code || '', source: top?.source || '', validFrom: top?.validFrom || '', validTo: top?.validTo || '', text: top?.text || '' };
   }
   if (typeof value.isolateArea === 'boolean') sanitized.isolateArea = value.isolateArea;
   if (typeof value.tintAreas === 'boolean') sanitized.tintAreas = value.tintAreas;

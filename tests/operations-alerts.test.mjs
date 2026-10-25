@@ -48,6 +48,19 @@ test('concurrent codes retain independent locations and validity through save, e
   assert.deepEqual(affectedAlertLocations(saved), { areas: ['Botoșani', 'Dorohoi'], places: ['Agafton'] });
 });
 
+test('saving derives the legacy warning summary from the most severe warning', () => {
+  const event = createEvent('Summary', 'storm');
+  event.alert = { code: 'orange', source: 'Old', validFrom: '', validTo: '', text: 'Stale' };
+  event.alerts = [alert('y', 'yellow', ['Dorohoi']), alert('r', 'red', ['Botoșani']), alert('r2', 'red', ['Flămânzi'])];
+  event.alerts[1].text = 'Ploi torențiale';
+  const saved = sanitizeEvent(event);
+  assert.deepEqual(saved.alert, { code: 'red', source: 'ANM', validFrom: '2026-10-19T07:00:00.000Z', validTo: '2026-10-19T15:00:00.000Z', text: 'Ploi torențiale' });
+  assert.deepEqual(sanitizeEvent({ ...event, alerts: [] }).alert, { code: '', source: '', validFrom: '', validTo: '', text: '' });
+  const legacy = { ...event }; delete legacy.alerts;
+  assert.equal(sanitizeEvent(legacy).alert.code, 'orange', 'Legacy single warnings stay untouched');
+  assert.equal(new EventStore(memoryStorage()).save({ ...event, alerts: [] }).alert.code, '');
+});
+
 test('invalid warning lists and reversed intervals are rejected before storage changes', () => {
   const store = new EventStore(memoryStorage());
   const event = createEvent('Weather', 'storm');
