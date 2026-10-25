@@ -32,6 +32,7 @@ async function browserChecks({ initOperations, createEvent }) {
     const cloudDb = { saveSituation: situation => { calls.push(situation); return save ? save(situation) : Promise.resolve(true); }, deleteSituation: id => { deletes.push(id); return del ? del(id) : Promise.resolve(true); } };
     const state = { data: { admin: { features: [] }, localities: [] }, visible: {}, overlays: {}, basemap: 'harta', theme: 'zi' };
     document.querySelector('#tab-situatii').replaceChildren();
+    document.querySelectorAll('.ops-drawbar, .ops-focusbar, .ops-presentation').forEach(el => el.remove());
     const ops = initOperations({ map, storage, state, toast: text => toasts.push(text), selectTab: noop, setSheet: noop, stopOtherTools: noop,
       applyStyle: noop, renderLayerPanel: noop, cloudDb, publishWaitMs: 40 });
     const archive = () => JSON.parse(memory.get('hb.events.v1') || '{"events":[]}').events;
@@ -404,6 +405,29 @@ async function browserChecks({ initOperations, createEvent }) {
       check('conflictSurvivesReload', $('.ops-conflict') && title() === 'Reîncărcare · a mea');
     }
 
+    // Ending an area selection or an itinerary pick lets the held version in, like the other tools.
+    {
+      const mine = situation('Zonă terminată');
+      const { ops } = boot({ active: mine, session: { cloudBase: mine.updatedAt } });
+      click('button[data-action="area"]');
+      ops.syncFromCloud([colleague(mine, 'Zonă terminată · coleg', 1)]);
+      check('heldWhileSelectingArea', $('.ops-conflict') && title() === 'Zonă terminată');
+      click('.ops-drawbar button[data-action="finish"]');
+      check('finishingAreaLoadsHeldVersion', title() === 'Zonă terminată · coleg' && !$('.ops-conflict'));
+    }
+    {
+      const mine = situation('Punct de itinerar');
+      const { ops } = boot({ active: mine, session: { cloudBase: mine.updatedAt } });
+      // The "Adaugă pe hartă" buttons live in a menu; choosing an entry runs its action.
+      const menu = $('[data-ops-add-action]');
+      if (menu) { menu.value = 'open-itinerary'; menu.dispatchEvent(new Event('change', { bubbles: true })); }
+      click('button[data-itinerary="pick"]');
+      ops.syncFromCloud([colleague(mine, 'Punct de itinerar · coleg', 1)]);
+      check('heldWhilePickingItinerary', $('.ops-conflict') && title() === 'Punct de itinerar');
+      click('.ops-drawbar button[data-action="cancel-itinerary-pick"]');
+      check('cancellingPickLoadsHeldVersion', title() === 'Punct de itinerar · coleg' && !$('.ops-conflict'));
+    }
+
     // One malformed document does not stop the others from syncing.
     {
       const { ops, archive } = boot({});
@@ -431,6 +455,6 @@ test('Cloud snapshots keep work in progress, publishing reports the real result,
     assert.equal(result.error, undefined, result.error);
     const failed = Object.entries(result).filter(([, ok]) => !ok).map(([name]) => name);
     assert.deepEqual(failed, [], 'Cloud guard regressions');
-    assert.ok(Object.keys(result).length >= 52, 'Every scenario reported');
+    assert.ok(Object.keys(result).length >= 65, 'Every scenario reported');
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });

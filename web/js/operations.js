@@ -1016,7 +1016,7 @@ export function initOperations(ctx) {
   }
 
   function finishDrawing() {
-    if (mode === "area") { stopDrawing(); render(); selectTab("situatii"); setSheet("half"); fit(); return; }
+    if (mode === "area") { stopDrawing(); render(); selectTab("situatii"); setSheet("half"); fit(); reconsiderCloud(); return; }
     if (mode === "zone") {
       if (points.length < 3) return message("Alege cel puțin trei puncte pe hartă pentru a închide conturul zonei.");
       const ring = [...points, points[0]];
@@ -1033,7 +1033,8 @@ export function initOperations(ctx) {
 
   function handleMapClick(event) {
     if (document.body.classList.contains("presenting")) return true;
-    if (itinerary.handleMapClick(event)) return true;
+    // A picked or cancelled itinerary point ends work on screen.
+    if (itinerary.handleMapClick(event)) { reconsiderCloud(); return true; }
     if (!mode) {
       if (!active || pending) return false;
       const layers = ["ops-features-line", "ops-route-backup", "ops-features-point", "ops-features-fill"].filter(layer => map.getLayer(layer));
@@ -2252,7 +2253,7 @@ export function initOperations(ctx) {
     if (button.dataset.alertAction && pending) return message("Finalizează sau anulează marcajul curent înainte de a adăuga sau șterge o avertizare.");
     if (alertEditor.handleClick(button)) return;
     if (button.dataset.action === "open-itinerary" && pending) return message("Finalizează marcajul curent înainte de a calcula itinerarul.");
-    if (itinerary.handleClick(button)) return;
+    if (itinerary.handleClick(button)) { reconsiderCloud(); return; }
 
     if (button.dataset.preset) {
       if (applyPreset) applyPreset(button.dataset.preset);
@@ -2432,7 +2433,7 @@ export function initOperations(ctx) {
 
   drawbar.onclick = (event) => {
     const action = event.target.closest("button")?.dataset.action;
-    if (action === "cancel-itinerary-pick") itinerary.cancelPick();
+    if (action === "cancel-itinerary-pick") { itinerary.cancelPick(); reconsiderCloud(); }
     if (action === "finish") finishDrawing();
     if (action === "cancel") cancelDrawing();
     if (action === "undo") { points.pop(); sync(); drawInstructions(); }
@@ -2537,7 +2538,7 @@ export function initOperations(ctx) {
   };
 
   const handleKey = (event) => {
-    if (event.key === "Escape" && itinerary.isPicking()) { itinerary.cancelPick(); event.preventDefault(); return true; }
+    if (event.key === "Escape" && itinerary.isPicking()) { itinerary.cancelPick(); reconsiderCloud(); event.preventDefault(); return true; }
     if (event.key === "Escape" && document.body.classList.contains("presenting")) { exitPresentation(); event.preventDefault(); return true; }
     if (event.key === "Escape" && mode) { cancelDrawing(); event.preventDefault(); return true; }
     return false;
@@ -2567,5 +2568,5 @@ export function initOperations(ctx) {
   restoreSession();
   sync(true);
   render();
-  return { handleMapClick, handleKey, cancelDrawing: () => { itinerary.cancelPick(); cancelDrawing(); }, isDrawing: () => !!mode || itinerary.isPicking(), sync, openRoadCreator, syncFromCloud };
+  return { handleMapClick, handleKey, cancelDrawing: () => { if (itinerary.cancelPick()) reconsiderCloud(); cancelDrawing(); }, isDrawing: () => !!mode || itinerary.isPicking(), sync, openRoadCreator, syncFromCloud };
 }
