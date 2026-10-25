@@ -241,10 +241,29 @@ function namesCounty(text) {
 /** A county-prefixed list for another county, "Județul Suceava:", whose names are not ours to match. */
 const otherCountyList = folded => [...folded.matchAll(/\bjud(?:etul|\.)\s*([a-z\-]+)\s*[:–-]/g)].some(m => m[1] !== 'botosani');
 
-/** The clause before a list names another county: "zona de munte a județului Suceava, respectiv zona localităților:". */
-function otherCountyClause(folded, at) {
-  const clause = folded.slice(Math.max(folded.lastIndexOf('\n', at - 1), folded.lastIndexOf(';', at - 1)) + 1, at);
-  return [...clause.matchAll(/\bjudetului\s+([a-z\-]+)/g)].some(m => m[1] !== 'botosani');
+/** Romania's counties, folded, by their first word: "a județului, respectiv" names none. */
+const COUNTIES = new Set(['alba', 'arad', 'arges', 'bacau', 'bihor', 'bistrita', 'botosani', 'braila', 'brasov', 'bucuresti', 'buzau',
+  'calarasi', 'caras', 'cluj', 'constanta', 'covasna', 'dambovita', 'dolj', 'galati', 'giurgiu', 'gorj', 'harghita', 'hunedoara',
+  'ialomita', 'iasi', 'ilfov', 'maramures', 'mehedinti', 'mures', 'neamt', 'olt', 'prahova', 'salaj', 'satu', 'sibiu', 'suceava',
+  'teleorman', 'timis', 'tulcea', 'valcea', 'vaslui', 'vrancea']);
+
+/**
+ * The clause a list belongs to, back to the last ";", line break or full stop after a word. A line
+ * that ends in a comma or "și" wrapped, so the clause goes on above it.
+ */
+function clauseBefore(folded, at) {
+  let from = 0;
+  for (const m of folded.slice(0, at).matchAll(/;|\n|[a-z]{4}\.(?=\s)/g)) {
+    if (m[0] === '\n' && /(?:,|\bsi)[ \t]*$/.test(folded.slice(from, m.index))) continue;
+    from = m.index + m[0].length;
+  }
+  return folded.slice(from, at);
+}
+
+/** The county a list's clause names, "zona de munte a județului Suceava, respectiv zona localităților:": ours, another, or ''. */
+function clauseCounty(folded, at) {
+  const counties = [...clauseBefore(folded, at).matchAll(/\bjud(?:etului|etul|\.)\s*([a-z]+)/g)].map(m => m[1]).filter(name => COUNTIES.has(name));
+  return counties.includes('botosani') ? 'botosani' : counties[0] ?? '';
 }
 
 /** Lists after "Zone afectate:", "Zona:", "Localitățile:", "zona localităților:". */
@@ -283,11 +302,16 @@ function sections(original) {
     const current = list.at(-1);
     const joined = current && /^[\s,/-]*(?:si\s*)?$/.test(folded.slice(lastEnd, m.index));
     lastEnd = m.index + m[0].length;
-    if (current && (current.code === code || joined)) continue;
-    const lineStart = origin[folded.lastIndexOf('\n', m.index) + 1] ?? 0;
+    const lineAt = folded.lastIndexOf('\n', m.index) + 1;
+    // The same code again opens a section of its own when it heads a line after the current section
+    // gave its interval, "MESAJ 2: COD GALBEN" for another region; elsewhere it repeats the title.
+    const again = current?.code === code && /^[\w\s:.,-]{0,40}$/.test(folded.slice(lineAt, m.index))
+      && /\binterval(?:ul)? de valabilitate\b|\bvalabil/.test(folded.slice(current.at, lineAt));
+    if (current && !again && (current.code === code || joined)) continue;
+    const lineStart = origin[lineAt] ?? 0;
     const start = !current ? 0 : lineStart > current.start ? lineStart : origin[m.index];
     if (current) current.end = start;
-    list.push({ code, start, end: original.length });
+    list.push({ code, start, end: original.length, at: m.index });
   }
   return { head: origin[folded.lastIndexOf('\n', mentions[0].index) + 1] ?? 0, list };
 }
@@ -325,11 +349,18 @@ function zoneOf(body, index, source) {
       else unmatched.push(match.unmatched);
     }
   };
-  if (lists.length) { concerns = true; lists.forEach(take); }
+  // A "Zona:" whose text opens a clause with a list of its own, "Zona: zona de câmpie a județului …,
+  // respectiv zona localităților: …", only labels it: the inner list is the one read.
+  const labelled = zoneLists(folded);
+  const zones = labelled.filter(list => !labelled.some(other => other.start > list.start && other.start < list.end)
+    && !lists.some(range => list.start >= range.start && list.start <= range.end))
+    .map(list => ({ ...list, county: clauseCounty(folded, list.start) }));
+  const ours = [...lists, ...zones.filter(list => list.county === 'botosani')];
+  if (ours.length) { concerns = true; ours.forEach(take); }
   else if (namesCounty(folded)) { concerns = true; county = true; }
   else if (!otherCountyList(folded)) {
-    const zones = zoneLists(folded).filter(list => !otherCountyClause(folded, list.start));
-    if (zones.length) zones.forEach(take);
+    const generic = zones.filter(list => !list.county);
+    if (generic.length) generic.forEach(take);
     // Free text is read only when it names no county at all: names repeat across counties.
     else if (!/\bjud(?:et\w*|\.)/.test(folded)) namesInText(folded, index.uats).forEach(name => areas.add(name));
     concerns = areas.size > 0 || places.size > 0;

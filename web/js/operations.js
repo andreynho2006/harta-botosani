@@ -1,7 +1,7 @@
 import { normalizeAlerts, affectedAlertLocations, resolvePlace, placeKey, placeLabel, legacyNote, countLabel, ALERT_LABELS, ALERT_RANK } from "./operations-alerts.js?v=20261019-multi-alerts";
 import { buildAlertGeography, buildAlertLabels, alertOutlined, attachAlertPopups } from "./operations-alert-map.js?v=20261019-multi-alerts";
-import { createAlertEditor } from "./operations-alert-editor.js?v=20261025-anm-import";
-import { fetchAnmFeeds } from "./operations-alert-feed.js?v=20261025-anm-import";
+import { createAlertEditor } from "./operations-alert-editor.js?v=20261025-anm-review";
+import { fetchAnmFeeds } from "./operations-alert-feed.js?v=20261025-anm-review";
 import { presentationFeatures, presentationRiskGroups, presentationKindLabel } from "./operations-risks.js?v=20261018-cards";
 import { EventStore, CloudStates, createEvent, sanitizeEvent, cleanupLegacyArchive } from "./event-store.js?v=20261025-cloud-state";
 import {
@@ -454,8 +454,8 @@ export function initOperations(ctx) {
       if (mode === "area") { areaTarget = alertId; drawInstructions(); }
     },
     fetchFeeds: ctx.fetchAnmFeeds ?? (() => fetchAnmFeeds()),
-    // The feed answers after a while: a marker form opened meanwhile would be lost to the re-render.
-    blocked: () => pending ? "Finalizează sau anulează marcajul curent, apoi importă din nou avertizările ANM." : "",
+    // The feed answers after a while: a marker form or a map pick started meanwhile would be lost to the re-render.
+    blocked: () => pending || mode || itinerary.isPicking() ? "Finalizează sau anulează marcajul ori alegerea de pe hartă în curs, apoi importă din nou avertizările ANM." : "",
   });
   // Warning popups stay quiet while any other map tool owns the pointer.
   attachAlertPopups(map, () => Boolean(active && !mode && !pending && !itinerary.isPicking() && !ctx.isMapToolActive?.()));

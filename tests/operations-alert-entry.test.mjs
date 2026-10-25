@@ -331,6 +331,18 @@ Fenomene: vijelie`);
       await settle();
       check('importWaitsForOpenMarker', !(stored().alerts || []).length && report().includes('Finalizează sau anulează marcajul') && $('#ops-marker'));
     }
+    // So would a map pick started meanwhile: the pick goes on and nothing is added.
+    {
+      let release;
+      const { ops, stored } = boot({ alerts: [warn('w1')], fetchAnmFeeds: () => new Promise(resolve => { release = () => resolve({ nowcasting: ours, general: null, errors: {} }); }) });
+      importButton().click();
+      await settle();
+      click('[data-warning-id="w1"] [data-alert-pick]');
+      release();
+      await settle();
+      check('importWaitsForMapPick', stored().alerts.length === 1 && report().includes('alegerea de pe hartă') && ops.isDrawing());
+      ops.cancelDrawing();
+    }
     // Another situation opened while the feed is read takes nothing, and neither does the first.
     {
       let release;
@@ -343,6 +355,7 @@ Fenomene: vijelie`);
       click('button.lnk[data-action="new"]');
       $('#ops-new [name="title"]').value = 'Altă situație';
       $('#ops-new').requestSubmit();
+      check('importWaitsInOtherSituation', importButton()?.disabled && importButton().textContent.includes('pentru altă situație'));
       release();
       await settle();
       check('importStaysWithItsSituation', stored().id !== first && stored().title === 'Altă situație' && !(stored().alerts || []).length
@@ -372,6 +385,6 @@ test('zone presets, the map pick and a pasted message fill warnings in the real 
     assert.equal(result.error, undefined, result.error);
     const failed = Object.entries(result).filter(([, ok]) => !ok).map(([name]) => name);
     assert.deepEqual(failed, [], 'Warning entry regressions');
-    assert.ok(Object.keys(result).length >= 68, 'Every scenario reported');
+    assert.ok(Object.keys(result).length >= 70, 'Every scenario reported');
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });

@@ -1,7 +1,7 @@
 import { normalizeAlerts, resolvePlace, placeKey, placeLabel, legacyNote, legacyNoteOverflow, notesWithLegacyNote, countLabel, ALERT_LABELS as CODES } from './operations-alerts.js?v=20261019-multi-alerts';
 import { localTime, isoTime, dateLabel } from './operations-time.js';
-import { parseWarningText } from './operations-alert-parse.js?v=20261025-anm-import';
-import { anmWarnings } from './operations-alert-feed.js?v=20261025-anm-import';
+import { parseWarningText } from './operations-alert-parse.js?v=20261025-anm-review';
+import { anmWarnings } from './operations-alert-feed.js?v=20261025-anm-review';
 
 const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const fold = value => String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
@@ -154,8 +154,9 @@ export function createAlertEditor({ panel, getActive, getData, onChange, onPickM
   }
   const reportHTML = lines => lines.map(line => `<p>${esc(line)}</p>`).join('');
   const IMPORT_LABEL = 'Importă din ANM (nowcasting și avertizări generale)';
-  const importButtonHTML = () => importing && importing === getActive()?.id
-    ? `<button type="button" class="btn" data-alert-action="import-anm" disabled aria-busy="true">Se citesc avertizările ANM…</button>`
+  // One read at a time: while another situation's import runs, this one's button waits too.
+  const importButtonHTML = () => importing
+    ? `<button type="button" class="btn" data-alert-action="import-anm" disabled aria-busy="true">${importing === getActive()?.id ? 'Se citesc avertizările ANM…' : 'Se citesc avertizările ANM pentru altă situație…'}</button>`
     : `<button type="button" class="btn" data-alert-action="import-anm">${IMPORT_LABEL}</button>`;
   function setImporting(id) {
     importing = id;
@@ -250,7 +251,7 @@ export function createAlertEditor({ panel, getActive, getData, onChange, onPickM
     const why = blocked();
     if (why) { showReport([...notes, why]); return; }
     const alerts = editableOrExplain();
-    if (!alerts) return;
+    if (!alerts) { showReport([...notes, 'Nu am adăugat nimic: notele situației trebuie scurtate întâi, după cum scrie deasupra listei.']); return; }
     const held = new Set(alerts.map(alert => alert.id));
     const fresh = found.filter(warning => !held.has(warning.id));
     const kept = found.length - fresh.length;

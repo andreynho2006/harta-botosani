@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { readFileSync } from 'node:fs';
 import { anmTimes, anmWarnings, readNowcasting, readGeneral, htmlText, fetchAnmFeeds, ANM_FEEDS } from '../web/js/operations-alert-feed.js';
-import { readZone } from '../web/js/operations-alert-parse.js';
+import { readZone, parseWarningText } from '../web/js/operations-alert-parse.js';
 import { isoTime } from '../web/js/operations-time.js';
 
 const uats = ['Botoșani', 'Dorohoi', 'Broscăuți', 'Dersca', 'Hilișeu-Horia', 'Mihăileni', 'Manoleasa', 'Săveni', 'Mihălășeni', 'Flămânzi', 'Vlădeni'];
@@ -193,4 +193,54 @@ test('an answer that is neither warnings nor "Nu exista date" is a failed feed, 
   }
   const empty = await fetchAnmFeeds({ fetchImpl: async () => ({ ok: true, json: async () => 'Nu exista date' }) });
   assert.deepEqual(empty.errors, {});
+});
+
+test('a zone clause of ours is read beside a neighbour\'s county list or our own, and whatever its punctuation', () => {
+  const zone = text => readZone(text, { uats: [...uats, 'Corni'] }).areas;
+  assert.deepEqual(zone('Județul Suceava: Liteni;\nZona de câmpie a județului Botoșani, respectiv zona localităților: Săveni;'), ['Săveni']);
+  assert.deepEqual(zone('Județul Botoșani: Dorohoi;\nZona de câmpie a județului Botoșani, respectiv zona localităților: Săveni;'), ['Dorohoi', 'Săveni']);
+  assert.deepEqual(zone('Zona de câmpie a județului Suceava,\nrespectiv zona localităților: Corni;'), [], 'a clause wrapped after a comma');
+  assert.deepEqual(zone('Zona de câmpie a județului Suceava, respectiv zona localităților: Corni. Zona de câmpie a județului Botoșani, respectiv zona localităților: Săveni;'), ['Săveni']);
+  assert.deepEqual(zone('Zona de câmpie a județului Botoșani, respectiv zona localităților: Săveni. Zona de munte a județului Suceava, respectiv zona localităților: Corni;'), ['Săveni'], 'a full stop ends our clause');
+  assert.deepEqual(zone('Zona de nord a județului, respectiv zona localităților: Dorohoi, Săveni;'), ['Dorohoi', 'Săveni'], '"a județului, respectiv" names no county');
+});
+
+test('a "Zona:" label over a neighbour\'s clause reads neither its names nor its prose', () => {
+  const [warning] = parseWarningText('Cod: GALBEN\nZona: Zona de câmpie a județului Suceava, respectiv zona localităților: Liteni, Corni;\nZona de câmpie a județului Botoșani, respectiv zona localităților: Săveni;', { uats: [...uats, 'Corni'] });
+  assert.deepEqual(warning.areas, ['Săveni']);
+  assert.deepEqual(warning.unmatched, []);
+  assert.deepEqual(readZone('Zona: Zona de câmpie a județului Suceava, respectiv zona localităților: Liteni, Corni;', { uats: [...uats, 'Corni'] }).areas, [], 'the label alone reads nothing');
+});
+
+test('two sections of the same code each keep their interval and phenomena; the county\'s is taken', () => {
+  const section = (n, interval, zone, phenomena) => `MESAJ ${n}: COD GALBEN\nInterval de valabilitate: ${interval}\nFenomene vizate: ${phenomena}\nZone afectate: ${zone}\n`;
+  const mesaj = section(1, '10 ianuarie, ora 12 – 10 ianuarie, ora 20', 'Banat', 'ceață') + section(2, '10 ianuarie, ora 20 – 11 ianuarie, ora 09', 'județul Botoșani', 'polei');
+  const [warning] = readGeneral({ avertizare: { '@attributes': { dataAparitiei: '2026-01-10T10:00', dataExpirarii: '2026-01-11T90:00', intervalul: 'conform textelor', fenomeneVizate: 'conform textelor', mesaj },
+    judet: { cod: 'BT', culoare: 1 } } }, { uats });
+  assert.deepEqual([warning.validFrom, warning.validTo, warning.text], [at('2026-01-10T20:00'), at('2026-01-11T09:00'), 'polei']);
+  const repeated = 'COD GALBEN\nAtenționare cod galben de polei.\nInterval de valabilitate: 10 ianuarie, ora 12 – 10 ianuarie, ora 20\nZone afectate: județul Botoșani';
+  assert.equal(parseWarningText(repeated, { uats, now: new Date('2026-01-09T12:00:00Z'), all: true }).length, 1, 'the title repeated in the text opens nothing');
+  const long = readGeneral({ avertizare: { '@attributes': { dataAparitiei: '2026-01-10T10:00', intervalul: 'conform textelor', fenomeneVizate: 'conform textelor',
+    mesaj: `COD GALBEN\nInterval de valabilitate: 10 ianuarie, ora 12 – 10 ianuarie, ora 20\nZone afectate: județul Botoșani\n${'Ninsori viscolite. '.repeat(400)}` }, judet: { cod: 'BT', culoare: 1 } } }, { uats });
+  assert.equal(long[0].textCut, true, 'a section cut at the limit says so');
+});
+
+test('a general warning issued at "T10" / "T20" appeared at 10:00 / 20:00, and expires after that', () => {
+  const general = (dataAparitiei, dataExpirarii) => readGeneral({ avertizare: { '@attributes': { dataAparitiei, dataExpirarii, intervalul: 'conform textelor', mesaj: '' }, judet: { cod: 'BT', culoare: 1 } } }, { uats })[0];
+  assert.equal(general('2026-01-10T10:00', '2026-01-10T20:00').validTo, at('2026-01-10T20:00'));
+  assert.equal(general('2026-01-10T20:00', '2026-01-11T90:00').validTo, at('2026-01-11T09:00'));
+});
+
+test('a start in the hour spring skips leaves the end after the time of issue', () => {
+  const [warning] = readNowcasting(nowcast({ creat: '2026-03-29 02:50:01', dataInceput: '2026-03-29T30:30', dataSfarsit: '2026-03-29T10:00', zona: 'Județul Botoșani: Dorohoi;' }), { uats });
+  assert.deepEqual([warning.validFrom, warning.validTo, warning.interval], ['', at('2026-03-29T10:00'), 'partial']);
+});
+
+test('warnings set to null or to a bare value are a failed feed; null items and repeated items are skipped', async () => {
+  for (const value of [{ avertizare: null }, { avertizare: 'error' }, { avertizare: 42 }]) {
+    const feeds = await fetchAnmFeeds({ fetchImpl: async () => ({ ok: true, json: async () => value }) });
+    assert.deepEqual(Object.keys(feeds.errors), ['nowcasting', 'general'], JSON.stringify(value));
+  }
+  const item = nowcast({ creat: '2026-07-14 09:32:01', dataInceput: '2026-07-14T90:40', dataSfarsit: '2026-07-14T10:30', zona: 'Județul Botoșani: Dorohoi;' }).avertizare[0];
+  assert.deepEqual(anmWarnings({ nowcasting: { avertizare: [null, item, item] }, general: { avertizare: [null] } }, { uats }).length, 1);
 });

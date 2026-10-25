@@ -1,7 +1,7 @@
 // Reads the ANM warnings published on meteoromania.ro: the nowcasting and the general warnings that
 // concern the county, as warnings the editor adds and the operator then checks.
 // Pure apart from `fetchAnmFeeds`, which the editor gets injected.
-import { foldText, readZone, readValidity, parseWarningText } from './operations-alert-parse.js?v=20261025-anm-import';
+import { foldText, readZone, readValidity, parseWarningText } from './operations-alert-parse.js?v=20261025-anm-review';
 import { isoTime, localTime } from './operations-time.js';
 
 const API = 'https://www.meteoromania.ro/wp-json/meteoapi/v2/';
@@ -22,8 +22,10 @@ export async function fetchAnmFeeds({ fetchImpl = globalThis.fetch, now = Date.n
     const response = await fetchImpl(`${url}?_=${now}`, { cache: 'no-store', signal: AbortSignal.timeout?.(timeout) });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const data = await response.json();
-    // Another answer, such as an error object or a bare value, is a failure, not an empty feed.
-    if (!(typeof data === 'string' && /^nu exist/i.test(data.trim())) && !(data && typeof data === 'object' && 'avertizare' in data)) throw new Error('răspuns neașteptat');
+    // Another answer, such as an error object, a bare value or { avertizare: null }, is a failure, not an empty feed.
+    const empty = value => typeof value === 'string' && /^nu exist/i.test(value.trim());
+    const warnings = data?.avertizare;
+    if (!empty(data) && !(data && typeof data === 'object' && !Array.isArray(data) && (empty(warnings) || (warnings && typeof warnings === 'object')))) throw new Error('răspuns neașteptat');
     return data;
   };
   const names = Object.keys(ANM_FEEDS);
@@ -56,7 +58,7 @@ export function htmlText(value) {
 }
 
 /** The feed's warnings: one object, a list, or the string "Nu exista date". */
-const asList = value => Array.isArray(value) ? value : value && typeof value === 'object' ? [value] : [];
+const asList = value => (Array.isArray(value) ? value : [value]).filter(item => item && typeof item === 'object');
 const attributes = item => item?.['@attributes'] ?? item ?? {};
 const itemsOf = data => asList(data?.avertizare).map(item => ({ attrs: attributes(item), item }));
 
@@ -94,7 +96,9 @@ function anmInterval(from, to, issued) {
   const ref = Date.parse(issued);
   const gap = time => Math.abs(Date.parse(time) - ref);
   const validFrom = !starts.length ? '' : Number.isFinite(ref) ? starts.reduce((best, time) => gap(time) < gap(best) ? time : best) : starts.at(-1);
-  const after = ends.filter(time => !validFrom || Date.parse(time) > Date.parse(validFrom));
+  // Without a start (one in the hour spring skips), the end still comes after the time of issue.
+  const floor = Date.parse(validFrom || issued);
+  const after = ends.filter(time => !Number.isFinite(floor) || Date.parse(time) > floor);
   const validTo = after[0] || '';
   const note = validFrom && validTo ? '' : ends.length && validFrom ? 'reversed' : validFrom || validTo ? 'partial' : 'none';
   return { validFrom, validTo, note };
@@ -156,7 +160,8 @@ export function readGeneral(data, { uats = [], now = new Date() } = {}) {
     if (!parts.length) return [];
     // The message holds one section per code, each with its own interval and phenomena. Its dates
     // name no year, so the day it appeared tells which one.
-    const appeared = anmTimes(a.dataAparitiei)[0];
+    // "T10" / "T20" read 10:00 / 20:00 here: ANM issues its general warnings by day, not at 01:00 or 02:00.
+    const appeared = anmTimes(a.dataAparitiei).at(-1);
     const issued = appeared ? new Date(appeared) : now;
     const sections = parseWarningText(htmlText(a.mesaj), { now: issued, all: true });
     const listed = conformText(a.intervalul) ? null : readValidity(a.intervalul, { now: issued });
@@ -168,19 +173,22 @@ export function readGeneral(data, { uats = [], now = new Date() } = {}) {
       // The section's own interval, else the message's, else only the end.
       const { validFrom, validTo, note } = section?.interval === '' ? { validFrom: section.validFrom, validTo: section.validTo, note: '' }
         : listed?.note === '' ? listed : { validFrom: '', validTo: expires, note: expires ? 'partial' : 'none' };
-      const phenomena = a.fenomeneVizate && !conformText(a.fenomeneVizate) ? htmlText(a.fenomeneVizate).replace(/[;.\s]+$/, '') : section?.text || '';
+      const listedPhenomena = a.fenomeneVizate && !conformText(a.fenomeneVizate) ? htmlText(a.fenomeneVizate).replace(/[;.\s]+$/, '') : null;
+      const phenomena = listedPhenomena === null ? { text: section?.text || '', textCut: Boolean(section?.textCut) } : limited(listedPhenomena);
       // Several messages may share a time of issue and a code, so what they say tells them apart.
       const id = `anm-gen-${digits(a.dataAparitiei)}-${code}-${fingerprint([a.tipMesaj, a.dataExpirarii, a.intervalul, county?.culoare, zoneOnly.join(), a.fenomeneVizate, a.mesaj])}`;
       return {
         key: id, id, code, source: 'ANM', validFrom, validTo, interval: note,
-        ...limited(phenomena), areas: zoneOnly.length ? [] : [...uats], places: [], county: !zoneOnly.length,
+        ...phenomena, areas: zoneOnly.length ? [] : [...uats], places: [], county: !zoneOnly.length,
         unmatched: [], ambiguous: [], zoneOnly,
       };
     });
   });
 }
 
-/** The county's warnings in both feeds, nowcasting first. */
+/** The county's warnings in both feeds, nowcasting first; an item the feed repeats counts once. */
 export function anmWarnings(feeds = {}, options = {}) {
-  return [...readNowcasting(feeds.nowcasting, options), ...readGeneral(feeds.general, options)];
+  const seen = new Set();
+  return [...readNowcasting(feeds.nowcasting, options), ...readGeneral(feeds.general, options)]
+    .filter(warning => !seen.has(warning.id) && seen.add(warning.id));
 }
