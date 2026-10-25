@@ -6,6 +6,10 @@ const wallFormatter = new Intl.DateTimeFormat('en-CA', {
 const labelFormatter = new Intl.DateTimeFormat('ro-RO', {
   timeZone: TIME_ZONE, dateStyle: 'short', timeStyle: 'short',
 });
+const shortLabelFormatter = new Intl.DateTimeFormat('ro-RO', {
+  timeZone: TIME_ZONE, day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit',
+});
+const clockFormatter = new Intl.DateTimeFormat('ro-RO', { timeZone: TIME_ZONE, timeStyle: 'short' });
 
 function dateFromISO(value) {
   if (typeof value !== 'string' || !/(Z|[+-]\d{2}:\d{2})$/i.test(value)) throw new Error('A timestamp with an explicit UTC offset is required.');
@@ -69,4 +73,12 @@ export function isoTime(value) {
 export function dateLabel(iso) {
   if (iso === '' || iso == null) return '';
   return labelFormatter.format(dateFromISO(iso));
+}
+
+/** "17.10.2026, 06:00 – 20:00": an end on the start's day in the county shows only its time. `short` drops the year. */
+export function intervalLabel(fromIso, toIso, short = false) {
+  const from = dateFromISO(fromIso), to = dateFromISO(toIso);
+  const format = short ? shortLabelFormatter : labelFormatter;
+  const sameDay = wallString(from).slice(0, 10) === wallString(to).slice(0, 10);
+  return `${format.format(from)} – ${(sameDay ? clockFormatter : format).format(to)}`;
 }

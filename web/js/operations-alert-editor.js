@@ -1,5 +1,5 @@
 import { normalizeAlerts, resolvePlace, placeKey, placeLabel, legacyNote, legacyNoteOverflow, notesWithLegacyNote, countLabel, ALERT_LABELS as CODES } from './operations-alerts.js?v=20261019-multi-alerts';
-import { localTime, isoTime, dateLabel } from './operations-time.js';
+import { localTime, isoTime, dateLabel, intervalLabel } from './operations-time.js?v=20261025-same-day';
 import { parseWarningText } from './operations-alert-parse.js?v=20261025-anm-review';
 import { anmWarnings } from './operations-alert-feed.js?v=20261025-anm-review';
 
@@ -80,7 +80,8 @@ export function createAlertEditor({ panel, getActive, getData, onChange, onPickM
   let importing = null;
   const canonical = (kind, entry) => canonicalEntry(kind, entry, getData()?.localities || []);
   function warnings() { return normalizeAlerts(getActive()); }
-  const legacyInterval = note => note.validFrom || note.validTo ? [note.validFrom, note.validTo].map(value => value ? dateLabel(value) : '…').join(' – ') : '';
+  const legacyInterval = note => note.validFrom && note.validTo ? intervalLabel(note.validFrom, note.validTo)
+    : note.validFrom || note.validTo ? [note.validFrom, note.validTo].map(value => value ? dateLabel(value) : '…').join(' – ') : '';
   function legacyText(active) {
     const note = legacyNote(active);
     if (!note) return '';
@@ -190,7 +191,7 @@ export function createAlertEditor({ panel, getActive, getData, onChange, onPickM
         : warning.county && warning.areas.length === allUats ? 'tot județul'
         : warning.areas.length || warning.places.length ? [warning.areas.length && countLabel(warning.areas.length, 'UAT', 'UAT-uri'), warning.places.length && countLabel(warning.places.length, 'sat', 'sate')].filter(Boolean).join(' și ')
         : 'nicio zonă din județ recunoscută: alege-o cu butoanele zonei';
-      const interval = warning.validFrom && warning.validTo ? `${dateLabel(warning.validFrom)} – ${dateLabel(warning.validTo)}`
+      const interval = warning.validFrom && warning.validTo ? intervalLabel(warning.validFrom, warning.validTo)
         : warning.interval === 'reversed' ? 'sfârșitul intervalului era înaintea începutului, completează-l'
         : warning.validFrom || warning.validTo ? 'interval incomplet, completează-l' : 'fără interval, completează-l';
       lines.push(`${CODES[warning.code]}${warning.source ? ` (${warning.source})` : ''}: ${zone}; ${interval}.`);

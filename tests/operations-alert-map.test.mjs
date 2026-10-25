@@ -13,6 +13,12 @@ test('same UAT combines simultaneous warnings with highest severity and retains 
   const html = alertPopupHTML(data.features, Date.parse('2026-10-20T00:00:00Z'));
   assert.match(html,/Cod galben/); assert.match(html,/Cod roșu/); assert.match(html,/Încheiat/); assert.match(html,/09:00/); assert.match(html,/15:00/);
 });
+test('the popup names a same-day interval\'s date once and labels each end on its own when one is missing', () => {
+  const popup = extra => alertPopupHTML(buildAlertGeography({ alerts: [warning('a', 'yellow', extra)] }, { admin }).features);
+  assert.match(popup({}), /<br>19\.10\.2026, 09:00 – 15:00<br>/);
+  assert.match(popup({ validTo: '2026-10-20T06:00:00Z' }), /<br>19\.10\.2026, 09:00 – 20\.10\.2026, 09:00<br>/);
+  assert.match(popup({ validTo: '' }), /<br>19\.10\.2026, 09:00 – neprecizat<br>/);
+});
 test('villages use exact names and finite coordinates, never prefix matches', () => {
   const data = buildAlertGeography({ alerts: [warning('a','orange',{ areas:[], places:['Agafton','Curte'] })] }, {localities:[{name:'Agafton',lon:26.5,lat:47.7},{name:'Curtești',lon:26.6,lat:47.7}]});
   assert.equal(data.features.length,1);

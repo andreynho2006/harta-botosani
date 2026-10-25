@@ -180,6 +180,7 @@ Fenomene: vijelie`);
       check('pasteFillsTheInterval', added?.validFrom && added.validTo && Date.parse(added.validTo) - Date.parse(added.validFrom) === 3600000);
       check('pasteOpensTheNewWarning', entry(added?.id)?.open && !entry('w1').open);
       check('pasteReportsWhatToCheck', report().includes('Am adăugat 1 avertizare') && report().includes('Cod portocaliu (ANM): 2 UAT-uri și 1 sat') && report().includes('Nerecunoscute: „Tâmpești”'));
+      check('pasteReportsTheDateOnce', report().includes('2 UAT-uri și 1 sat; 20.10.2026, 18:30 – 19:30.'));
       check('pasteClearsTheBox', $('[data-alert-paste]').value === '' && $('.ops-alert-paste').open);
       click('[data-alert-action="add"]');
       check('reportGoesWithTheNextAdd', !report() && stored().alerts.length === 3);

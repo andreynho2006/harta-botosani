@@ -112,8 +112,10 @@ async function browserChecks({ initOperations, createEvent }) {
         check('fullWarningAvailable', alert.textContent.includes('Warning line 59'));
         check('sourceVisible', alert.textContent.includes('Warning authority'));
         check('validityVisible', alert.textContent.includes('17.10.2026'));
+        check('sameDayIntervalOnce', alert.querySelector('.ops-alert-when')?.textContent === 'Warning authority · 17.10.2026, 09:00 – 23:00');
       }
       if (name === 'legend') check('legendReachable', inViewport(panel(name)) && panel(name).textContent.includes('Actualizat'));
+      if (name === 'legend') check('legendSameDayInterval', panel(name).textContent.includes('17.10, 09:00 – 23:00'));
       if (name === 'commands') {
         const commands = [...panel(name).querySelectorAll('button')];
         check('commandsReachable', inViewport(panel(name)) && commands.length > 0);

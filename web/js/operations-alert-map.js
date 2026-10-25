@@ -1,5 +1,6 @@
 /* global maplibregl */
 import { normalizeAlerts, resolvePlace, placeKey, placeLabel, ALERT_COLORS as colors, ALERT_RANK as rank, ALERT_LABELS as labels } from './operations-alerts.js?v=20261019-multi-alerts';
+import { intervalLabel } from './operations-time.js?v=20261025-same-day';
 
 const escape = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
@@ -199,6 +200,11 @@ function formatTime(value) {
   return new Intl.DateTimeFormat('ro-RO', { timeZone: 'Europe/Bucharest', dateStyle: 'short', timeStyle: 'short' }).format(timestamp);
 }
 
+// Both ends as saved (UTC) share the shorter same-day form; a missing or foreign end keeps its own label.
+function formatInterval(from, to) {
+  try { return intervalLabel(from, to); } catch { return `${formatTime(from)} – ${formatTime(to)}`; }
+}
+
 /** Escaped popup markup; historic and future warnings remain inspectable. */
 export function alertPopupHTML(features, now = Date.now()) {
   const names = new Set(), warnings = new Map();
@@ -218,7 +224,7 @@ export function alertPopupHTML(features, now = Date.now()) {
   return `<div class="ops-alert-popup"><strong>${[...names].map(escape).join(' · ')}</strong>${entries.map(warning => {
     const start = Date.parse(warning.validFrom), end = Date.parse(warning.validTo);
     const timing = Number.isFinite(end) && end < now ? 'Încheiat' : Number.isFinite(start) && start > now ? 'Urmează' : Number.isFinite(start) && Number.isFinite(end) ? 'În vigoare' : 'Interval incomplet';
-    return `<div class="ops-alert-popup-item" data-code="${escape(warning.code)}"><strong>${escape(labels[warning.code] || warning.code)}</strong>${warning.source ? ` · ${escape(warning.source)}` : ''}<br>${escape(formatTime(warning.validFrom))} – ${escape(formatTime(warning.validTo))}<br><small>${timing} · ora României</small>${warning.text ? `<div>${escape(warning.text)}</div>` : ''}</div>`;
+    return `<div class="ops-alert-popup-item" data-code="${escape(warning.code)}"><strong>${escape(labels[warning.code] || warning.code)}</strong>${warning.source ? ` · ${escape(warning.source)}` : ''}<br>${escape(formatInterval(warning.validFrom, warning.validTo))}<br><small>${timing} · ora României</small>${warning.text ? `<div>${escape(warning.text)}</div>` : ''}</div>`;
   }).join('')}${approximate ? '<p class="ops-alert-popup-note"><small>Zona satului este orientativă (1,6 km).</small></p>' : ''}</div>`;
 }
 

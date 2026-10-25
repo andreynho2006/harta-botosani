@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { localTime, isoTime, dateLabel } from '../web/js/operations-time.js';
+import { localTime, isoTime, dateLabel, intervalLabel } from '../web/js/operations-time.js';
 
 test('Bucharest wall time uses winter and summer offsets explicitly', () => {
   assert.equal(localTime('2026-01-16T10:30:00.000Z'), '2026-01-16T12:30');
@@ -29,6 +29,20 @@ test('ambiguous autumn wall time consistently chooses the earlier instant', () =
   assert.equal(localTime('2026-10-25T01:30:00.000Z'), '2026-10-25T03:30');
 });
 
+test('a same-day interval names its date once, by the county\'s day; one over two days names both', () => {
+  assert.equal(intervalLabel('2026-10-17T03:00:00Z', '2026-10-17T17:00:00Z'), '17.10.2026, 06:00 – 20:00');
+  assert.equal(intervalLabel('2026-10-17T03:00:00Z', '2026-10-17T17:00:00Z', true), '17.10, 06:00 – 20:00');
+  assert.equal(intervalLabel('2026-10-25T09:00:00Z', '2026-10-26T06:00:00Z'), '25.10.2026, 11:00 – 26.10.2026, 08:00');
+  assert.equal(intervalLabel('2026-10-25T09:00:00Z', '2026-10-26T06:00:00Z', true), '25.10, 11:00 – 26.10, 08:00');
+  // The same UTC date spans two Bucharest days, and two UTC dates can fall on one.
+  assert.equal(intervalLabel('2026-10-17T20:00:00Z', '2026-10-17T22:00:00Z'), '17.10.2026, 23:00 – 18.10.2026, 01:00');
+  assert.equal(intervalLabel('2026-10-17T21:30:00Z', '2026-10-18T05:00:00Z'), '18.10.2026, 00:30 – 08:00');
+  // 25.10.2026 has 25 hours: 01:00 summer time to 23:00 winter time is still one day.
+  assert.equal(intervalLabel('2026-10-24T22:00:00Z', '2026-10-25T21:00:00Z'), '25.10.2026, 01:00 – 23:00');
+  assert.throws(() => intervalLabel('2026-10-17T06:00', '2026-10-17T20:00:00Z'));
+  assert.throws(() => intervalLabel('2026-10-17T06:00:00Z', ''));
+});
+
 test('empty values remain empty', () => {
   for (const fn of [localTime, isoTime, dateLabel]) {
     assert.equal(fn(''), '');
@@ -47,6 +61,7 @@ test('display and parsing remain in Bucharest when the host timezone changes', (
       assert.equal(isoTime('2026-07-17T01:30'), iso);
       assert.match(dateLabel(iso), /17\.07\.2026/);
       assert.match(dateLabel(iso), /01:30/);
+      assert.equal(intervalLabel(iso, '2026-07-16T23:00:00.000Z'), '17.07.2026, 01:30 – 02:00');
     }
   } finally {
     if (previous === undefined) delete process.env.TZ; else process.env.TZ = previous;

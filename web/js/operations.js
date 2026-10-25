@@ -1,6 +1,6 @@
 import { normalizeAlerts, affectedAlertLocations, resolvePlace, placeKey, placeLabel, legacyNote, countLabel, ALERT_LABELS, ALERT_RANK } from "./operations-alerts.js?v=20261019-multi-alerts";
-import { buildAlertGeography, buildAlertLabels, alertOutlined, attachAlertPopups } from "./operations-alert-map.js?v=20261025-county-band";
-import { createAlertEditor } from "./operations-alert-editor.js?v=20261025-anm-review";
+import { buildAlertGeography, buildAlertLabels, alertOutlined, attachAlertPopups } from "./operations-alert-map.js?v=20261025-same-day";
+import { createAlertEditor } from "./operations-alert-editor.js?v=20261025-same-day";
 import { fetchAnmFeeds } from "./operations-alert-feed.js?v=20261025-anm-review";
 import { presentationFeatures, presentationRiskGroups, presentationKindLabel } from "./operations-risks.js?v=20261018-cards";
 import { EventStore, CloudStates, createEvent, sanitizeEvent, cleanupLegacyArchive } from "./event-store.js?v=20261025-cloud-state";
@@ -11,7 +11,7 @@ import {
 import { outsideMask, geometryBounds } from "./commune-geometry.js";
 import { circle } from "./geo.js";
 import { LAYER_GROUPS, LAYER_PRESETS } from "./config.js?v=20261018-itineraries-v2";
-import { localTime, isoTime, dateLabel } from "./operations-time.js";
+import { localTime, isoTime, dateLabel, intervalLabel } from "./operations-time.js?v=20261025-same-day";
 import { createOperationsCards } from "./operations-cards.js?v=20261018-cards";
 import { createInterventionPlanner } from "./intervention-planner.js?v=20261025-safe-routes";
 
@@ -2202,8 +2202,11 @@ export function initOperations(ctx) {
       const time = Date.parse(value);
       return Number.isFinite(time) ? new Intl.DateTimeFormat("ro-RO", { timeZone: "Europe/Bucharest", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }).format(time) : "";
     };
-    // "de la …" / "până la …" when only one end of the validity is known.
-    const span = (from, to, format) => from && to ? `${format(from)} – ${format(to)}` : from ? `de la ${format(from)}` : to ? `până la ${format(to)}` : "";
+    // "de la …" / "până la …" when only one end of the validity is known; `short` drops the year, as in the legend.
+    const span = (from, to, short = false) => {
+      const format = short ? shortTime : dateLabel;
+      return from && to ? intervalLabel(from, to, short) : from ? `de la ${format(from)}` : to ? `până la ${format(to)}` : "";
+    };
     // A code-less message from an older archive still shows, on a neutral banner.
     const note = warnings.length ? null : legacyNote(active);
     const scope = warning => [warning.areas.length ? `${warning.areas.length} UAT` : "", warning.villages.length ? countLabel(warning.villages.length, "sat", "sate") : ""].filter(Boolean).join(", ") || "fără localități";
@@ -2220,7 +2223,7 @@ export function initOperations(ctx) {
           <h1>${esc(active.title)}</h1>
         </div>
         ${hasNotes ? `<div id="ops-pres-message-text" tabindex="0" aria-label="Descriere"><p class="ops-slide-notes">${esc(active.notes)}</p></div>` : ""}
-        ${warnings.length ? `<div class="ops-alert-grid">${warnings.map((warning, index) => `<p id="ops-pres-alert${index ? '-' + index : ''}" class="ops-alert" data-code="${esc(warning.code)}" data-pres-key="alert:${esc(warning.id)}" tabindex="0" role="note"><b class="ops-alert-code">${esc(ALERT_LABELS[warning.code] || warning.code)}</b><span class="ops-alert-when">${[warning.source, span(warning.validFrom, warning.validTo, dateLabel) || "Interval nespecificat"].filter(Boolean).map(esc).join(" · ")}</span>${warning.text ? `<span class="ops-alert-text">${esc(warning.text)}</span>` : ""}<span class="ops-alert-areas">${esc([...warning.areas, ...warning.villages].join(", ") || "Fără localități selectate")}</span></p>`).join("")}</div>` : note ? `<div class="ops-alert-grid"><p id="ops-pres-alert" class="ops-alert" data-code="" tabindex="0" role="note"><b class="ops-alert-code">Mesaj</b><span class="ops-alert-when">${[note.source, span(note.validFrom, note.validTo, dateLabel)].filter(Boolean).map(esc).join(" · ")}</span>${note.text ? `<span class="ops-alert-text">${esc(note.text)}</span>` : ""}</p></div>` : ""}
+        ${warnings.length ? `<div class="ops-alert-grid">${warnings.map((warning, index) => `<p id="ops-pres-alert${index ? '-' + index : ''}" class="ops-alert" data-code="${esc(warning.code)}" data-pres-key="alert:${esc(warning.id)}" tabindex="0" role="note"><b class="ops-alert-code">${esc(ALERT_LABELS[warning.code] || warning.code)}</b><span class="ops-alert-when">${[warning.source, span(warning.validFrom, warning.validTo) || "Interval nespecificat"].filter(Boolean).map(esc).join(" · ")}</span>${warning.text ? `<span class="ops-alert-text">${esc(warning.text)}</span>` : ""}<span class="ops-alert-areas">${esc([...warning.areas, ...warning.villages].join(", ") || "Fără localități selectate")}</span></p>`).join("")}</div>` : note ? `<div class="ops-alert-grid"><p id="ops-pres-alert" class="ops-alert" data-code="" tabindex="0" role="note"><b class="ops-alert-code">Mesaj</b><span class="ops-alert-when">${[note.source, span(note.validFrom, note.validTo)].filter(Boolean).map(esc).join(" · ")}</span>${note.text ? `<span class="ops-alert-text">${esc(note.text)}</span>` : ""}</p></div>` : ""}
 
       </header>
       <nav id="ops-pres-commands" class="ops-slide-controls" data-pres-panel="commands" data-pres-edge="right" ${commandsCollapsed ? "hidden" : ""} aria-label="Comenzi prezentare">
@@ -2262,7 +2265,7 @@ export function initOperations(ctx) {
       </aside>
 
       <footer id="ops-pres-legend" class="ops-slide-foot" data-pres-panel="legend" data-pres-edge="bottom" ${legendCollapsed ? "hidden" : ""} aria-label="Legenda situației">
-        <div class="ops-legend">${warnings.map(warning => `<span class="ops-legend-code" data-code="${esc(warning.code)}"><i aria-hidden="true"></i><b>${esc(ALERT_LABELS[warning.code] || warning.code)}</b> · ${esc(scope(warning))} · ${esc(span(warning.validFrom, warning.validTo, shortTime) || "interval nespecificat")}</span>`).join("")}${Object.entries(counts).map(([kind, count]) => `<span><i data-kind="${esc(kind)}"></i>${esc(kind === "resolved" ? "Rezolvat / Redeschis" : presentationKindLabel(kind, active.type, KINDS[kind]))}: <b>${count}</b></span>`).join("") || `<span>Toate situațiile monitorizate: <b>0 probleme active</b></span>`}</div>
+        <div class="ops-legend">${warnings.map(warning => `<span class="ops-legend-code" data-code="${esc(warning.code)}"><i aria-hidden="true"></i><b>${esc(ALERT_LABELS[warning.code] || warning.code)}</b> · ${esc(scope(warning))} · ${esc(span(warning.validFrom, warning.validTo, true) || "interval nespecificat")}</span>`).join("")}${Object.entries(counts).map(([kind, count]) => `<span><i data-kind="${esc(kind)}"></i>${esc(kind === "resolved" ? "Rezolvat / Redeschis" : presentationKindLabel(kind, active.type, KINDS[kind]))}: <b>${count}</b></span>`).join("") || `<span>Toate situațiile monitorizate: <b>0 probleme active</b></span>`}</div>
         <span>${dirty ? "Situație în lucru" : "Actualizat " + dateLabel(active.updatedAt)}</span>
       </footer>`;
     for (const el of presentation.querySelectorAll("[id]")) if (scrollPositions.has(presKey(el))) el.scrollTop = scrollPositions.get(presKey(el));
