@@ -12,7 +12,7 @@ import { initOperations } from "./operations.js?v=20261025-cloud-guard";
 import {
   saveSubunitsCloud, subscribeSubunits,
   saveSituationCloud, deleteSituationCloud, subscribeSituations, onCloudStatus,
-} from "./cloud-db.js";
+} from "./cloud-db.js?v=20261025-cloud-guard";
 import {
   distance, bearing, direction, circle, fmtDistance, fmtLatLon, fmtStereo, fmtDMS,
   parseCoordinates, makeUatLookup,
@@ -229,8 +229,8 @@ async function init() {
       });
     }
     if (cloud?.subscribeSituations) {
-      cloud.subscribeSituations((cloudEvents) => {
-        operations?.syncFromCloud?.(cloudEvents);
+      cloud.subscribeSituations((cloudEvents, meta) => {
+        operations?.syncFromCloud?.(cloudEvents, meta);
       });
     }
   } catch { /* context de test fără cloud */ }

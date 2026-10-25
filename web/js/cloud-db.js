@@ -136,19 +136,25 @@ export async function saveSubunitsCloud(subunitsDoc) {
 
 // ------------------------------------------------------------------ Situații operative CJSU
 
-/** Ascultă în timp real toate situațiile operative CJSU din Firestore. */
+/**
+ * Ascultă în timp real toate situațiile operative CJSU din Firestore. Cache-ul local arată
+ * imediat și scrierile proprii încă neconfirmate de server; `pending` le numește, iar
+ * `includeMetadataChanges` anunță și momentul în care serverul le confirmă.
+ */
 export async function subscribeSituations(onUpdateAll) {
   const conn = await getFirestoreDb();
   if (!conn) return () => {};
   const { db, fs } = conn;
   const colRef = fs.collection(db, "situatii");
-  return fs.onSnapshot(colRef, (snap) => {
-    const events = [];
+  return fs.onSnapshot(colRef, { includeMetadataChanges: true }, (snap) => {
+    const events = [], pending = new Set();
     snap.forEach((doc) => {
       const d = parseSituationFromFirestore(doc.data());
-      if (d && d.id) events.push(d);
+      if (!d || !d.id) return;
+      events.push(d);
+      if (doc.metadata.hasPendingWrites) pending.add(d.id);
     });
-    onUpdateAll(events);
+    onUpdateAll(events, { pending });
   }, (err) => {
     console.warn("Eroare la sincronizarea situațiilor din cloud:", err);
   });

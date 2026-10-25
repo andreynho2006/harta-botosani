@@ -25,11 +25,11 @@ async function browserChecks({ initOperations, createEvent }) {
     getPadding: () => ({}), getContainer: () => document.querySelector('#map'), fitBounds: noop, flyTo: noop, setPadding: noop, resize: noop, jumpTo: noop,
     getCanvas: () => document.querySelector('#map'),
   };
-  const boot = ({ active, session = {}, save } = {}) => {
+  const boot = ({ active, session = {}, save, del } = {}) => {
     const memory = new Map([['hb.ops.session.v1', JSON.stringify({ active, ...session })]]);
     const storage = { getItem: key => memory.get(key) ?? null, setItem: (key, value) => memory.set(key, value), removeItem: key => memory.delete(key) };
     const calls = [], toasts = [], deletes = [];
-    const cloudDb = { saveSituation: situation => { calls.push(situation); return save ? save(situation) : Promise.resolve(true); }, deleteSituation: async id => { deletes.push(id); return true; } };
+    const cloudDb = { saveSituation: situation => { calls.push(situation); return save ? save(situation) : Promise.resolve(true); }, deleteSituation: id => { deletes.push(id); return del ? del(id) : Promise.resolve(true); } };
     const state = { data: { admin: { features: [] }, localities: [] }, visible: {}, overlays: {}, basemap: 'harta', theme: 'zi' };
     document.querySelector('#tab-situatii').replaceChildren();
     const ops = initOperations({ map, storage, state, toast: text => toasts.push(text), selectTab: noop, setSheet: noop, stopOtherTools: noop,
@@ -38,11 +38,15 @@ async function browserChecks({ initOperations, createEvent }) {
     return { ops, calls, toasts, archive, deletes };
   };
   const $ = selector => document.querySelector(selector);
+  // A missing button fails the checks that follow instead of stopping every later scenario.
+  const click = selector => $(selector)?.click();
   const title = () => $('[data-ops-card="event"] h2')?.textContent;
   const status = () => $('#ops-save-state')?.textContent || '';
   const notice = () => $('.ops-notice')?.textContent || '';
   const editTitle = value => { const input = $('[data-field="title"]'); input.value = value; input.dispatchEvent(new Event('input', { bubbles: true })); };
   const situation = name => { const event = createEvent(name, 'snow'); event.updatedAt = later(-30); return event; };
+  const pick = id => { const select = $('#ops-archive'); select.value = id; select.dispatchEvent(new Event('change', { bubbles: true })); };
+  const colleague = (event, title, minutes) => ({ ...structuredClone(event), title, updatedAt: later(minutes) });
 
   try {
     // A colleague publishes while the marker form is open: the form and its text survive.
@@ -72,7 +76,7 @@ async function browserChecks({ initOperations, createEvent }) {
       check('unpublishedHeld', $('[data-field="title"]').value === 'Cod portocaliu · varianta mea' && $('.ops-conflict'));
       check('localCopyKept', archive().find(event => event.id === mine.id)?.title === 'Cod portocaliu · varianta mea');
       check('conflictToastOnce', toasts.filter(text => text.startsWith('Altcineva')).length === 1 && (ops.syncFromCloud([newer]), toasts.filter(text => text.startsWith('Altcineva')).length === 1));
-      $('[data-action="cloud-take"]').click();
+      click('[data-action="cloud-take"]');
       check('takeCloudVersion', title() === 'Cod portocaliu · coleg' && !$('.ops-conflict') && status().startsWith('Publicat în Cloud'));
       check('takenVersionStored', archive().find(event => event.id === mine.id)?.updatedAt === newer.updatedAt);
     }
@@ -85,9 +89,9 @@ async function browserChecks({ initOperations, createEvent }) {
       editTitle('Secetă · mai târziu');
       ops.syncFromCloud([colleague]);
       check('olderTimestampStillConflict', $('.ops-conflict') && $('[data-field="title"]').value === 'Secetă · mai târziu');
-      $('[data-action="save"]').click(); await settle();
+      click('[data-action="save"]'); await settle();
       check('plainPublishRefusedInConflict', calls.length === 0 && notice().startsWith('Altcineva a publicat'));
-      $('[data-action="cloud-overwrite"]').click(); await settle();
+      click('[data-action="cloud-overwrite"]'); await settle();
       check('overwritePublishes', calls.length === 1 && calls[0].title === 'Secetă · mai târziu' && !$('.ops-conflict') && status().startsWith('Publicat în Cloud'));
     }
 
@@ -108,7 +112,7 @@ async function browserChecks({ initOperations, createEvent }) {
         ops.syncFromCloud([structuredClone(situation)]);
       }) });
       editTitle('Incendiu · publicat');
-      $('[data-action="save"]').click(); await settle();
+      click('[data-action="save"]'); await settle();
       check('echoNotConflict', !$('.ops-conflict') && $('[data-action="save"]').disabled);
       release(); await settle();
       check('publishReportsSuccess', notice().startsWith('Situația a fost publicată în Cloud') && status().startsWith('Publicat în Cloud') && !$('[data-action="save"]').disabled);
@@ -121,7 +125,7 @@ async function browserChecks({ initOperations, createEvent }) {
       const { ops } = boot({ active: mine, session: { cloudBase: mine.updatedAt }, save: situation => new Promise(resolve => { sent = situation; release = () => resolve(true); }) });
       editTitle('Grindină · trimis');
       // Headless Chrome runs on virtual time: let a millisecond pass so the versions differ.
-      $('[data-action="save"]').click(); await settle(5);
+      click('[data-action="save"]'); await settle(5);
       editTitle('Grindină · după trimitere');
       ops.syncFromCloud([structuredClone(sent)]);
       check('lateEchoAfterEditNotConflict', !$('.ops-conflict') && $('[data-field="title"]').value === 'Grindină · după trimitere');
@@ -134,7 +138,7 @@ async function browserChecks({ initOperations, createEvent }) {
       const mine = situation('Polei');
       const { ops } = boot({ active: mine, save: async () => false });
       editTitle('Polei · DN29');
-      $('[data-action="save"]').click(); await settle();
+      click('[data-action="save"]'); await settle();
       check('failedPublishReported', notice().startsWith('Situația e salvată doar în acest browser') && status().includes('nepublicat în Cloud'));
       void ops;
     }
@@ -145,7 +149,7 @@ async function browserChecks({ initOperations, createEvent }) {
       let release;
       boot({ active: mine, save: () => new Promise(resolve => { release = () => resolve(true); }) });
       editTitle('Ninsoare · offline');
-      $('[data-action="save"]').click(); await settle(80);
+      click('[data-action="save"]'); await settle(80);
       check('slowPublishPending', notice().startsWith('Cloud-ul nu a confirmat încă') && status().includes('nepublicat în Cloud'));
       release(); await settle();
       check('latePublishLands', notice().startsWith('Publicarea s-a încheiat') && status().startsWith('Publicat în Cloud'));
@@ -157,10 +161,10 @@ async function browserChecks({ initOperations, createEvent }) {
       const point = (id, title) => ({ type: 'Feature', geometry: { type: 'Point', coordinates: [26.6, 47.7] }, properties: { id, kind: 'isu', status: 'confirmed', title, observedAt: mine.updatedAt } });
       mine.features.features.push(point('m1', 'Echipaj ISU 1'), point('m2', 'Echipaj ISU 2'));
       const { archive } = boot({ active: mine });
-      $('[data-remove="m1"]').click();
+      click('[data-remove="m1"]');
       const stored = () => archive().find(event => event.id === mine.id)?.features.features.map(f => f.properties.id).join(',');
       check('markerRemovedAtOnce', !$('[data-remove="m1"]') && stored() === 'm2' && $('.ops-undo')?.textContent.includes('Echipaj ISU 1'));
-      $('[data-action="undo"]').click();
+      click('[data-action="undo"]');
       check('markerUndoRestoresOrder', $('[data-remove="m1"]') && stored() === 'm1,m2' && !$('.ops-undo'));
     }
 
@@ -170,17 +174,177 @@ async function browserChecks({ initOperations, createEvent }) {
       const { ops, archive, calls, deletes } = boot({ active: mine });
       ops.syncFromCloud([structuredClone(mine)]);
       const inArchive = () => archive().some(event => event.id === mine.id);
-      $('[data-delete-id]').click();
+      click('[data-delete-id]');
       check('deleteAsksFirst', $('.ops-confirm')?.textContent.includes('și din Cloud') && inArchive() && !deletes.length);
       check('deleteFocusesCancel', document.activeElement?.dataset.action === 'cancel-delete');
-      $('[data-action="cancel-delete"]').click();
+      click('[data-action="cancel-delete"]');
       check('deleteCanBeCancelled', !$('.ops-confirm') && title() === 'Exercițiu CJSU' && inArchive());
-      $('[data-delete-id]').click();
-      $('[data-confirm-delete]').click(); await settle();
+      click('[data-delete-id]');
+      click('[data-confirm-delete]'); await settle();
       check('deleteRemovesEverywhere', !inArchive() && deletes[0] === mine.id && !title() && $('.ops-undo')?.textContent.includes('Exercițiu CJSU'));
       ops.syncFromCloud([]);
-      $('[data-action="undo"]').click(); await settle();
+      click('[data-action="undo"]'); await settle();
       check('deleteUndoRestores', inArchive() && title() === 'Exercițiu CJSU' && calls.some(sent => sent.id === mine.id && sent.updatedAt === mine.updatedAt) && !$('.ops-undo'));
+    }
+
+    // The colleague's version may carry an older timestamp than our edit; taking it still stores it.
+    {
+      const mine = situation('Ceață densă');
+      const { ops, archive } = boot({ active: mine, session: { cloudBase: mine.updatedAt } });
+      editTitle('Ceață densă · varianta mea');
+      const older = colleague(mine, 'Ceață densă · coleg', -10);
+      ops.syncFromCloud([older]);
+      click('[data-action="cloud-take"]');
+      check('takeOlderCloudVersion', title() === 'Ceață densă · coleg' && archive().find(event => event.id === mine.id)?.updatedAt === older.updatedAt);
+    }
+
+    // Undoing a delete during a conflict brings back our edits and the conflict, not the colleague's copy.
+    {
+      const mine = situation('Revărsare Siret');
+      const { ops, archive, calls } = boot({ active: mine, session: { cloudBase: mine.updatedAt } });
+      editTitle('Revărsare Siret · varianta mea');
+      const theirs = colleague(mine, 'Revărsare Siret · coleg', 1);
+      ops.syncFromCloud([theirs]);
+      click('[data-delete-id]'); click('[data-confirm-delete]'); await settle();
+      ops.syncFromCloud([]);
+      click('[data-action="undo"]'); await settle();
+      const stored = () => archive().find(event => event.id === mine.id)?.title;
+      check('undoKeepsOurEditsInConflict', $('[data-field="title"]').value === 'Revărsare Siret · varianta mea' && stored() === 'Revărsare Siret · varianta mea' && $('.ops-conflict'));
+      check('undoRewritesTheirCloudCopy', calls.some(sent => sent.title === 'Revărsare Siret · coleg'));
+      ops.syncFromCloud([theirs]);
+      check('restoredConflictSurvivesEcho', stored() === 'Revărsare Siret · varianta mea' && $('.ops-conflict'));
+      const before = calls.length;
+      click('[data-action="save"]'); await settle();
+      check('restoredConflictStillGuardsPublish', calls.length === before && notice().startsWith('Altcineva a publicat'));
+    }
+
+    // Our write is still pending: reopening the situation must not call it published.
+    {
+      const mine = situation('Viscol sud'), other = situation('Secetă Prut');
+      let release;
+      const { ops } = boot({ active: mine, session: { cloudBase: mine.updatedAt }, save: written => new Promise(resolve => {
+        release = () => resolve(true);
+        ops.syncFromCloud([written, structuredClone(other)], { pending: new Set([written.id]) });
+      }) });
+      ops.syncFromCloud([structuredClone(mine), structuredClone(other)], { pending: new Set() });
+      editTitle('Viscol sud · offline');
+      click('[data-action="save"]'); await settle(80);
+      pick(other.id); pick(mine.id);
+      check('pendingWriteNotPublishedOnReopen', title() === 'Viscol sud · offline' && status().includes('nepublicat în Cloud'));
+      release(); await settle();
+      check('pendingWriteLandsAfterReopen', status().startsWith('Publicat în Cloud'));
+    }
+
+    // A write queued offline (even before a reload) is published once the server confirms it in a snapshot.
+    {
+      const mine = situation('Polei DJ291');
+      const { ops, calls } = boot({ active: mine, save: () => new Promise(() => {}) });
+      editTitle('Polei DJ291 · trimis');
+      click('[data-action="save"]'); await settle(80);
+      ops.syncFromCloud([structuredClone(calls[0])], { pending: new Set([calls[0].id]) });
+      check('queuedWriteStillUnpublished', status().includes('nepublicat în Cloud'));
+      ops.syncFromCloud([structuredClone(calls[0])], { pending: new Set() });
+      check('serverConfirmationMarksPublished', status().startsWith('Publicat în Cloud'));
+    }
+
+    // A just-created or duplicated situation can be deleted before any edit, and undone.
+    {
+      const { archive } = boot({});
+      const form = $('#ops-new');
+      form.querySelector('[name="title"]').value = 'Exercițiu nou';
+      form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+      check('newSituationSavedAtOnce', archive().some(event => event.title === 'Exercițiu nou'));
+      click('[data-delete-id]'); click('[data-confirm-delete]'); await settle();
+      check('newSituationDeletes', !title() && !archive().some(event => event.title === 'Exercițiu nou') && $('.ops-undo'));
+      click('[data-action="undo"]'); await settle();
+      check('newSituationUndo', title() === 'Exercițiu nou');
+      click('[data-action="duplicate"]');
+      check('duplicateSavedAtOnce', archive().some(event => event.title === 'Exercițiu nou · copie'));
+      click('[data-delete-id]'); click('[data-confirm-delete]'); await settle();
+      check('duplicateDeletes', !title() && !archive().some(event => event.title === 'Exercițiu nou · copie') && archive().some(event => event.title === 'Exercițiu nou'));
+    }
+
+    // A live version with an older timestamp (another computer's clock, or a queued write) is stored as shown.
+    {
+      const mine = situation('Furtună Dorohoi');
+      const { ops, archive } = boot({ active: mine, session: { cloudBase: mine.updatedAt } });
+      ops.syncFromCloud([structuredClone(mine)]);
+      ops.syncFromCloud([colleague(mine, 'Furtună Dorohoi · coleg', -40)]);
+      check('olderLiveVersionStored', title() === 'Furtună Dorohoi · coleg' && archive().find(event => event.id === mine.id)?.title === 'Furtună Dorohoi · coleg');
+    }
+
+    // While our overwrite travels, "Încarcă versiunea din Cloud" waits for its answer.
+    {
+      const mine = situation('Inundație Bașeu');
+      let release;
+      const { ops } = boot({ active: mine, session: { cloudBase: mine.updatedAt }, save: () => new Promise(resolve => { release = () => resolve(true); }) });
+      editTitle('Inundație Bașeu · varianta mea');
+      ops.syncFromCloud([colleague(mine, 'Inundație Bașeu · coleg', 1)]);
+      click('[data-action="cloud-overwrite"]'); await settle();
+      click('[data-action="cloud-take"]');
+      check('takeRefusedWhilePublishing', $('[data-field="title"]').value === 'Inundație Bașeu · varianta mea' && notice().startsWith('Așteaptă răspunsul'));
+      release(); await settle();
+      check('overwriteLandsCleanly', !$('.ops-conflict') && status().startsWith('Publicat în Cloud'));
+    }
+
+    // Undo before the Cloud delete answers: no stale "deleted" message, and the restore is not called published early.
+    {
+      const mine = situation('Alunecare Hudești');
+      let answerDelete, answerRestore;
+      const { ops, toasts } = boot({ active: mine, session: { cloudBase: mine.updatedAt },
+        del: () => new Promise(resolve => { answerDelete = () => resolve(true); }),
+        save: () => new Promise(resolve => { answerRestore = () => resolve(true); }) });
+      ops.syncFromCloud([structuredClone(mine)]);
+      click('[data-delete-id]'); click('[data-confirm-delete]'); await settle();
+      click('[data-action="undo"]'); await settle();
+      check('restoreNotPublishedBeforeAnswer', title() === 'Alunecare Hudești' && status().includes('nepublicat în Cloud'));
+      answerDelete(); await settle(80);
+      check('noStaleDeleteMessage', !toasts.some(text => text.includes('ștearsă')) && !notice().includes('ștearsă'));
+      answerRestore(); await settle();
+      check('restoreLandsAsPublished', status().startsWith('Publicat în Cloud'));
+    }
+
+    // The banner leaves when the conflict does: Cloud copy deleted, or the held marker form dropped.
+    {
+      const mine = situation('Vânt puternic');
+      const { ops } = boot({ active: mine, session: { cloudBase: mine.updatedAt } });
+      editTitle('Vânt puternic · varianta mea');
+      ops.syncFromCloud([colleague(mine, 'Vânt puternic · coleg', 1)]);
+      ops.syncFromCloud([]);
+      check('bannerLeavesWhenCloudCopyGoes', !$('.ops-conflict'));
+    }
+    {
+      const mine = situation('Grindină Săveni');
+      const { ops } = boot({ active: mine, session: { cloudBase: mine.updatedAt } });
+      ops.openRoadCreator();
+      ops.syncFromCloud([colleague(mine, 'Grindină Săveni · coleg', 1)]);
+      check('heldByFormExplainsWhy', $('.ops-conflict')?.textContent.includes('Dacă renunți la ele'));
+      click('[data-action="discard-mark"]');
+      check('droppingTheFormLoadsTheNewVersion', title() === 'Grindină Săveni · coleg' && !$('.ops-conflict'));
+    }
+
+    // Exporting a clean situation keeps its version, so it still reads as published.
+    {
+      const mine = situation('Export curat');
+      window.showSaveFilePicker = async () => ({ createWritable: async () => ({ write: async () => {}, close: async () => {} }) });
+      const { ops, archive } = boot({ active: mine });
+      ops.syncFromCloud([structuredClone(mine)]);
+      click('[data-action="event-export"]'); await settle();
+      click('[data-action="archive-export"]'); await settle();
+      check('exportKeepsVersion', archive().find(event => event.id === mine.id)?.updatedAt === mine.updatedAt && status().startsWith('Publicat în Cloud'));
+      pick(mine.id);
+      check('exportedReopensPublished', status().startsWith('Publicat în Cloud'));
+    }
+
+    // A marker's "Anulează" does not outlive the version it belongs to.
+    {
+      const mine = situation('Marcaj și conflict');
+      mine.features.features.push({ type: 'Feature', geometry: { type: 'Point', coordinates: [26.6, 47.7] }, properties: { id: 'p1', kind: 'isu', status: 'confirmed', title: 'Echipaj', observedAt: mine.updatedAt } });
+      const { ops } = boot({ active: mine, session: { cloudBase: mine.updatedAt } });
+      click('[data-remove="p1"]');
+      ops.syncFromCloud([colleague(mine, 'Marcaj și conflict · coleg', 1)]);
+      click('[data-action="cloud-take"]');
+      check('undoGoesWithReplacedVersion', !$('.ops-undo') && title() === 'Marcaj și conflict · coleg');
     }
 
     // One malformed document does not stop the others from syncing.
@@ -210,6 +374,6 @@ test('Cloud snapshots keep work in progress, publishing reports the real result,
     assert.equal(result.error, undefined, result.error);
     const failed = Object.entries(result).filter(([, ok]) => !ok).map(([name]) => name);
     assert.deepEqual(failed, [], 'Cloud guard regressions');
-    assert.ok(Object.keys(result).length >= 20, 'Every scenario reported');
+    assert.ok(Object.keys(result).length >= 45, 'Every scenario reported');
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });

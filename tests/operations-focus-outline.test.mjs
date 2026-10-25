@@ -74,6 +74,10 @@ async function browserChecks({ initOperations, createEvent }) {
       state.focusUat({ name: 'Flămânzi', feature: admin.features[1] });
       bar.querySelector('[data-faction="adopt-view"]').click();
       Object.assign(result.view, { areasAfterAdopt: saved().areas, barAfterAdopt: bar.querySelector('strong')?.textContent });
+      // Editing the situation's own zone in the panel ends a map view.
+      state.focusUat({ name: 'Curtești', feature: admin.features[0] });
+      document.querySelector('#tab-situatii [data-area="Flămânzi"]').click();
+      Object.assign(result.view, { areasAfterPanelEdit: saved().areas, selectionAfterPanelEdit: selection(), barAfterPanelEdit: bar.querySelector('strong')?.textContent });
     }
     out.textContent = JSON.stringify(result);
   } catch (error) { out.textContent = JSON.stringify({ error: error.stack }); }
@@ -101,6 +105,7 @@ test('the real focus outline hides only where a code outline draws the same shap
       areasAfterFocus: [], selectionDuringView: 'uat:Flămânzi', barLabel: 'Vizualizare:', masked: true,
       selectionAfterBack: 'uat:Curtești,place-focus:Poiana', barHiddenAfterBack: false,
       areasAfterAdopt: ['Flămânzi'], barAfterAdopt: 'Focus:',
+      areasAfterPanelEdit: [], selectionAfterPanelEdit: 'uat:Curtești,place-focus:Poiana', barAfterPanelEdit: 'Focus:',
     }, 'A map focus frames a view; only "Adaugă în situație" changes the open situation');
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });

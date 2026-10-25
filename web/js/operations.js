@@ -405,6 +405,9 @@ export function initOperations(ctx) {
   // `unpublished` tracks that gap; `cloudBase` is the Cloud version the open situation started
   // from, so a colleague's newer copy is told apart from the echo of our own publish.
   let unpublished = false, cloudBase = null, cloudConflict = null, publishing = false, cloudSeen = false;
+  // Ids whose Cloud copy is still our own unconfirmed write, and the last snapshot, replayed
+  // when work that held a newer version back is dropped.
+  let cloudPending = new Set(), lastSnapshot = null;
   let confirmDeleteId = null, undo = null;
   // With a situation open, "Focalizează UAT / satul" from the map only frames the view:
   // exploring the map in a meeting must not add areas to what is saved and published.
@@ -916,6 +919,7 @@ export function initOperations(ctx) {
     if (!mode) return;
     stopDrawing();
     render();
+    reconsiderCloud();
   }
 
   function start(tool, defaultKind = null) {
@@ -1227,7 +1231,9 @@ export function initOperations(ctx) {
     if (!active || !cloudConflict) return "";
     return `<div class="ops-conflict" role="alert">
       <p><b>Altcineva a publicat în Cloud o versiune mai nouă a acestei situații (${esc(dateLabel(cloudConflict.updatedAt))}).</b>
-      Modificările tale sunt salvate doar în acest browser. Alege ce rămâne: versiunea din Cloud le înlocuiește pe ale tale, iar publicarea ta o înlocuiește pe cea din Cloud.</p>
+      ${unpublished || dirty
+        ? "Modificările tale sunt salvate doar în acest browser. Alege ce rămâne: versiunea din Cloud le înlocuiește pe ale tale, iar publicarea ta o înlocuiește pe cea din Cloud."
+        : "Ai un marcaj, un instrument sau o dată în lucru. Dacă renunți la ele, versiunea nouă se încarcă singură; dacă le păstrezi, alegi aici ce rămâne."}</p>
       <div class="ops-actions">
         <button class="btn" type="button" data-action="cloud-take">Încarcă versiunea din Cloud</button>
         <button class="btn" type="button" data-action="cloud-overwrite">Publică varianta mea peste ea</button>
@@ -1565,52 +1571,72 @@ export function initOperations(ctx) {
   }
 
   async function deleteSituation(id) {
-    const local = db.load(id);
-    if (!local) { confirmDeleteId = null; return render(); }
     const wasOpen = active?.id === id;
+    // A situation just created or duplicated may not have reached the archive yet.
+    const local = db.load(id) ?? (wasOpen ? structuredClone(active) : null);
+    if (!local) { confirmDeleteId = null; return render(); }
     if (wasOpen && (pending || mode || itinerary.isPicking())) return message("Finalizează sau anulează marcajul în curs înainte de a șterge situația.");
     if (wasOpen && intervalRejected("Situația nu a fost ștearsă.")) return;
     confirmDeleteId = null;
     const cloudCopy = cloudCopies.get(id) ?? null;
-    const openState = wasOpen ? { unpublished, cloudBase } : null;
+    const openState = wasOpen ? { unpublished, cloudBase, cloudConflict } : null;
+    const deletion = { undone: false };
     db.remove(id);
     if (wasOpen) closeActive();
     render();
-    offerUndo(`Situația „${local.title}” a fost ștearsă.`, () => restoreSituation(local, cloudCopy, openState));
+    offerUndo(`Situația „${local.title}” a fost ștearsă.`, () => {
+      const restored = restoreSituation(local, cloudCopy, openState);
+      if (restored !== false) deletion.undone = true;
+      return restored;
+    });
     if (!cloudCopy || !cloudDb?.deleteSituation) return toast("Situația a fost ștearsă din acest browser.");
     const result = await cloudWrite(() => cloudDb.deleteSituation(id));
+    // Undone meanwhile: the answer about the deletion no longer describes what is on screen.
+    if (deletion.undone) return;
     if (result === "ok") toast("Situația a fost ștearsă și din Cloud.");
     else if (result === "waiting") message("Situația a fost ștearsă din acest browser; ștergerea din Cloud se trimite când revine conexiunea.");
     else message("Situația a fost ștearsă din acest browser, dar nu și din Cloud, așa că va reapărea la următoarea sincronizare.");
   }
 
-  // Puts back the local copy at once, and the Cloud copy as it was before the deletion.
+  // Puts back the local copy at once, and the Cloud copy as it was before the deletion. That
+  // copy may be a colleague's version the operator had not chosen yet, so it is written back
+  // as theirs, not marked as our own publish, and the open conflict comes back with it.
   function restoreSituation(local, cloudCopy, openState) {
     if (openState && !canReplaceDraft()) return false;
     try { db.put(local); }
     catch (error) { console.warn(error); message("Situația nu a putut fi pusă la loc în acest browser."); return false; }
+    const rewrite = Boolean(cloudCopy && cloudDb?.saveSituation);
     if (openState) {
-      setActive(local);
-      unpublished = openState.unpublished; cloudBase = openState.cloudBase;
+      setActive(local, { exact: true });
+      ({ unpublished, cloudBase, cloudConflict } = openState);
+      // Until the Cloud copy is back, the situation is not in the Cloud.
+      if (rewrite) unpublished = true;
       persistSession(); refreshPublishState();
     } else render();
     toast(`Situația „${local.title}” a fost pusă la loc.`);
-    if (!cloudCopy || !cloudDb?.saveSituation) return true;
-    publishToCloud(cloudCopy).then(result => {
-      if (result !== "failed") return;
-      if (active?.id === local.id) { unpublished = true; persistSession(); refreshPublishState(); }
-      message("Situația e pusă la loc în acest browser, dar nu și în Cloud: apasă „Publică în Cloud”.");
+    if (!rewrite) return true;
+    const copy = structuredClone(cloudCopy);
+    const landed = () => {
+      if (!openState || active?.id !== local.id) return;
+      // Back as before the deletion, unless the operator edited it meanwhile.
+      if (active.updatedAt === local.updatedAt) unpublished = openState.unpublished;
+      persistSession(); refreshPublishState();
+    };
+    cloudWrite(() => cloudDb.saveSituation(copy), landed).then(result => {
+      if (result === "ok") return landed();
+      if (result === "failed") message("Situația e pusă la loc în acest browser, dar nu și în Cloud: apasă „Publică în Cloud”.");
     });
     return true;
   }
 
   // Our version is in the Cloud: it becomes the base, and stays unpublished only if the
   // operator kept editing while the write was on its way.
-  function markPublished(version) {
+  function markPublished(version, overwritten = null) {
     if (active?.id !== version.id) return;
     cloudBase = version.updatedAt;
     if (active.updatedAt === version.updatedAt) unpublished = false;
-    cloudConflict = null;
+    // Only the version this publish replaced; one that came later still needs a choice.
+    if (cloudConflict === overwritten) cloudConflict = null;
     persistSession();
   }
 
@@ -1631,9 +1657,10 @@ export function initOperations(ctx) {
       refreshPublishState(); toast(notice); return;
     }
     const version = { id: active.id, updatedAt: active.updatedAt }, title = active.title;
+    const overwritten = overwrite ? cloudConflict : null;
     publishing = true; notice = "Se publică în Cloud…"; refreshPublishState();
     const result = await publishToCloud(active, () => {
-      markPublished(version);
+      markPublished(version, overwritten);
       if (active?.id === version.id) { notice = "Publicarea s-a încheiat: situația a ajuns în Cloud."; refreshPublishState(); toast(notice); }
       else toast(`Situația „${title}” a ajuns în Cloud.`);
     });
@@ -1647,7 +1674,7 @@ export function initOperations(ctx) {
         : `Situația „${title}” nu a ajuns în Cloud. Deschide-o și apasă din nou „Publică în Cloud”.`);
     }
     if (result === "ok") {
-      markPublished(version);
+      markPublished(version, overwritten);
       notice = `Situația a fost publicată în Cloud (${dateLabel(version.updatedAt)}). Celelalte ecrane o primesc acum.`;
     } else if (result === "waiting") {
       notice = "Cloud-ul nu a confirmat încă publicarea. Situația e salvată în acest browser, iar publicarea se încheie singură când revine conexiunea.";
@@ -1695,8 +1722,10 @@ export function initOperations(ctx) {
     });
   }
 
-  function syncFromCloud(cloudEvents = []) {
+  function syncFromCloud(cloudEvents = [], { pending: pendingIds } = {}) {
     if (!Array.isArray(cloudEvents)) return;
+    lastSnapshot = [cloudEvents, { pending: pendingIds }];
+    cloudPending = pendingIds instanceof Set ? pendingIds : new Set();
     // One malformed document must not stop the sync for every screen: each is checked on its
     // own, and a repeated id keeps its newest version.
     cloudCopies.clear();
@@ -1708,16 +1737,23 @@ export function initOperations(ctx) {
     }
     cloudSeen = true;
     const remote = active ? cloudCopies.get(active.id) : null;
-    if (active && !remote) cloudConflict = null;
-    if (remote && remote.updatedAt === active.updatedAt && !cloudBase) { cloudBase = remote.updatedAt; persistSession(); }
+    // Our own write still on its way says nothing about what the server holds.
+    const settled = Boolean(remote && !cloudPending.has(remote.id));
+    if (settled && remote.updatedAt === active.updatedAt && !dirty && (!cloudBase || unpublished)) {
+      // The server holds this exact version: our publish landed, even one queued before a reload.
+      cloudBase = remote.updatedAt; unpublished = false;
+      persistSession(); refreshSaveState();
+    }
     // A Cloud version this screen did not start from and did not send. Clocks differ between
     // computers, so with a known base any other version counts, not only a later timestamp.
-    const ours = remote && sentVersions.has(`${remote.id}@${remote.updatedAt}`);
-    const newer = Boolean(remote && !ours && remote.updatedAt !== active.updatedAt
-      && (cloudBase ? remote.updatedAt !== cloudBase : remote.updatedAt > active.updatedAt));
+    const ours = settled && sentVersions.has(`${remote.id}@${remote.updatedAt}`);
+    const newer = settled && !ours && remote.updatedAt !== active.updatedAt
+      && (cloudBase ? remote.updatedAt !== cloudBase : remote.updatedAt > active.updatedAt);
     // Work that is not in the Cloud yet, or still on screen only, is never replaced silently.
-    const held = newer && (unpublished || dirty || pending || mode || itinerary.isPicking() || alertEditor.rejectedDates().length > 0);
-    const incoming = [...cloudCopies.values()].filter(event => !(held && event.id === active.id));
+    const held = newer && (unpublished || dirty || busy());
+    // The local copy of unpublished work stays as it is, whatever the timestamps say.
+    const keepLocal = active && (held || unpublished || dirty);
+    const incoming = [...cloudCopies.values()].filter(event => !(keepLocal && event.id === active.id));
     try {
       if (incoming.length) db.importArchive({ format: "harta-botosani-events", version: 1, events: incoming });
     } catch (e) {
@@ -1732,9 +1768,11 @@ export function initOperations(ctx) {
       return;
     }
     if (newer) {
-      active = structuredClone(remote);
+      // Stored exactly, so an older timestamp from another computer is not undone by a reload.
+      try { active = db.put(remote); } catch (e) { console.warn(e); active = structuredClone(remote); }
       normalizeEventFeatures(active);
       cloudBase = remote.updatedAt; unpublished = false; cloudConflict = null;
+      dropUndo();
       persistSession();
       // Isolation, tint and warning areas are baked into the style, so rebuild it.
       sync(true);
@@ -1743,7 +1781,19 @@ export function initOperations(ctx) {
       toast(`Situația „${active.title}” a fost actualizată în direct din Cloud.`);
       return;
     }
+    // Gone from the Cloud, back to our base, or our own version: nothing left to choose.
+    if (cloudConflict && (!remote || settled)) { cloudConflict = null; showConflict(); }
     refreshArchive();
+  }
+
+  // Open forms, drawing tools, a picked itinerary point or a rejected date: work on screen only.
+  function busy() {
+    return Boolean(pending || mode || itinerary.isPicking() || alertEditor.rejectedDates().length);
+  }
+
+  // A version held back only by work on screen applies once that work is dropped.
+  function reconsiderCloud() {
+    if (cloudConflict && lastSnapshot && !unpublished && !dirty && !busy()) syncFromCloud(...lastSnapshot);
   }
 
   // Only the archive list follows other situations: rebuilding the panel would wipe what the
@@ -1755,17 +1805,19 @@ export function initOperations(ctx) {
     bar.outerHTML = archiveHTML(list());
   }
 
-  function setActive(event) {
-    // The Cloud copy wins when the archive here lags behind it.
+  function setActive(event, { exact = false } = {}) {
+    // The Cloud copy wins when the archive here lags behind it, unless this very version is wanted.
     const copy = cloudCopies.get(event.id);
-    active = structuredClone(copy && copy.updatedAt > event.updatedAt ? copy : event);
+    active = structuredClone(!exact && copy && copy.updatedAt > event.updatedAt ? copy : event);
     active.places = active.places || [];
     active.isolateArea = active.isolateArea ?? false;
     active.tintAreas = active.tintAreas ?? true;
     pending = null; editingId = null; dirty = false; exported = false; notice = ""; confirmDeleteId = null; viewFocus = null;
-    // Without a Cloud copy the situation lives only here, once the Cloud has answered at all.
+    // Without a Cloud copy the situation lives only here, once the Cloud has answered at all;
+    // a copy that is still our unconfirmed write is not in the Cloud yet either.
     cloudBase = copy?.updatedAt ?? null; cloudConflict = null;
-    unpublished = copy ? active.updatedAt > copy.updatedAt : cloudSeen;
+    unpublished = copy ? active.updatedAt > copy.updatedAt || cloudPending.has(copy.id) : cloudSeen;
+    dropUndo();
     stopDrawing();
     for (const key of Object.keys(state.visible)) if (typeof active.visible[key] === "boolean") state.visible[key] = active.visible[key];
     try { storage?.setItem("hb.visible.v2", JSON.stringify(state.visible)); } catch { /* */ }
@@ -1777,6 +1829,7 @@ export function initOperations(ctx) {
   function closeActive() {
     active = null; pending = null; editingId = null; confirmDeleteId = null; viewFocus = null;
     unpublished = false; cloudBase = null; cloudConflict = null;
+    dropUndo();
     stopDrawing(); sync(true);
   }
 
@@ -2037,6 +2090,7 @@ export function initOperations(ctx) {
       return;
     }
     if (target.dataset?.toggle && active) {
+      if (target.dataset.toggle === "isolateArea") viewFocus = null;
       active[target.dataset.toggle] = target.checked;
       changed();
       sync(true);
@@ -2089,6 +2143,7 @@ export function initOperations(ctx) {
         active.isolateArea = false;
         active.tintAreas = true;
         dirty = true; unpublished = true; cloudBase = null; cloudConflict = null; viewFocus = null; exported = false; notice = "";
+        dropUndo(); autoSaveActiveToDb();
         if (applyPreset) applyPreset(type);
         sync(true); render();
       } catch { message("Introdu o denumire pentru situație."); }
@@ -2181,11 +2236,13 @@ export function initOperations(ctx) {
     if (button.dataset.area && active) {
       if (pending) return message("Finalizează marcajul curent înainte de schimbarea zonei.");
       active.areas = active.areas.filter(name => name !== button.dataset.area);
+      viewFocus = null;
       changed(); sync(true); render(); return;
     }
     if (button.dataset.placeRemove && active) {
       if (pending) return message("Finalizează marcajul curent înainte de schimbarea zonei.");
       active.places = (active.places || []).filter(name => name !== button.dataset.placeRemove);
+      viewFocus = null;
       changed(); sync(true); render(); return;
     }
     if (button.dataset.resolveMark && active) {
@@ -2209,7 +2266,7 @@ export function initOperations(ctx) {
       sync(); render();
       offerUndo(`Marcajul „${removed.properties.title || KINDS[removed.properties.kind]}” a fost eliminat.`, () => {
         if (active?.id !== eventId) { message("Între timp s-a deschis altă situație; marcajul nu mai poate fi pus la loc."); return true; }
-        if (pending) { message("Finalizează sau anulează marcajul curent, apoi apasă din nou „Anulează”."); return false; }
+        if (pending || mode || itinerary.isPicking()) { message("Finalizează sau anulează marcajul ori instrumentul curent, apoi apasă din nou „Anulează”."); return false; }
         if (intervalRejected("Marcajul nu a fost pus la loc.")) return false;
         const features = active.features.features;
         if (!features.some(f => f.properties.id === removed.properties.id)) features.splice(Math.min(index, features.length), 0, removed);
@@ -2266,6 +2323,7 @@ export function initOperations(ctx) {
       const match = (state.data.admin?.features || []).find(f => f.properties.kind === "uat" && f.properties.name.toLowerCase() === val?.toLowerCase());
       if (!match) return message("Alege o comună sau un oraș valid din lista județului Botoșani.");
       if (!active.areas.includes(match.properties.name)) active.areas = [...active.areas, match.properties.name];
+      viewFocus = null;
       changed(); sync(true); render(); fit();
       return;
     }
@@ -2275,11 +2333,12 @@ export function initOperations(ctx) {
       if (!loc) return message("Alege un sat / o localitate validă din județul Botoșani.");
       active.places = active.places || [];
       if (!active.places.includes(loc.name)) active.places = [...active.places, loc.name];
+      viewFocus = null;
       changed(); sync(true); render(); fit();
       return;
     }
     if (action === "clear-areas" && active) {
-      active.areas = []; active.places = []; active.isolateArea = false;
+      active.areas = []; active.places = []; active.isolateArea = false; viewFocus = null;
       changed(); sync(true); render();
       return;
     }
@@ -2292,19 +2351,21 @@ export function initOperations(ctx) {
     }
     if (action === "cloud-overwrite" && active && cloudConflict) save({ overwrite: true });
     if (action === "cloud-take" && active && cloudConflict) {
+      if (publishing) return message("Așteaptă răspunsul la publicarea în curs, apoi alege versiunea.");
       if (pending || mode || itinerary.isPicking()) return message("Finalizează sau anulează marcajul în curs înainte de a încărca versiunea din Cloud.");
       if (intervalRejected("Versiunea din Cloud nu a fost încărcată.")) return;
       try { setActive(db.put(cloudConflict)); }
       catch (error) { console.warn(error); return message("Versiunea din Cloud nu a putut fi salvată în acest browser."); }
       toast(`Ai încărcat versiunea din Cloud a situației „${active.title}”.`);
     }
-    if (action === "fit") { setSheet("peek"); fit(); }
+    // "Încadrează zona" in the panel frames the situation, so a map view ends here.
+    if (action === "fit") { if (viewFocus) { viewFocus = null; sync(true); } setSheet("peek"); fit(); }
     if (action === "preset" && active) {
       if (applyPreset) applyPreset(active.type);
       changed();
     }
     if (action === "present") present();
-    if (action === "discard-mark") { pending = null; editingId = null; sync(); render(); }
+    if (action === "discard-mark") { pending = null; editingId = null; sync(); render(); reconsiderCloud(); }
     if (action === "new" && canReplaceDraft()) { closeActive(); render(); }
     if (action === "open" && canReplaceDraft()) {
       try {
@@ -2315,14 +2376,17 @@ export function initOperations(ctx) {
     if (action === "duplicate" && canReplaceDraft()) {
       const base = createEvent(active.title + " · copie", active.type);
       active = { ...structuredClone(active), id: base.id, title: base.title, createdAt: base.createdAt, updatedAt: base.updatedAt };
-      dirty = true; unpublished = true; cloudBase = null; cloudConflict = null; exported = false; render();
+      dirty = true; unpublished = true; cloudBase = null; cloudConflict = null; exported = false;
+      viewFocus = null; confirmDeleteId = null; dropUndo();
+      autoSaveActiveToDb(); persistSession(); sync(true); render();
     }
     if (action === "event-export") {
       try {
         if (pending || mode) return message("Finalizează marcajul curent înainte de salvare JSON.");
         if (intervalRejected("Situația nu a fost exportată.")) return;
-        const savedSnap = db.save(snapshot());
-        active = savedSnap; dirty = false;
+        // A clean situation is exported as stored: a new timestamp would make it look unpublished.
+        const savedSnap = dirty ? db.save(snapshot()) : { ...snapshot(), updatedAt: active.updatedAt };
+        if (dirty) { active = savedSnap; dirty = false; persistSession(); }
         const ok = await saveJsonFile(`situatie-${active.id}.json`, { format: "harta-botosani-events", version: 1, exportedAt: new Date().toISOString(), events: [savedSnap] });
         if (ok) { exported = true; notice = "Situația a fost salvată în arhivă și în fișierul JSON."; render(); toast(notice); }
       } catch { message("Verifică denumirea și datele situației înainte de export."); }
@@ -2330,8 +2394,8 @@ export function initOperations(ctx) {
     if (action === "archive-export") {
       try {
         if (active && intervalRejected("Arhiva nu a fost exportată.")) return;
-        if (active && !pending && !mode) {
-          active = db.save(snapshot()); dirty = false;
+        if (active && !pending && !mode && dirty) {
+          active = db.save(snapshot()); dirty = false; persistSession();
         }
         const ok = await saveJsonFile("situatii.json", db.exportArchive());
         if (ok) { message("Baza de date cu toate situațiile (situatii.json) a fost salvată."); render(); }
