@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { normalizeAlerts, affectedAlertLocations, warningsForLocation, placeKey, resolvePlace, placeLabel, legacyNote, notesWithLegacyNote } from '../web/js/operations-alerts.js';
 import { createEvent, sanitizeEvent, EventStore } from '../web/js/event-store.js';
+import { warningOptions } from '../web/js/operations-alert-editor.js';
 
 const alert = (id, code, areas, places = []) => ({ id, code, source: 'ANM', validFrom: '2026-10-19T10:00:00+03:00', validTo: '2026-10-19T18:00:00+03:00', text: 'Vânt puternic', areas, places });
 function memoryStorage() {
@@ -110,4 +111,18 @@ test('invalid warning lists and reversed intervals are rejected before storage c
     assert.deepEqual(store.load(event.id), before);
   }
   assert.deepEqual(sanitizeEvent({ ...event, alerts: [] }).alerts, []);
+});
+
+test('the warning picker offers county villages by UAT and keeps unlisted stored entries clearable', () => {
+  const data = { localities: [
+    { name: 'Agafton', lon: 26.6, lat: 47.8, uat: 'Curtești' }, { name: 'Braniște', lon: 27.25, lat: 47.8, uat: '' },
+    { name: 'Poiana', lon: 26.9, lat: 47.6, uat: 'Flămânzi' },
+  ], admin: { features: [{ properties: { kind: 'uat', name: 'Curtești' } }, { properties: { kind: 'judet', name: 'Botoșani' } }] } };
+  assert.deepEqual(warningOptions('places', data, ['Braniște', 'Agafton']), [
+    { value: 'Braniște', label: 'Braniște (în afara listei)', checked: true },
+    { value: 'Agafton|Curtești', label: 'Agafton (Curtești)', checked: true },
+    { value: 'Poiana|Flămânzi', label: 'Poiana (Flămânzi)', checked: false },
+  ]);
+  assert.deepEqual(warningOptions('areas', data, ['Curtești', 'Hârlău']).map(o => [o.value, o.checked]), [['Hârlău', true], ['Curtești', true]]);
+  assert.deepEqual(warningOptions('places', data).map(o => o.value), ['Agafton|Curtești', 'Poiana|Flămânzi'], 'Villages outside the county are not offered');
 });

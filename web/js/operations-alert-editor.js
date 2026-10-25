@@ -5,24 +5,33 @@ const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;
 const fold = value => String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
 const dateValue = value => { try { return localTime(value); } catch { return ''; } };
 
+/** Stored legacy village names map to their current `Name|UAT` key; unknown entries are kept. */
+export function canonicalEntry(kind, entry, localities = []) {
+  if (kind !== 'places') return entry;
+  const place = resolvePlace(entry, localities);
+  return place?.uat ? placeKey(place) : entry;
+}
+
+/**
+ * Picker options as { value, label, checked }. Villages outside the county are not offered,
+ * but a stored entry the list cannot show comes first, so it can still be cleared.
+ */
+export function warningOptions(kind, data = {}, stored = []) {
+  const values = kind === 'areas'
+    ? (data.admin?.features || []).filter(f => f.properties?.kind === 'uat').map(f => f.properties.name)
+    : (data.localities || []).filter(place => place.uat && place.name).map(placeKey);
+  const label = value => kind === 'places' ? placeLabel(value) : value;
+  const options = [...new Set(values.filter(Boolean))].map(value => ({ value, label: label(value) }))
+    .sort((a, b) => a.label.localeCompare(b.label, 'ro'));
+  const selected = new Set(stored.map(entry => canonicalEntry(kind, entry, data.localities)));
+  const listed = new Set(options.map(option => option.value));
+  const unlisted = [...selected].filter(value => !listed.has(value)).map(value => ({ value, label: `${label(value)} (în afara listei)` }));
+  return [...unlisted, ...options].map(option => ({ ...option, checked: selected.has(option.value) }));
+}
+
 export function createAlertEditor({ panel, getActive, getData, onChange }) {
   let newId = null;
-  /** Options as { value, label }. Villages outside the county are left out. */
-  function geography(kind) {
-    const data = getData() || {};
-    const values = kind === 'areas'
-      ? (data.admin?.features || []).filter(f => f.properties?.kind === 'uat').map(f => f.properties.name)
-      : (data.localities || []).filter(place => place.uat && place.name).map(placeKey);
-    return [...new Set(values.filter(Boolean))]
-      .map(value => ({ value, label: kind === 'places' ? placeLabel(value) : value }))
-      .sort((a, b) => a.label.localeCompare(b.label, 'ro'));
-  }
-  /** Stored legacy village names map to their current key; unknown entries are kept. */
-  function canonical(kind, entry) {
-    if (kind !== 'places') return entry;
-    const place = resolvePlace(entry, getData()?.localities || []);
-    return place?.uat ? placeKey(place) : entry;
-  }
+  const canonical = (kind, entry) => canonicalEntry(kind, entry, getData()?.localities || []);
   function warnings() { return normalizeAlerts(getActive()); }
   function editable() {
     const active = getActive();
@@ -39,11 +48,10 @@ export function createAlertEditor({ panel, getActive, getData, onChange }) {
     return active.alerts;
   }
   function listHTML(alert, kind, label) {
-    const selected = new Set((alert[kind] || []).map(entry => canonical(kind, entry)));
-    const options = geography(kind);
-    return `<details class="ops-alert-picker"><summary>${label} <span data-alert-count="${kind}">${selected.size} selectate</span></summary>
+    const options = warningOptions(kind, getData() || {}, alert[kind] || []);
+    return `<details class="ops-alert-picker"><summary>${label} <span data-alert-count="${kind}">${options.filter(option => option.checked).length} selectate</span></summary>
       <label>Caută ${kind === 'areas' ? 'UAT' : 'localitate'}<input type="search" data-alert-search="${kind}" placeholder="Scrie numele…" autocomplete="off"></label>
-      <div class="ops-alert-options" role="group" aria-label="${label}">${options.map(option => `<label data-alert-option="${esc(fold(option.label))}"><input type="checkbox" data-alert-area="${kind}" value="${esc(option.value)}" ${selected.has(option.value) ? 'checked' : ''}><span>${esc(option.label)}</span></label>`).join('')}</div>
+      <div class="ops-alert-options" role="group" aria-label="${label}">${options.map(option => `<label data-alert-option="${esc(fold(option.label))}"><input type="checkbox" data-alert-area="${kind}" value="${esc(option.value)}" ${option.checked ? 'checked' : ''}><span>${esc(option.label)}</span></label>`).join('')}</div>
       <p class="muted" data-alert-no-results hidden>Niciun rezultat.</p>
       ${options.length ? '' : '<p class="muted">Lista se încarcă odată cu harta.</p>'}
     </details>`;
@@ -134,11 +142,13 @@ export function createAlertEditor({ panel, getActive, getData, onChange }) {
     if (target.dataset.warningField) return editField(target);
     const kind = target.dataset.alertArea;
     if (!['areas', 'places'].includes(kind)) return false;
-    if (!geography(kind).some(option => option.value === target.value)) return true;
     const entry = target.closest('[data-warning-id]');
     const alert = editable().find(item => item.id === entry?.dataset.warningId);
     if (!alert) return true;
     const selected = new Set((alert[kind] || []).map(item => canonical(kind, item)));
+    // Accept a listed option, or clearing an entry that is stored but no longer listed.
+    const listed = warningOptions(kind, getData() || {}).some(option => option.value === target.value);
+    if (!listed && !(selected.has(target.value) && !target.checked)) return true;
     if (target.checked) selected.add(target.value); else selected.delete(target.value);
     alert[kind] = [...selected];
     updateStatus(entry, alert);
