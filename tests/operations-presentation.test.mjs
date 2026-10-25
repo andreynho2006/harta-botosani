@@ -7,7 +7,7 @@ import { pathToFileURL } from 'node:url';
 import { spawnSync } from 'node:child_process';
 
 const chrome = process.env.CHROME_BIN || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
-const sizes = [[1366, 768], [320, 568], [390, 844], [844, 390], [900, 480]];
+const sizes = [[1920, 1080], [1366, 768], [1024, 768], [320, 568], [390, 844], [844, 390], [900, 480]];
 
 async function browserChecks({ initOperations, createEvent }) {
   try {
@@ -247,6 +247,106 @@ async function browserChecks({ initOperations, createEvent }) {
       && !document.querySelector('[data-alert-status]').textContent.startsWith('Interval invalid'));
     document.querySelector('[data-action="save"]').click();
     check('saveWorksOnceCorrected', notice().startsWith('Situația a fost salvată') && archive() !== archiveBefore);
+
+    // Back to presentation with no warnings, as the layout checks below expect.
+    while (document.querySelector('[data-alert-action="remove"]')) document.querySelector('[data-alert-action="remove"]').click();
+    document.querySelector('[data-action="present"]').click();
+    await nextFrame();
+
+    // Three realistic warnings (about three lines of text, two lines of areas each) must stay
+    // readable together: the grid never scrolls on its own and the title is never clipped.
+    const shownRect = (rect, start, boundary) => {
+      if (!rect || !rect.width || !rect.height) return false;
+      for (let node = start; node; node = node.parentElement) {
+        const style = getComputedStyle(node);
+        if (style.overflowX !== 'visible' || style.overflowY !== 'visible') {
+          const box = node.getBoundingClientRect(), left = box.left + node.clientLeft, top = box.top + node.clientTop;
+          if (rect.top < top - 0.5 || rect.left < left - 0.5 || rect.bottom > top + node.clientHeight + 0.5 || rect.right > left + node.clientWidth + 0.5) return false;
+        }
+        if (node === boundary) break;
+      }
+      return rect.top >= -0.5 && rect.bottom <= innerHeight + 0.5;
+    };
+    const shown = (element, boundary) => Boolean(element) && shownRect(element.getBoundingClientRect(), element.parentElement, boundary);
+    const firstLine = element => { const range = document.createRange(); range.selectNodeContents(element); return range.getClientRects()[0]; };
+    const openMessages = async () => {
+      document.querySelector('[data-action="present"]').click();
+      await nextFrame();
+      if (!visible(panel('messages'))) toggle('messages').click();
+      await nextFrame();
+      return panel('messages');
+    };
+    document.querySelector('.ops-pres-exit').click();
+    for (let i = 0; i < 3; i++) document.querySelector('[data-alert-action="add"]').click();
+    const scenario = [
+      ['red', 'Ninsori abundente și viscol puternic, cu depuneri de zăpadă de peste 25 cm; drumuri impracticabile și vizibilitate redusă sub 100 m.'],
+      ['orange', 'Intensificări ale vântului cu rafale de 60-70 km/h și ninsori moderate cantitativ; posibile căderi de arbori și întreruperi de curent.'],
+      ['yellow', 'Polei și ceață densă în zonele joase, cu temperaturi în scădere sub minus 5 grade; circulație îngreunată pe drumurile secundare.'],
+    ];
+    [...document.querySelectorAll('[data-warning-id]')].forEach((entry, index) => {
+      const set = (field, value, type) => {
+        const input = entry.querySelector('[data-warning-field="' + field + '"]');
+        input.value = value; input.dispatchEvent(new Event(type, { bubbles: true }));
+      };
+      set('code', scenario[index][0], 'change'); set('source', 'ANM București', 'input');
+      set('validFrom', '2026-10-17T06:00', 'change'); set('validTo', '2026-10-17T20:00', 'change'); set('text', scenario[index][1], 'input');
+      for (const village of entry.querySelectorAll('[data-alert-area="places"]')) village.click();
+    });
+    // Without a description the title block is the only thing the header can squeeze, so the clip showed up there first.
+    const readable = async (suffix) => {
+      const head = await openMessages();
+      const grid = head.querySelector('.ops-alert-grid');
+      const triple = [...head.querySelectorAll('.ops-alert')];
+      check('threeWarningsRendered' + suffix, triple.length === 3 && triple.map(banner => banner.dataset.code).join() === 'red,orange,yellow');
+      check('descriptionAsConfigured' + suffix, Boolean(head.querySelector('.ops-slide-notes')) === (suffix === ''));
+      check('titleNotClipped' + suffix, shown(head.querySelector('.ops-slide-eyebrow'), head) && shown(head.querySelector('h1'), head));
+      check('threeWarningsHeaderInViewport' + suffix, inViewport(head));
+      if (!compact) {
+        // The header is the visible area: neither the grid, a banner nor the header itself may hide a banner's start.
+        check('bannerStartsVisible' + suffix, triple.every(banner => {
+          const text = banner.querySelector('.ops-alert-text');
+          return shown(banner.querySelector('.ops-alert-code'), head) && shown(banner.querySelector('.ops-alert-when'), head) && shownRect(firstLine(text), text, head);
+        }));
+        check('alertGridHasNoNestedScroll' + suffix, grid.scrollHeight <= grid.clientHeight + 1);
+        check('headerHasNoScroll' + suffix, head.scrollHeight <= head.clientHeight + 1);
+        check('headerLeavesMapFree' + suffix, head.getBoundingClientRect().height <= innerHeight * 0.5);
+      } else {
+        // On phones the header scrolls as a whole, so every banner's start must be reachable by scrolling to it.
+        check('bannersReachableByScrolling' + suffix, triple.every(banner => {
+          banner.scrollIntoView({ block: 'start' });
+          const text = banner.querySelector('.ops-alert-text');
+          return shown(banner.querySelector('.ops-alert-code'), head) && shown(banner.querySelector('.ops-alert-when'), head) && shownRect(firstLine(text), text, head);
+        }));
+        head.scrollTop = 0;
+      }
+    };
+    await readable('');
+    document.querySelector('.ops-pres-exit').click();
+    const noNotes = document.querySelector('[data-field="notes"]');
+    noNotes.value = ''; noNotes.dispatchEvent(new Event('input', { bubbles: true }));
+    await readable('NoDescription');
+
+    // A scrolled banner or description keeps its position when the overlay is rebuilt.
+    document.querySelector('.ops-pres-exit').click();
+    const longText = document.querySelector('[data-warning-field="text"]');
+    longText.value = Array.from({ length: 40 }, (_, i) => 'Long warning line ' + i).join('\n'); longText.dispatchEvent(new Event('input', { bubbles: true }));
+    const longNotes = document.querySelector('[data-field="notes"]');
+    longNotes.value = Array.from({ length: 60 }, (_, i) => 'Operational note ' + i).join('\n'); longNotes.dispatchEvent(new Event('input', { bubbles: true }));
+    await openMessages();
+    const scrollIds = ['ops-pres-alert', 'ops-pres-message-text'];
+    const scrolled = {};
+    for (const id of scrollIds) { const element = document.getElementById(id); element.scrollTop = 40; scrolled[id] = element.scrollTop; }
+    for (let i = 0; i < 2; i++) document.querySelector('[data-pres-group="resolved"]').click(); // rebuilds the overlay, then restores the group
+    check('bannerScrollSurvivesRender', scrolled['ops-pres-alert'] > 0 && document.getElementById('ops-pres-alert').scrollTop === scrolled['ops-pres-alert']);
+    check('descriptionScrollSurvivesRender', scrolled['ops-pres-message-text'] > 0 && document.getElementById('ops-pres-message-text').scrollTop === scrolled['ops-pres-message-text']);
+    // Banners are keyed by warning, not by rank: downgrading the scrolled warning while presenting moves its banner to
+    // ops-pres-alert-1, and its position has to follow it.
+    const rank = document.querySelector('[data-warning-field="code"]');
+    rank.value = 'yellow'; rank.dispatchEvent(new Event('change', { bubbles: true }));
+    for (let i = 0; i < 2; i++) document.querySelector('[data-pres-group="resolved"]').click();
+    const moved = [...document.querySelectorAll('.ops-alert')].find(banner => banner.textContent.includes('Long warning line 39'));
+    check('scrolledWarningChangedRank', moved?.id === 'ops-pres-alert-1');
+    check('bannerScrollFollowsWarning', Boolean(moved) && moved.scrollTop === scrolled['ops-pres-alert']);
     parent.postMessage(result, '*');
   } catch (error) { parent.postMessage({ viewport: innerWidth + 'x' + innerHeight, error: error.stack }, '*'); }
 }

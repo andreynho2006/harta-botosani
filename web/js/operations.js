@@ -1576,8 +1576,12 @@ export function initOperations(ctx) {
 
   function renderPresentationOverlay() {
     if (!active) return;
-    const focused = presentation.contains(document.activeElement) ? { id: document.activeElement.id, data: { ...document.activeElement.dataset } } : null;
-    const scrollPositions = new Map([...presentation.querySelectorAll("[data-pres-panel]")].map(el => [el.id, el.scrollTop]));
+    // Panels, warning banners and the description all scroll on their own; the rebuild below recreates them, so
+    // scroll positions and focus are kept by key. A banner's id is its rank (ops-pres-alert, ops-pres-alert-1, ...), which
+    // changes when a warning is added, removed or re-ranked, so banners are keyed by their warning instead.
+    const presKey = el => el.dataset.presKey || el.id;
+    const focused = presentation.contains(document.activeElement) ? { id: presKey(document.activeElement), data: { ...document.activeElement.dataset } } : null;
+    const scrollPositions = new Map([...presentation.querySelectorAll("[id]")].filter(el => el.scrollTop).map(el => [presKey(el), el.scrollTop]));
     presentation.dataset.compact = String(compactPresentation);
     presentation.dataset.commandsOpen = String(!commandsCollapsed);
     const panelToggle = (name, label, collapsed, arrow) => `<button class="ops-pres-toggle ops-pres-toggle-${name}" type="button" data-action="pres-toggle-${name}" aria-expanded="${!collapsed}" aria-controls="ops-pres-${name}" aria-label="${collapsed ? "Arată" : "Ascunde"} ${label.toLowerCase()}" title="${collapsed ? "Arată" : "Ascunde"} ${label.toLowerCase()}"><span aria-hidden="true">${arrow}</span><span class="ops-toggle-label">${label}</span></button>`;
@@ -1636,12 +1640,12 @@ export function initOperations(ctx) {
       ${panelToggle("commands", "Comenzi", commandsCollapsed, commandsCollapsed ? "▲" : "▼")}
       <button class="ops-pres-exit" type="button" data-action="exit" aria-label="Ieși din prezentare" title="Ieși din prezentare"><span aria-hidden="true">✕</span></button>
       <header id="ops-pres-messages" class="ops-slide-head" data-pres-panel="messages" data-pres-edge="top" ${messagesCollapsed ? "hidden" : ""} aria-label="Mesaje și avertizări">
-        <div id="ops-pres-message-text" tabindex="0" aria-label="Titlu și descriere">
+        <div class="ops-slide-title">
           <span class="ops-slide-eyebrow">ȘEDINȚĂ CJSU · ${esc(TYPES[active.type] || active.type)} · ${esc(areaText)}</span>
           <h1>${esc(active.title)}</h1>
-          ${hasNotes ? `<p class="ops-slide-notes">${esc(active.notes)}</p>` : ""}
         </div>
-        ${warnings.length ? `<div class="ops-alert-grid">${warnings.map((warning, index) => `<p id="ops-pres-alert${index ? '-' + index : ''}" class="ops-alert" data-code="${esc(warning.code)}" tabindex="0" role="note"><b class="ops-alert-code">${esc(ALERT_LABELS[warning.code] || warning.code)}</b><span class="ops-alert-when">${[warning.source, span(warning.validFrom, warning.validTo, dateLabel) || "Interval nespecificat"].filter(Boolean).map(esc).join(" · ")}</span>${warning.text ? `<span class="ops-alert-text">${esc(warning.text)}</span>` : ""}<span class="ops-alert-areas">${esc([...warning.areas, ...warning.villages].join(", ") || "Fără localități selectate")}</span></p>`).join("")}</div>` : note ? `<div class="ops-alert-grid"><p id="ops-pres-alert" class="ops-alert" data-code="" tabindex="0" role="note"><b class="ops-alert-code">Mesaj</b><span class="ops-alert-when">${[note.source, span(note.validFrom, note.validTo, dateLabel)].filter(Boolean).map(esc).join(" · ")}</span>${note.text ? `<span class="ops-alert-text">${esc(note.text)}</span>` : ""}</p></div>` : ""}
+        ${hasNotes ? `<div id="ops-pres-message-text" tabindex="0" aria-label="Descriere"><p class="ops-slide-notes">${esc(active.notes)}</p></div>` : ""}
+        ${warnings.length ? `<div class="ops-alert-grid">${warnings.map((warning, index) => `<p id="ops-pres-alert${index ? '-' + index : ''}" class="ops-alert" data-code="${esc(warning.code)}" data-pres-key="alert:${esc(warning.id)}" tabindex="0" role="note"><b class="ops-alert-code">${esc(ALERT_LABELS[warning.code] || warning.code)}</b><span class="ops-alert-when">${[warning.source, span(warning.validFrom, warning.validTo, dateLabel) || "Interval nespecificat"].filter(Boolean).map(esc).join(" · ")}</span>${warning.text ? `<span class="ops-alert-text">${esc(warning.text)}</span>` : ""}<span class="ops-alert-areas">${esc([...warning.areas, ...warning.villages].join(", ") || "Fără localități selectate")}</span></p>`).join("")}</div>` : note ? `<div class="ops-alert-grid"><p id="ops-pres-alert" class="ops-alert" data-code="" tabindex="0" role="note"><b class="ops-alert-code">Mesaj</b><span class="ops-alert-when">${[note.source, span(note.validFrom, note.validTo, dateLabel)].filter(Boolean).map(esc).join(" · ")}</span>${note.text ? `<span class="ops-alert-text">${esc(note.text)}</span>` : ""}</p></div>` : ""}
 
       </header>
       <nav id="ops-pres-commands" class="ops-slide-controls" data-pres-panel="commands" data-pres-edge="right" ${commandsCollapsed ? "hidden" : ""} aria-label="Comenzi prezentare">
@@ -1686,10 +1690,10 @@ export function initOperations(ctx) {
         <div class="ops-legend">${warnings.map(warning => `<span class="ops-legend-code" data-code="${esc(warning.code)}"><i aria-hidden="true"></i><b>${esc(ALERT_LABELS[warning.code] || warning.code)}</b> · ${esc(scope(warning))} · ${esc(span(warning.validFrom, warning.validTo, shortTime) || "interval nespecificat")}</span>`).join("")}${Object.entries(counts).map(([kind, count]) => `<span><i data-kind="${esc(kind)}"></i>${esc(kind === "resolved" ? "Rezolvat / Redeschis" : presentationKindLabel(kind, active.type, KINDS[kind]))}: <b>${count}</b></span>`).join("") || `<span>Toate situațiile monitorizate: <b>0 probleme active</b></span>`}</div>
         <span>${dirty ? "Situație în lucru" : "Actualizat " + dateLabel(active.updatedAt)}</span>
       </footer>`;
-    for (const el of presentation.querySelectorAll("[data-pres-panel]")) el.scrollTop = scrollPositions.get(el.id) || 0;
+    for (const el of presentation.querySelectorAll("[id]")) if (scrollPositions.has(presKey(el))) el.scrollTop = scrollPositions.get(presKey(el));
     if (focused) {
       const replacement = focused.id
-        ? [...presentation.querySelectorAll("[id]")].find(element => element.id === focused.id)
+        ? [...presentation.querySelectorAll("[id]")].find(element => presKey(element) === focused.id)
         : [...presentation.querySelectorAll("button")].find(button => Object.entries(focused.data).every(([key, value]) => button.dataset[key] === value));
       replacement?.focus({ preventScroll: true });
     }

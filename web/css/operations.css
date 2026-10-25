@@ -167,13 +167,20 @@
 }
 .ops-slide-head {
   top: calc(var(--pres-top) + 54px); left: calc(var(--pres-left) + 366px); right: var(--pres-right);
-  max-height: min(40dvh, calc(100dvh - 148px)) !important; display: flex; flex-direction: column; gap: 10px;
+  max-height: min(44dvh, calc(100dvh - 148px)) !important; display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto 1fr auto;
 }
-.ops-slide-head > div { flex: 1 1 auto; min-height: 0; overflow: auto; overscroll-behavior: contain; }
+/* When the header reaches its height limit the title keeps its size and the warning banners shrink toward their start
+   (min-height); the description takes whatever is left (at least a line, then it scrolls). Only if even that does not fit
+   does the whole header scroll: three warnings in two columns on a short window (about 1024x600) end up there, and the
+   grid keeps min-height: 0 because without it the rows would not shrink to fit at 1024x768 either. */
+.ops-slide-head > .ops-slide-title { grid-row: 1; }
+.ops-slide-head > #ops-pres-message-text { grid-row: 2; margin-top: 5px; min-height: 1.6em; overflow: auto; overscroll-behavior: contain; }
+.ops-slide-head > #ops-pres-message-text > p { margin: 0; }
+.ops-slide-head > .ops-alert-grid { grid-row: 3; margin-top: 10px; min-height: 0; }
 .ops-slide-eyebrow { display: block; color: var(--ink-2); font-size: 12px; line-height: 1.4; font-weight: 600; }
 .ops-slide-head h1 { display: block; margin: 4px 0 0; font-size: clamp(19px, 2vw, 25px); line-height: 1.2; font-weight: 700; }
 .ops-slide-head p { display: block; margin: 5px 0 0; color: var(--ink-2); font-size: 13px; line-height: 1.45; white-space: pre-wrap; }
-.ops-slide-head .ops-alert { flex: 1 1 auto; min-height: min(80px, 18dvh); max-height: 24dvh; overflow: auto; overscroll-behavior: contain; margin: 0; padding: 8px 10px; border-left: 4px solid var(--warn); border-radius: 4px; background: var(--panel-2); color: var(--ink); font-weight: 550; }
+.ops-slide-head .ops-alert { min-height: min(96px, 24dvh); max-height: 24dvh; overflow: auto; overscroll-behavior: contain; margin: 0; padding: 8px 10px; border-left: 4px solid var(--warn); border-radius: 4px; background: var(--panel-2); color: var(--ink); font-weight: 550; }
 .ops-slide-summary {
   top: calc(var(--pres-top) + 54px); left: calc(var(--pres-left) + 54px); bottom: calc(var(--pres-bottom) + 54px);
   width: 300px; display: flex; flex-direction: column; gap: 10px;
