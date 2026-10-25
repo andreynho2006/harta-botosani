@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { parseWarningText, nameKey } from '../web/js/operations-alert-parse.js';
 import { isoTime } from '../web/js/operations-time.js';
+import { rivers, U } from './fixtures/synthetic-rivers.mjs';
 
 const uats = ['Botoșani', 'Dorohoi', 'Broscăuți', 'Dersca', 'Lozna', 'Cristinești', 'Hilișeu-Horia', 'Mihăileni', 'Curtești', 'Vlădeni',
   'Ungureni', 'Darabani', 'Săveni', 'Ștefănești', 'Răchiți', 'Corni', 'Hudești', 'Flămânzi', 'Mihai Eminescu'];
@@ -181,4 +182,68 @@ test('another county named in brackets, or a signature, never selects a UAT of o
   const [qualified] = parse('COD GALBEN\nZona: Corni (județul Suceava), Dorohoi');
   assert.deepEqual([qualified.areas, qualified.unmatched], [['Dorohoi'], ['Corni (județul Suceava)']]);
   assert.deepEqual(parse('COD GALBEN\nFenomene: vijelie\nISU „Nicolae Iorga” Botoșani')[0].areas, []);
+});
+
+// The river cases use an invented index and invented UATs: `with` parses like `parse`, with the rivers loaded.
+const withRivers = (text, options = {}) => parse(text, { uats: U, rivers, ...options });
+const INHGA_2025 = `AVERTIZARE HIDROLOGICĂ
+BAZINELE HIDROGRAFICE VIZATE: Vişeu, Iza, Siret şi Jijia.
+COD GALBEN: În intervalul 27.06.2025 ora 12:00 – 28.06.2025 ora 12:00 pe râurile din bazinele hidrografice: Jijia – bazin superior şi afluenţi bazin mijlociu şi inferior (judeţele: Botoşani şi Iaşi), Siret – afluenţii mici aferenţi sectorului aval confluenţă cu râul Suceava (judeţele: Suceava, Botoşani, Neamţ, Iaşi, Bacău, Vrancea şi Galaţi)`;
+
+test('with the river list, an INHGA warning takes the UATs along the rivers it names instead of marking the county', () => {
+  const [warning, ...rest] = withRivers(INHGA_2025);
+  assert.equal(rest.length, 0);
+  assert.equal(warning.source, 'INHGA');
+  assert.equal(warning.validFrom, at('2025-06-27T12:00'));
+  assert.equal(warning.validTo, at('2025-06-28T12:00'));
+  assert.deepEqual(warning.areas, ['U2', 'U5', 'U9', 'U10', 'U11', 'U12', 'U13', 'U14']);
+  assert.deepEqual([warning.places, warning.unmatched, warning.ambiguous, warning.county], [[], [], [], false]);
+  assert.deepEqual(warning.rivers.map(river => [river.name, river.scope, river.sector]), [['Jijia', 'basin', false], ['Siret', 'tributaries', true]]);
+  assert.deepEqual([warning.smallRivers, warning.riverAmbiguous], [false, []]);
+});
+
+test('without the river list an INHGA warning reads as before, and the rivers fields are empty', () => {
+  const text = `AVERTIZARE HIDROLOGICĂ
+COD PORTOCALIU
+Interval de valabilitate: 20.10 ora 12:00 – 21.10 ora 12:00
+Zone afectate: râurile din bazinul hidrografic Prut – afluenții din județul Botoșani (Jijia, Sitna, Bașeu).`;
+  const [plain] = parse(text);
+  assert.deepEqual([plain.county, plain.areas, plain.rivers, plain.smallRivers, plain.riverAmbiguous], [true, [], [], false, []]);
+  const [loaded] = withRivers(text);
+  assert.deepEqual([loaded.county, loaded.rivers.map(river => `${river.name} ${river.scope}`)],
+    [false, ['Prut tributaries', 'Jijia basin', 'Sitna basin', 'Bașeu basin']]);
+  assert.equal(loaded.areas.length, 14, 'The Prut\'s tributaries reach every UAT of the index');
+});
+
+test('a text pasted without the INHGA title is told by its "bazinele hidrografice", and a river text of another source is not read', () => {
+  const text = 'Cod galben. Pe râurile din bazinele hidrografice Başeu şi Volovăţ din judeţul Botoşani';
+  const [found] = withRivers(text);
+  assert.equal(found.source, 'INHGA');
+  assert.deepEqual([found.areas, found.rivers.map(river => river.name)], [['U3', 'U4', 'U5', 'U6'], ['Bașeu', 'Volovăț']]);
+  assert.equal(parse(text)[0].source, 'INHGA', 'Also without the river list');
+  const [anm] = withRivers('Cod galben nowcasting ANM. Zona: Jijia (județul Botoșani)');
+  assert.deepEqual([anm.source, anm.rivers, anm.county], ['ANM', [], true], 'An ANM warning for the county is still every UAT');
+});
+
+test('a section whose rivers are all in other counties does not concern ours, unless no section does', () => {
+  const found = withRivers(`COD GALBEN
+Valabil de la 20.10.2026 ora 10 până la 21.10.2026 ora 10
+Pe râurile din bazinele hidrografice: Prut – afluenţii aferenţi sectorului aval confluenţă cu râul Jijia (judeţele: Iaşi, Vaslui şi Galaţi)
+COD PORTOCALIU
+Valabil de la 20.10.2026 ora 10 până la 21.10.2026 ora 10
+Pe râurile din bazinele hidrografice: Jijia (judeţele: Botoşani şi Iaşi)`);
+  assert.deepEqual(found.map(warning => [warning.code, warning.areas.length]), [['orange', 7]]);
+  const [alone] = withRivers('COD GALBEN\nPe râurile din bazinele hidrografice: Prut – afluenţii aferenţi sectorului aval confluenţă cu râul Jijia (judeţele: Iaşi, Vaslui şi Galaţi)');
+  assert.deepEqual([alone.code, alone.areas, alone.rivers, alone.county], ['yellow', [], [], false], 'Every section comes back when none concerns the county');
+  const every = withRivers('COD GALBEN\nPrut – afluenţii mici (judeţele: Iaşi şi Vaslui)\nCOD ROŞU\nJijia (judeţele: Botoşani şi Iaşi)', { all: true });
+  assert.equal(every.length, 2, '`all` asks for every section');
+});
+
+test('"unele râuri mici" make a section concern the county, and a name of several courses is reported by name', () => {
+  const found = withRivers(`Avertizare hidrologică
+COD GALBEN: pe unele râuri mici din judeţele: Prahova, Suceava şi Botoşani
+COD PORTOCALIU: Prut – afluenţii mici (judeţele: Iaşi şi Vaslui)`);
+  assert.deepEqual(found.map(warning => [warning.code, warning.smallRivers, warning.rivers.length, warning.areas.length]), [['yellow', true, 0, 0]]);
+  const [clash] = withRivers('Cod galben. Pe râurile din bazinele hidrografice: Valea Mare – bazin (județul Botoșani), Miletin (județul Botoșani)');
+  assert.deepEqual([clash.riverAmbiguous, clash.ambiguous, clash.rivers.map(river => river.name)], [['Valea Mare'], [], ['Miletin']]);
 });

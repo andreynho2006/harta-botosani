@@ -2,6 +2,7 @@
 // Pure and DOM-free; the editor turns each result into a warning the operator then checks.
 import { placeKey } from './operations-alerts.js?v=20261019-multi-alerts';
 import { localTime, isoTime } from './operations-time.js';
+import { readRivers } from './operations-rivers.js';
 
 const CODE_WORDS = { galben: 'yellow', portocaliu: 'orange', rosu: 'red' };
 const MONTHS = {
@@ -317,7 +318,7 @@ function sections(original) {
 }
 
 function sourceOf(folded) {
-  if (/\binhga\b|hidrolog/.test(folded)) return 'INHGA';
+  if (/\binhga\b|hidrolog|bazin(?:ele|ul)?\s+hidrografic/.test(folded)) return 'INHGA';
   if (/\banm\b|meteorolog|nowcasting|srpv/.test(folded)) return 'ANM';
   if (/\bro[\s-]?alert\b|\bigsu\b/.test(folded)) return 'IGSU';
   return '';
@@ -387,13 +388,25 @@ function wallToday(now) {
 export const readValidity = (text, { now = new Date() } = {}) => readInterval(foldText(text).folded, wallToday(now));
 
 /**
- * Every warning a pasted message holds for the county, as
- * { code, source, validFrom, validTo, text, textCut, areas, places, county, unmatched, ambiguous, interval }.
- * `county` marks a message for the whole county (its areas are then all UATs, except for INHGA,
- * whose warnings name rivers). Sections that name other counties only are left out, unless no
- * section concerns the county at all or `all` asks for every section.
+ * An INHGA section's zone with the rivers it names (see `readRivers`): when any is kept, their UATs
+ * are the areas and the county mark, villages and unmatched names of the text give way to them.
  */
-export function parseWarningText(text, { uats = [], localities = [], now = new Date(), all = false } = {}) {
+function withRivers(zone, water) {
+  if (!water) return { ...zone, rivers: [], smallRivers: false, riverAmbiguous: [] };
+  const own = water.rivers.length ? { ...zone, areas: water.areas, places: [], county: false, unmatched: [], ambiguous: [] } : zone;
+  return { ...own, rivers: water.rivers, smallRivers: water.smallRivers, riverAmbiguous: water.ambiguous, concerns: zone.concerns || water.concerns };
+}
+
+/**
+ * Every warning a pasted message holds for the county, as
+ * { code, source, validFrom, validTo, text, textCut, areas, places, county, unmatched, ambiguous, rivers, smallRivers, riverAmbiguous, interval }.
+ * `county` marks a message for the whole county (its areas are then all UATs, except for INHGA,
+ * whose warnings name rivers). With `rivers`, the hydrography's `properties`, an INHGA warning
+ * takes the UATs along the rivers it names for the county instead, and `rivers` lists them.
+ * Sections that name other counties only are left out, unless no section concerns the county
+ * at all or `all` asks for every section.
+ */
+export function parseWarningText(text, { uats = [], localities = [], rivers = [], now = new Date(), all = false } = {}) {
   const original = String(text ?? '').replace(/\r\n?/g, '\n');
   if (!original.trim()) return [];
   const today = wallToday(now);
@@ -405,7 +418,7 @@ export function parseWarningText(text, { uats = [], localities = [], now = new D
     const body = original.slice(start, end);
     const { folded } = foldText(body);
     const source = sourceOf(folded) || wholeSource;
-    const zone = zoneOf(body, index, source);
+    const zone = withRivers(zoneOf(body, index, source), source === 'INHGA' && rivers.length ? readRivers(body, rivers, { uats }) : null);
     const { text: warningText, cut } = readText(body);
     const own = readInterval(folded, today);
     const { validFrom, validTo, note } = own.note === 'none' && shared.note !== 'none' ? shared : own;
