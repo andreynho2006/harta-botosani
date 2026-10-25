@@ -172,6 +172,7 @@ async function browserChecks({ initOperations, createEvent }) {
       const inArchive = () => archive().some(event => event.id === mine.id);
       $('[data-delete-id]').click();
       check('deleteAsksFirst', $('.ops-confirm')?.textContent.includes('și din Cloud') && inArchive() && !deletes.length);
+      check('deleteFocusesCancel', document.activeElement?.dataset.action === 'cancel-delete');
       $('[data-action="cancel-delete"]').click();
       check('deleteCanBeCancelled', !$('.ops-confirm') && title() === 'Exercițiu CJSU' && inArchive());
       $('[data-delete-id]').click();

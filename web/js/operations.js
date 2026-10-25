@@ -2236,7 +2236,8 @@ export function initOperations(ctx) {
     if (button.dataset.deleteId) {
       confirmDeleteId = button.dataset.deleteId;
       render();
-      panel.querySelector("[data-confirm-delete]")?.focus();
+      // The safe answer takes the focus, so Enter right after "Șterge" deletes nothing.
+      panel.querySelector('[data-action="cancel-delete"]')?.focus();
       return;
     }
     if (button.dataset.confirmDelete) return deleteSituation(button.dataset.confirmDelete);
