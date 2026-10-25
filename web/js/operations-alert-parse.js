@@ -105,6 +105,8 @@ const DATE_PATTERNS = [
   { re: /\b(\d{1,2})\.(\d{1,2})(?![.\d])[ \t,]*(?:ora|orele)[ \t]*(\d{1,2})(?:[:.](\d{2}))?(?!\d)/g, parts: m => ({ year: null, month: +m[2], day: +m[1], hour: m[3], minute: m[4] }) },
 ];
 const TIME_ONLY = /(?:\b(?:ora|orele)[ \t]*(\d{1,2})(?:[:.](\d{2}))?(?!\d)|\b(\d{1,2}):(\d{2})(?!\d))/g;
+// A time of day; INHGA ends an interval at "ora 24:00", the midnight that closes the day.
+const clock = (hour, minute) => minute <= 59 && (hour <= 23 || (hour === 24 && minute === 0));
 
 /** Every date and time in the text, in reading order, each marked when it is the time the message was issued. */
 function timeTokens(folded) {
@@ -115,7 +117,7 @@ function timeTokens(folded) {
     for (const m of folded.matchAll(re)) {
       if (overlaps(m.index, m.index + m[0].length)) continue;
       const p = parts(m);
-      if (p.month < 1 || p.month > 12 || p.day < 1 || p.day > 31 || +(p.hour ?? 0) > 23 || +(p.minute ?? 0) > 59) continue;
+      if (p.month < 1 || p.month > 12 || p.day < 1 || p.day > 31 || !clock(+(p.hour ?? 0), +(p.minute ?? 0))) continue;
       const end = m.index + m[0].trimEnd().length;
       taken.push([m.index, end]);
       tokens.push({ index: m.index, end, date: { year: p.year, month: p.month, day: p.day }, time: p.hour !== undefined ? { hour: +p.hour, minute: +(p.minute || 0) } : null });
@@ -124,7 +126,7 @@ function timeTokens(folded) {
   for (const m of folded.matchAll(TIME_ONLY)) {
     if (overlaps(m.index, m.index + m[0].length)) continue;
     const hour = +(m[1] ?? m[3]), minute = +(m[2] ?? m[4] ?? 0);
-    if (hour > 23 || minute > 59) continue;
+    if (!clock(hour, minute)) continue;
     taken.push([m.index, m.index + m[0].length]);
     tokens.push({ index: m.index, end: m.index + m[0].length, date: null, time: { hour, minute } });
   }
@@ -178,6 +180,10 @@ function readInterval(folded, today) {
         const next = new Date(Date.UTC(value.year, value.month - 1, value.day + 1));
         value = { ...value, year: next.getUTCFullYear(), month: next.getUTCMonth() + 1, day: next.getUTCDate() };
       }
+    }
+    if (value.hour === 24) {
+      const next = new Date(Date.UTC(value.year, value.month - 1, value.day + 1));
+      value = { year: next.getUTCFullYear(), month: next.getUTCMonth() + 1, day: next.getUTCDate(), hour: 0, minute: 0 };
     }
     resolved.push(value);
   }
@@ -321,7 +327,9 @@ function sections(original) {
 }
 
 function sourceOf(folded) {
-  if (/\binhga\b|hidrolog|bazin(?:ele|ul)?\s+hidrografic/.test(folded)) return 'INHGA';
+  // A section pasted without the bulletin's title still reads as INHGA by its river wording:
+  // "bazinele hidrografice", "afluenții (mici) aferenți", "bazin superior", "sector aval".
+  if (/\binhga\b|hidrolog|bazin(?:ele|ul)?\s+hidrografic|\bafluent\w*\s+(?:mici\s+|de\s+(?:stanga|dreapta)\s+)?aferent|\bbazin\s+(?:superior|mijlociu|inferior|amonte)\b|\bsector(?:ul|ului)?\s+(?:aval|amonte)\b/.test(folded)) return 'INHGA';
   if (/\banm\b|meteorolog|nowcasting|srpv/.test(folded)) return 'ANM';
   if (/\bro[\s-]?alert\b|\bigsu\b/.test(folded)) return 'IGSU';
   return '';

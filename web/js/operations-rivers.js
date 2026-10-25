@@ -72,7 +72,8 @@ const endsSentence = (text, at) => text[at] === '.' && at >= 3 && /[a-z0-9]{3}$/
  * wrap onto the next lines), or to the first code or "momentul producerii" heading, or 500 characters.
  */
 function skippedRanges(folded) {
-  return [...folded.matchAll(/^[ \t]*(?:bazinele[ \t]+hidrografice[ \t]+(?:vizate|afectate)\b|catre[ \t]*:)/gm)].map(m => {
+  // The title may share its line with the text pasted before it; the addressees open their own.
+  return [...folded.matchAll(/\bbazinele\s+hidrografice\s+(?:vizate|afectate)\s*:|^[ \t]*catre[ \t]*:/gm)].map(m => {
     const from = m.index + m[0].length;
     const heading = folded.slice(from, m.index + 500).search(new RegExp(`${CODE_HEADING.source}|\\bmomentul\\s+producerii\\b`));
     const limit = heading < 0 ? Math.min(folded.length, m.index + 500) : from + heading;
@@ -109,8 +110,11 @@ function countyLists(folded) {
   return lists;
 }
 
-/** Each name takes the first county list after it, and the last list before it when none follows; none is unknown. */
-function assignLists(hits, lists) {
+/**
+ * Each name takes the first county list after it. When none follows, it takes the last list before it in the same
+ * sentence ("Prut (județele: Botoșani și Iași), Jijia"); a name after the sentence of the last list has none.
+ */
+function assignLists(folded, hits, lists) {
   const events = [...hits.map(hit => ({ at: hit.start, hit })), ...lists.map(list => ({ at: list.start, list }))].sort((a, b) => a.at - b.at);
   let waiting = [], last = null;
   for (const { hit, list } of events) {
@@ -119,7 +123,8 @@ function assignLists(hits, lists) {
     waiting = [];
     last = list;
   }
-  for (const name of waiting) name.list = last;
+  const sentenceEnds = (from, to) => { for (let at = from; at < to; at++) if (endsSentence(folded, at)) return true; return false; };
+  for (const name of waiting) if (last && !sentenceEnds(last.end, name.start)) name.list = last;
 }
 
 // An entry is a line or two; a text pasted from a PDF wraps lines inside it, so a line break does not end it.
@@ -190,6 +195,18 @@ function readEntry(folded, hit, next, course, index, lists) {
   return { course, river, domain };
 }
 
+/**
+ * The cadastre's name, or the warning's spelling of it when only that one has diacritics: many cadastre names
+ * came without them ("Volovat"), while the warning writes "Volovăț".
+ */
+function shownName(text, origin, hit, course) {
+  if (/[^\x00-\x7f]/.test(course.name)) return course.name;
+  const written = text.slice(origin[hit.start], origin[hit.end - 1] + 1).replace(/[\s-]+/g, ' ')
+    .replace(/ş/g, 'ș').replace(/Ş/g, 'Ș').replace(/ţ/g, 'ț').replace(/Ţ/g, 'Ț');
+  const marked = /[^\x00-\x7f]/.test(written) && written !== written.toUpperCase();
+  return marked && nameKey(written) === nameKey(course.name) ? written : course.name;
+}
+
 // "pe unele râuri mici din județele: Prahova, Suceava și Botoșani" names counties, not rivers.
 const SMALL_RIVERS = /rauri(?:le)?\s+mici\s+din\s+judet\w*\s*:?\s*[^.]*\bbotosani\b/;
 
@@ -201,7 +218,7 @@ const SMALL_RIVERS = /rauri(?:le)?\s+mici\s+din\s+judet\w*\s*:?\s*[^.]*\bbotosan
  * title or the addressees, or for other counties are left out.
  */
 export function readRivers(sectionText, properties, { uats = [] } = {}) {
-  const { folded } = foldText(sectionText);
+  const { folded, origin } = foldText(sectionText);
   const index = riverIndex(properties);
   const smallRivers = SMALL_RIVERS.test(folded);
   const kept = [], clashing = [];
@@ -212,22 +229,25 @@ export function readRivers(sectionText, properties, { uats = [] } = {}) {
     const hits = [...folded.matchAll(index.scan)]
       .map(m => ({ start: m.index, end: m.index + m[0].length, key: nameKey(m[0]) }))
       .filter(hit => !skipped.some(([from, to]) => hit.start >= from && hit.start < to) && !isLandmark(folded, hit.start));
-    assignLists(hits, lists);
-    const mentioned = /\bbotosani\b/.test(folded);
+    assignLists(folded, hits, lists);
+    // Without any county list, the rivers are the county's when the text names Botoșani; with lists, a name
+    // outside them belongs to a part of the message about some other place.
+    const mentioned = !lists.length && /\bbotosani\b/.test(folded);
     hits.forEach((hit, i) => {
       if (!(hit.list ? hit.list.counties.has('botosani') : mentioned)) return;
       const course = index.names.get(hit.key);
-      if (course) kept.push(readEntry(folded, hit, hits[i + 1], course, index, lists));
+      if (course) kept.push({ ...readEntry(folded, hit, hits[i + 1], course, index, lists), hit });
       else clashing.push(index.clashes.get(hit.key));
     });
   }
-  // The same river and scope named twice is one.
-  const rivers = [];
-  for (const { river, domain } of kept) {
-    const found = new Set(domain.flatMap(course => course.uats.map(nameKey)));
-    const mine = { ...river, uats: uats.filter(name => found.has(nameKey(name))) };
-    const same = rivers.find(other => ['name', 'scope', 'after', 'before'].every(field => other[field] === mine[field]));
-    if (same) same.sector ||= mine.sector; else rivers.push(mine);
+  // The same course and scope named twice is one, however each time spelled it.
+  const rivers = [], seen = new Map();
+  for (const { course, river, domain, hit } of kept) {
+    const found = new Set(domain.flatMap(other => other.uats.map(nameKey)));
+    const mine = { ...river, name: shownName(sectionText, origin, hit, course), uats: uats.filter(name => found.has(nameKey(name))) };
+    const key = [course.code, mine.scope, mine.after, mine.before].join('|');
+    if (seen.has(key)) seen.get(key).sector ||= mine.sector;
+    else { seen.set(key, mine); rivers.push(mine); }
   }
   const areas = uats.filter(name => rivers.some(river => river.uats.includes(name)));
   return { rivers, areas, ambiguous: [...new Set(clashing)], smallRivers, concerns: rivers.length > 0 || smallRivers };

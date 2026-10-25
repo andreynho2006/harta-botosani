@@ -191,3 +191,20 @@ test('the title\'s skipped lines end at any code heading the sections accept, "C
   }
   assert.deepEqual(read(`${title}\nCOD: GALBEN: Jijia (judeţele: Iaşi şi Vaslui).`).rivers, [], 'The title\'s own names are still skipped');
 });
+
+test('a cadastre name without diacritics takes the warning\'s spelling, and one course named twice is listed once', () => {
+  const plain = [{ name: 'Volovat', aba: 'VOLOVAT (VOLOVET)', alt: ['Volovet'], code: 'RO_XIII_1.8', uats: ['U3'] }];
+  assert.deepEqual(readRivers('Volovăţ (judeţul Botoşani)', plain, { uats: U }).rivers.map(river => river.name), ['Volovăț'], 'Cedillas become commas');
+  assert.deepEqual(readRivers('VOLOVĂŢ (judeţul Botoşani)', plain, { uats: U }).rivers.map(river => river.name), ['Volovat'], 'Capitals are not a spelling');
+  assert.deepEqual(readRivers('Volovet (judeţul Botoşani)', plain, { uats: U }).rivers.map(river => river.name), ['Volovat'], 'An alternative name shows the main one');
+  const twice = read('Bășeu (județul Botoșani), Başeu (judeţul Botoşani)');
+  assert.deepEqual(summary(twice), ['Bașeu basin false U4,U5,U6'], 'The cadastre keeps its own diacritics');
+});
+
+test('the national title is skipped on a line it shares, and names past the sentence of the last county list are not ours', () => {
+  const shared = read('pe BAZINELE HIDROGRAFICE VIZATE: Siret, Prut şi Jijia. Jijia – bazin superior (judeţele: Botoşani şi Iaşi)');
+  assert.deepEqual(shared.rivers.map(river => river.name), ['Jijia']);
+  const later = read(`${head}Miletin - afluenţii aferenţi sectorului aval S.H. Nicolae Bălcescu; judeţele: Botoşani şi Iaşi. Pe râuri din bazinele hidrografice: Buhai şi Podriga.`);
+  assert.deepEqual(later.rivers.map(river => river.name), ['Miletin'], 'Buhai and Podriga come after the sentence the list closed');
+  assert.deepEqual(read('Bașeu și Volovăț, sub cod portocaliu. ISU Botoșani').rivers.map(river => river.name), ['Bașeu', 'Volovăț'], 'Without any list, a text naming Botoșani keeps its rivers');
+});

@@ -90,6 +90,16 @@ Zone afectate: râurile din bazinul hidrografic Prut – afluenții din județul
   assert.equal(warning.validTo, at('2026-10-21T12:00'));
 });
 
+test('"ora 24:00" ends the interval at the midnight that closes its day', () => {
+  const [warning] = parse('AVERTIZARE HIDROLOGICĂ\nCOD GALBEN: În intervalul 02.04.2026 ora 18:00 – 04.04.2026 ora 24:00 pe râurile din bazinele hidrografice: Jijia (județele: Botoșani și Iași).');
+  assert.equal(warning.validFrom, at('2026-04-02T18:00'));
+  assert.equal(warning.validTo, at('2026-04-05T00:00'));
+  assert.equal(warning.interval, '');
+  const [later] = parse('ATENȚIONARE HIDROLOGICĂ\nCOD GALBEN\nInterval de valabilitate: 20.10 ora 12:00 – ora 24:00');
+  assert.equal(later.validTo, at('2026-10-21T00:00'), 'An end without a date closes the start\'s day');
+  assert.deepEqual(parse('ATENȚIONARE HIDROLOGICĂ\nCOD GALBEN\nInterval de valabilitate: 20.10 ora 12:00 – 21.10 ora 24:30').map(w => w.validTo), [''], 'Only 24:00 is a time past 23:59');
+});
+
 test('free text names UATs, but not "ISU Botoșani", and "până la" alone is the end of the interval', () => {
   const [warning] = parse('ISU Botoșani informează: cod galben de ceață până la ora 11:00, în localitățile Darabani, Săveni și Ștefănești.');
   assert.deepEqual(warning.areas, ['Darabani', 'Săveni', 'Ștefănești']);
@@ -289,4 +299,15 @@ test('a title without a full stop ends at "COD: GALBEN" like at any other code h
 BAZINELE HIDROGRAFICE VIZATE: Bahna, Siret şi Jijia
 COD: GALBEN: În intervalul 27.06.2025 ora 12:00 – 28.06.2025 ora 12:00 pe râurile din bazinele hidrografice: Miletin (judeţele: Botoşani şi Iaşi).`);
   assert.deepEqual([found.rivers.map(river => river.name), found.areas, found.county], [['Miletin'], ['U9', 'U10', 'U14'], false]);
+});
+
+test('a section pasted without the bulletin\'s title is INHGA by its river wording, and a sector is its river, not the county', () => {
+  const [above] = parse('COD GALBEN: Prut – afluenţii aferenţi sectorului amonte confluenţă cu râul Jijia (judeţele: Botoşani şi Iaşi)', { rivers });
+  assert.equal(above.source, 'INHGA');
+  assert.deepEqual(above.rivers.map(river => [river.name, river.scope, river.before]), [['Prut', 'tributaries', 'Jijia']]);
+  const [reach] = parse('COD GALBEN: pe râurile: Prut – sector amonte acumularea Stânca Costeşti (judeţul Botoşani).', { rivers });
+  assert.equal(reach.source, 'INHGA');
+  assert.deepEqual([reach.county, reach.rivers.map(river => [river.name, river.scope, river.sector])], [false, [['Prut', 'river', true]]]);
+  const [upper] = parse('COD GALBEN: Jijia – bazin superior şi afluenţi bazin mijlociu şi inferior (judeţele: Botoşani şi Iaşi).', { rivers });
+  assert.equal(upper.source, 'INHGA');
 });
