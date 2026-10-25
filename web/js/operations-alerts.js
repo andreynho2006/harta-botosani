@@ -57,11 +57,19 @@ export function legacyNote(event) {
   return text || source || validFrom || validTo ? { text, source, validFrom, validTo } : null;
 }
 
-/** Notes with the legacy message appended, kept within the 10 000-character notes limit. */
+const NOTES_LIMIT = 10000;
+const joinLegacyNote = (notes, note, interval) =>
+  [notes, `Mesaj fără cod (arhivă): ${[note.text, note.source, interval].filter(Boolean).join(' · ')}`].filter(Boolean).join('\n\n');
+
+/** Characters the notes must lose before the legacy message fits the 10 000-character limit. */
+export function legacyNoteOverflow(notes, note, interval = '') {
+  return note ? Math.max(0, joinLegacyNote(notes, note, interval).length - NOTES_LIMIT) : 0;
+}
+
+/** Notes with the legacy message appended; null when they do not fit, since cutting either loses text. */
 export function notesWithLegacyNote(notes, note, interval = '') {
   if (!note) return notes || '';
-  const line = `Mesaj fără cod (arhivă): ${[note.text, note.source, interval].filter(Boolean).join(' · ')}`;
-  return [notes, line].filter(Boolean).join('\n\n').slice(0, 10000);
+  return legacyNoteOverflow(notes, note, interval) ? null : joinLegacyNote(notes, note, interval);
 }
 
 export function affectedAlertLocations(event) {

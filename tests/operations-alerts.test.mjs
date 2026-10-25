@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { normalizeAlerts, affectedAlertLocations, warningsForLocation, placeKey, resolvePlace, placeLabel, legacyNote, notesWithLegacyNote } from '../web/js/operations-alerts.js';
+import { normalizeAlerts, affectedAlertLocations, warningsForLocation, placeKey, resolvePlace, placeLabel, legacyNote, legacyNoteOverflow, notesWithLegacyNote } from '../web/js/operations-alerts.js';
 import { createEvent, sanitizeEvent, EventStore } from '../web/js/event-store.js';
-import { warningOptions } from '../web/js/operations-alert-editor.js';
+import { warningOptions, createAlertEditor } from '../web/js/operations-alert-editor.js';
 
 const alert = (id, code, areas, places = []) => ({ id, code, source: 'ANM', validFrom: '2026-10-19T10:00:00+03:00', validTo: '2026-10-19T18:00:00+03:00', text: 'Vânt puternic', areas, places });
 function memoryStorage() {
@@ -58,8 +58,43 @@ test('a code-less legacy message is kept as a note instead of disappearing', () 
   assert.equal(legacyNote({ alert: { code: '' } }), null);
   assert.equal(notesWithLegacyNote('Sinteză', legacyNote(event), '25.10.2026, 12:00 – …'), 'Sinteză\n\nMesaj fără cod (arhivă): Viscol · IGSU · 25.10.2026, 12:00 – …');
   assert.equal(notesWithLegacyNote('', legacyNote(event)), 'Mesaj fără cod (arhivă): Viscol · IGSU');
-  assert.equal(notesWithLegacyNote('x'.repeat(9990), legacyNote(event)).length, 10000, 'Notes never exceed the saved limit');
+  const line = 'Mesaj fără cod (arhivă): Viscol · IGSU';
+  const fits = 'x'.repeat(10000 - line.length - 2);
+  assert.equal(notesWithLegacyNote(fits, legacyNote(event)), `${fits}\n\n${line}`, 'Notes that fit are kept whole');
+  assert.equal(legacyNoteOverflow(fits, legacyNote(event)), 0);
+  assert.equal(notesWithLegacyNote(`${fits}x`, legacyNote(event)), null, 'Neither text is cut to make room');
+  assert.equal(legacyNoteOverflow(`${fits}x`, legacyNote(event)), 1);
+  assert.equal(legacyNoteOverflow('x'.repeat(10000), null), 0);
   assert.equal(notesWithLegacyNote('Sinteză', null), 'Sinteză');
+});
+
+test('full notes keep a legacy event unmigrated and say how much to shorten', () => {
+  const active = { alert: { code: '', source: 'IGSU', text: 'Viscol', validFrom: '', validTo: '' }, notes: 'x'.repeat(10000) };
+  const note = { textContent: '', setAttribute(name, value) { this[name] = value; } };
+  const panel = { querySelector: selector => selector === '[data-legacy-note]' ? note : null };
+  let changes = 0;
+  const editor = createAlertEditor({ panel, getActive: () => active, getData: () => ({}), onChange: () => { changes++; } });
+  const overflow = legacyNoteOverflow(active.notes, legacyNote(active));
+  assert.match(editor.html(), new RegExp(`scurteaz-o cu ${overflow} de caractere`));
+  assert.equal(editor.handleClick({ dataset: { alertAction: 'add' } }), true);
+  assert.equal(active.alerts, undefined, 'The legacy message stays in place');
+  assert.equal(active.notes.length, 10000, 'The notes are not cut');
+  assert.equal(changes, 0);
+  assert.match(note.textContent, new RegExp(`scurteaz-o cu ${overflow} de caractere`));
+  assert.equal(note.role, 'alert');
+  // The count is recomputed on each click, not taken from the last render.
+  for (const [left, words] of [[19, '19 caractere'], [1, '1 caracter']]) {
+    active.notes = 'x'.repeat(10000 - overflow + left);
+    editor.handleClick({ dataset: { alertAction: 'add' } });
+    assert.match(note.textContent, new RegExp(`scurteaz-o cu ${words},`));
+  }
+
+  active.notes = 'x'.repeat(10000 - overflow);
+  editor.handleClick({ dataset: { alertAction: 'add' } });
+  assert.equal(active.alerts.length, 1);
+  assert.equal(active.notes.length, 10000);
+  assert.ok(active.notes.endsWith('Mesaj fără cod (arhivă): Viscol · IGSU'));
+  assert.doesNotMatch(editor.html(), /data-legacy-note/, 'Once migrated the message lives in the notes');
 });
 
 test('villages with the same name are told apart by UAT and legacy names prefer the county', () => {

@@ -1,4 +1,4 @@
-import { normalizeAlerts, resolvePlace, placeKey, placeLabel, legacyNote, notesWithLegacyNote, ALERT_LABELS as CODES } from './operations-alerts.js?v=20261019-multi-alerts';
+import { normalizeAlerts, resolvePlace, placeKey, placeLabel, legacyNote, legacyNoteOverflow, notesWithLegacyNote, ALERT_LABELS as CODES } from './operations-alerts.js?v=20261019-multi-alerts';
 import { localTime, isoTime, dateLabel } from './operations-time.js';
 
 const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -33,6 +33,18 @@ export function createAlertEditor({ panel, getActive, getData, onChange }) {
   let newId = null;
   const canonical = (kind, entry) => canonicalEntry(kind, entry, getData()?.localities || []);
   function warnings() { return normalizeAlerts(getActive()); }
+  const legacyInterval = note => note.validFrom || note.validTo ? [note.validFrom, note.validTo].map(value => value ? dateLabel(value) : '…').join(' – ') : '';
+  // Romanian counts from 20 (and 100, 200…) take "de": 19 caractere, 20 de caractere, 101 caractere.
+  const characters = n => n === 1 ? '1 caracter' : `${n} ${n % 100 === 0 || n % 100 >= 20 ? 'de ' : ''}caractere`;
+  function legacyText(active) {
+    const note = legacyNote(active);
+    if (!note) return '';
+    const overflow = legacyNoteOverflow(active.notes, note, legacyInterval(note));
+    return `Mesaj fără cod din arhivă: „${note.text || note.source}”. Apare în prezentare; ${overflow
+      ? `„Sinteză operativă” nu mai are loc pentru el: scurteaz-o cu ${characters(overflow)}, apoi adaugă avertizarea.`
+      : 'la prima avertizare adăugată, textul trece în „Sinteză operativă”.'}`;
+  }
+  /** The warning list, migrating a legacy event; null while its code-less message does not fit the notes. */
   function editable() {
     const active = getActive();
     if (!active) return [];
@@ -40,8 +52,9 @@ export function createAlertEditor({ panel, getActive, getData, onChange }) {
       // Saving rewrites the legacy field from the warning list, so keep a code-less message in the notes.
       const note = legacyNote(active);
       if (note) {
-        const interval = note.validFrom || note.validTo ? [note.validFrom, note.validTo].map(value => value ? dateLabel(value) : '…').join(' – ') : '';
-        active.notes = notesWithLegacyNote(active.notes, note, interval);
+        const notes = notesWithLegacyNote(active.notes, note, legacyInterval(note));
+        if (notes === null) return null;
+        active.notes = notes;
       }
       active.alerts = warnings();
     }
@@ -67,7 +80,7 @@ export function createAlertEditor({ panel, getActive, getData, onChange }) {
     const alerts = warnings();
     return `<section class="ops-card" data-ops-card="alerts"><h3>Avertizări și localități sub cod</h3>
       <p class="muted">Fiecare cod are propria zonă și propriul interval. Poți suprapune mai multe avertizări.</p>
-      ${legacyNote(getActive()) ? `<p class="muted" role="note">Mesaj fără cod din arhivă: „${esc(legacyNote(getActive()).text || legacyNote(getActive()).source)}”. Apare în prezentare; la prima avertizare adăugată, textul trece în „Sinteză operativă”.</p>` : ''}
+      ${legacyNote(getActive()) ? `<p class="muted" role="note" data-legacy-note>${esc(legacyText(getActive()))}</p>` : ''}
       <div class="ops-alert-list">${alerts.map((alert, i) => `<details class="ops-alert-entry" data-warning-id="${esc(alert.id)}" ${alerts.length === 1 || alert.id === newId ? 'open' : ''}>
         <summary><span class="ops-alert-dot" data-code="${esc(alert.code)}" aria-hidden="true"></span><span data-alert-summary>${esc(CODES[alert.code] || 'Avertizare')} · ${(alert.areas?.length || 0) + (alert.places?.length || 0)} zone</span></summary>
         <div class="ops-alert-fields">
@@ -161,6 +174,12 @@ export function createAlertEditor({ panel, getActive, getData, onChange }) {
     const action = button?.dataset.alertAction;
     if (!['add', 'remove'].includes(action) || !getActive()) return false;
     const alerts = editable();
+    if (!alerts) {
+      // The notes may have grown since the last render, so say how much to shorten now.
+      const note = panel.querySelector('[data-legacy-note]');
+      if (note) { note.textContent = legacyText(getActive()); note.setAttribute('role', 'alert'); }
+      return true;
+    }
     if (action === 'add') {
       newId = crypto.randomUUID();
       alerts.push({ id: newId, code: 'yellow', source: '', validFrom: '', validTo: '', text: '', areas: [], places: [] });
