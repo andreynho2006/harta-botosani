@@ -1626,13 +1626,22 @@ export function initOperations(ctx) {
       notice = "Situația e salvată în acest browser. Cloud-ul nu e disponibil, deci celelalte ecrane nu o primesc.";
       refreshPublishState(); toast(notice); return;
     }
-    const version = { id: active.id, updatedAt: active.updatedAt };
+    const version = { id: active.id, updatedAt: active.updatedAt }, title = active.title;
     publishing = true; notice = "Se publică în Cloud…"; refreshPublishState();
     const result = await publishToCloud(active, () => {
       markPublished(version);
       if (active?.id === version.id) { notice = "Publicarea s-a încheiat: situația a ajuns în Cloud."; refreshPublishState(); toast(notice); }
+      else toast(`Situația „${title}” a ajuns în Cloud.`);
     });
     publishing = false;
+    // Another situation may be open by now: its panel must not carry this answer.
+    if (active?.id !== version.id) {
+      notice = "";
+      refreshPublishState();
+      return toast(result === "ok" ? `Situația „${title}” a fost publicată în Cloud.`
+        : result === "waiting" ? `Publicarea situației „${title}” așteaptă conexiunea.`
+        : `Situația „${title}” nu a ajuns în Cloud. Deschide-o și apasă din nou „Publică în Cloud”.`);
+    }
     if (result === "ok") {
       markPublished(version);
       notice = `Situația a fost publicată în Cloud (${dateLabel(version.updatedAt)}). Celelalte ecrane o primesc acum.`;
