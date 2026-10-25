@@ -44,6 +44,19 @@ test('save updates the existing event while preserving its creation timestamp', 
   assert.equal(updated.title, 'Updated situation');
 });
 
+test('put stores a version exactly as given, even over a newer local copy', () => {
+  const store = new EventStore(memoryStorage());
+  const local = store.save({ ...eventWithRoad(), title: 'Local edit' });
+  const cloud = { ...structuredClone(local), title: 'Colleague version', updatedAt: '2020-01-01T00:00:00.000Z' };
+  const stored = store.put(cloud);
+  assert.equal(stored.updatedAt, cloud.updatedAt);
+  assert.equal(store.load(local.id).title, 'Colleague version');
+  assert.equal(store.list().length, 1);
+  assert.equal(store.importArchive({ format: 'harta-botosani-events', version: 1, events: [local] }).imported, 1, 'the newer local copy still wins a normal merge');
+  assert.throws(() => store.put({ ...cloud, features: 'not geojson' }));
+  assert.equal(store.load(local.id).title, 'Local edit');
+});
+
 test('storage quota and malformed existing archives throw without replacing existing data', () => {
   const storage = memoryStorage(), store = new EventStore(storage);
   store.save(eventWithRoad());

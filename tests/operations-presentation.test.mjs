@@ -207,7 +207,7 @@ async function browserChecks({ initOperations, createEvent }) {
     const title = () => document.querySelector('[data-ops-card="event"] h2').textContent;
     check('rejectedDateFlagged', held());
     document.querySelector('[data-action="save"]').click();
-    refused('saveRefusedWhileDateRejected', 'Situația nu a fost salvată.');
+    refused('saveRefusedWhileDateRejected', 'Situația nu a fost publicată.');
     document.querySelector('[data-action="event-export"]').click(); await settle();
     refused('exportRefusedWhileDateRejected', 'Situația nu a fost exportată.');
     document.querySelector('[data-action="archive-export"]').click(); await settle();
@@ -246,7 +246,7 @@ async function browserChecks({ initOperations, createEvent }) {
     check('correctedDateLiftsTheFlag', !document.querySelector('[data-warning-field="validFrom"]').validationMessage
       && !document.querySelector('[data-alert-status]').textContent.startsWith('Interval invalid'));
     document.querySelector('[data-action="save"]').click();
-    check('saveWorksOnceCorrected', notice().startsWith('Situația a fost salvată') && archive() !== archiveBefore);
+    check('saveWorksOnceCorrected', notice().startsWith('Situația e salvată în acest browser') && archive() !== archiveBefore);
 
     // Back to presentation with no warnings, as the layout checks below expect.
     while (document.querySelector('[data-alert-action="remove"]')) document.querySelector('[data-alert-action="remove"]').click();

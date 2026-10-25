@@ -401,6 +401,11 @@ export function initOperations(ctx) {
   let compactPresentation = isCompactViewport(), lastOpenedPanel = "messages";
   let standaloneFocus = { areas: [], places: [], isolate: true };
   let restoring = false;
+  // Edits are autosaved in this browser at once but reach other screens only when published.
+  // `unpublished` tracks that gap; `cloudBase` is the Cloud version the open situation started
+  // from, so a colleague's newer copy is told apart from the echo of our own publish.
+  let unpublished = false, cloudBase = null, cloudConflict = null, publishing = false, cloudSeen = false;
+  const cloudCopies = new Map(), sentVersions = new Set();
 
   state.operations = {
     features: FC(), draft: FC(), selection: FC(), alerts: FC(), alertLabels: FC(), mask: FC(), endpoints: FC(),
@@ -429,6 +434,8 @@ export function initOperations(ctx) {
         pending,
         editingId,
         dirty,
+        unpublished,
+        cloudBase,
         summaryCollapsed,
         messagesCollapsed,
         legendCollapsed,
@@ -472,7 +479,7 @@ export function initOperations(ctx) {
         };
       }
       if (saved?.active && typeof saved.active === "object") {
-        const fromDb = !saved.dirty && saved.active.id ? db.load(saved.active.id) : null;
+        const fromDb = !saved.dirty && !saved.unpublished && saved.active.id ? db.load(saved.active.id) : null;
         try {
           active = fromDb && fromDb.updatedAt > (saved.active.updatedAt || "") ? fromDb : sanitizeEvent(saved.active);
         } catch {
@@ -492,6 +499,10 @@ export function initOperations(ctx) {
         editingId = saved.editingId || null;
       }
       dirty = Boolean(saved?.dirty);
+      if (active) {
+        unpublished = Boolean(saved?.unpublished);
+        cloudBase = typeof saved?.cloudBase === "string" ? saved.cloudBase : null;
+      }
     } catch (e) {
       console.warn("Nu am putut restaura sesiunea operativă", e);
     } finally {
@@ -648,11 +659,20 @@ export function initOperations(ctx) {
   }
 
   function changed() {
-    dirty = true; exported = false;
+    dirty = true; unpublished = true; exported = false;
     autoSaveActiveToDb();
     persistSession();
     const badge = panel.querySelector("#ops-save-state");
-    if (badge) badge.textContent = dirty ? "Salvat automat în sesiune" : "Salvat automat";
+    if (badge) badge.textContent = saveStateText();
+  }
+
+  function saveStateText() {
+    if (!active) return "";
+    if (alertEditor.rejectedDates().length) return "Interval invalid · e păstrată ultima variantă validă";
+    if (dirty) return exported ? "Exportat JSON · nesalvat în browser" : "Modificări nesalvate";
+    if (unpublished) return `Salvat în acest browser · nepublicat în Cloud · ${dateLabel(active.updatedAt)}`;
+    if (cloudBase) return `Publicat în Cloud · ${dateLabel(cloudBase)}`;
+    return `Salvat în acest browser · ${dateLabel(active.updatedAt)}`;
   }
 
   function currentView() {
@@ -670,7 +690,7 @@ export function initOperations(ctx) {
     active.isolateArea = standaloneFocus.areas.length > 0 || standaloneFocus.places.length > 0 ? standaloneFocus.isolate : false;
     active.tintAreas = true;
     standaloneFocus = { areas: [], places: [], isolate: true };
-    dirty = true; exported = false;
+    dirty = true; unpublished = true; cloudBase = null; cloudConflict = null; exported = false;
     autoSaveActiveToDb();
     persistSession();
     return active;
@@ -1187,6 +1207,27 @@ export function initOperations(ctx) {
     </form>`;
   }
 
+  function conflictHTML() {
+    if (!active || !cloudConflict) return "";
+    return `<div class="ops-conflict" role="alert">
+      <p><b>Altcineva a publicat în Cloud o versiune mai nouă a acestei situații (${esc(dateLabel(cloudConflict.updatedAt))}).</b>
+      Modificările tale sunt salvate doar în acest browser. Alege ce rămâne: versiunea din Cloud le înlocuiește pe ale tale, iar publicarea ta o înlocuiește pe cea din Cloud.</p>
+      <div class="ops-actions">
+        <button class="btn" type="button" data-action="cloud-take">Încarcă versiunea din Cloud</button>
+        <button class="btn" type="button" data-action="cloud-overwrite">Publică varianta mea peste ea</button>
+      </div>
+    </div>`;
+  }
+
+  // A snapshot can land while the operator types in a form, so the banner is swapped in place.
+  function showConflict() {
+    const old = panel.querySelector(".ops-conflict");
+    const badge = panel.querySelector("#ops-save-state");
+    const html = conflictHTML();
+    if (old) old.outerHTML = html;
+    else if (badge && html) badge.insertAdjacentHTML("afterend", html);
+  }
+
   function archiveHTML(events) {
     return `<section class="ops-card ops-archive-bar">
       <div class="ops-card-title">
@@ -1246,10 +1287,11 @@ export function initOperations(ctx) {
           <h2>${esc(active.title)}</h2>
           <button type="button" class="lnk" data-action="new">Închide</button>
         </div>
-        <p id="ops-save-state" class="ops-save-state">${dirty ? exported ? "Exportat JSON · nesalvat în browser" : "Modificări nesalvate" : `Salvat în baza de date · ${dateLabel(active.updatedAt)}`}</p>
+        <p id="ops-save-state" class="ops-save-state">${esc(saveStateText())}</p>
+        ${conflictHTML()}
 
         <div class="ops-actions ops-top-actions">
-          <button class="btn primary" type="button" data-action="save">💾 Salvează situația</button>
+          <button class="btn primary" type="button" data-action="save" ${publishing ? "disabled" : ""}>${publishing ? "☁️ Se publică…" : "☁️ Publică în Cloud"}</button>
           <button class="btn primary" type="button" data-action="present">🖥️ Prezintă în ședință</button>
           <button class="btn" type="button" data-action="event-export">Salvează .json</button>
           <button class="btn" type="button" data-action="duplicate">Duplică</button>
@@ -1453,19 +1495,79 @@ export function initOperations(ctx) {
     return true;
   }
 
-  function save() {
+  // Firestore answers a write only once the server has it; offline the write just queues and
+  // goes out when the network returns. Past this wait the operator hears it is still pending.
+  const PUBLISH_WAIT_MS = ctx.publishWaitMs ?? 10000;
+
+  // Resolves to "ok", "failed" or "waiting". A write that answers after the wait still marks
+  // the version as published through `onLate`.
+  function publishToCloud(event, onLate) {
+    sentVersions.add(`${event.id}@${event.updatedAt}`);
+    const write = Promise.resolve()
+      .then(() => cloudDb.saveSituation(structuredClone(event)))
+      .then(ok => ok ? "ok" : "failed", error => { console.warn(error); return "failed"; });
+    let timer;
+    const wait = new Promise(resolve => { timer = setTimeout(() => resolve("waiting"), PUBLISH_WAIT_MS); });
+    return Promise.race([write, wait]).then(result => {
+      clearTimeout(timer);
+      if (result === "waiting") write.then(late => { if (late === "ok") onLate(); });
+      return result;
+    });
+  }
+
+  // Our version is in the Cloud: it becomes the base, and stays unpublished only if the
+  // operator kept editing while the write was on its way.
+  function markPublished(version) {
+    if (active?.id !== version.id) return;
+    cloudBase = version.updatedAt;
+    if (active.updatedAt === version.updatedAt) unpublished = false;
+    cloudConflict = null;
+    persistSession();
+  }
+
+  async function save({ overwrite = false } = {}) {
+    if (publishing) return;
     try {
-      if (pending || mode) return message("Finalizează adăugarea marcajului curent înainte de a salva situația.");
-      if (intervalRejected("Situația nu a fost salvată.")) return;
+      if (pending || mode) return message("Finalizează adăugarea marcajului curent înainte de a publica situația.");
+      if (intervalRejected("Situația nu a fost publicată.")) return;
+      if (cloudConflict && !overwrite) return message("Altcineva a publicat între timp o versiune mai nouă. Alege în caseta de sus dacă o încarci sau o înlocuiești cu varianta ta.");
       active = db.save(snapshot()); dirty = false; exported = false;
       persistSession();
-      try { cloudDb?.saveSituation?.(active); } catch (e) { console.warn(e); }
-      notice = "Situația a fost salvată în baza de date (și sincronizată în Cloud).";
-      render(); toast(notice);
     } catch (error) {
       console.warn(error);
-      message("Salvarea nu a reușit. Verifică denumirea situației și intervalele avertizărilor; poți salva direct în fișier JSON.");
+      return message("Salvarea nu a reușit. Verifică denumirea situației și intervalele avertizărilor; poți salva direct în fișier JSON.");
     }
+    if (!cloudDb?.saveSituation) {
+      notice = "Situația e salvată în acest browser. Cloud-ul nu e disponibil, deci celelalte ecrane nu o primesc.";
+      refreshPublishState(); toast(notice); return;
+    }
+    const version = { id: active.id, updatedAt: active.updatedAt };
+    publishing = true; notice = "Se publică în Cloud…"; refreshPublishState();
+    const result = await publishToCloud(active, () => {
+      markPublished(version);
+      if (active?.id === version.id) { notice = "Publicarea s-a încheiat: situația a ajuns în Cloud."; refreshPublishState(); toast(notice); }
+    });
+    publishing = false;
+    if (result === "ok") {
+      markPublished(version);
+      notice = `Situația a fost publicată în Cloud (${dateLabel(version.updatedAt)}). Celelalte ecrane o primesc acum.`;
+    } else if (result === "waiting") {
+      notice = "Cloud-ul nu a confirmat încă publicarea. Situația e salvată în acest browser, iar publicarea se încheie singură când revine conexiunea.";
+    } else {
+      notice = "Situația e salvată doar în acest browser: nu a ajuns în Cloud. Verifică conexiunea și apasă din nou „Publică în Cloud”.";
+    }
+    refreshPublishState(); toast(notice);
+  }
+
+  // The publish answer can land while the operator types, so only its own lines change.
+  function refreshPublishState() {
+    const button = panel.querySelector('[data-action="save"]');
+    if (button) { button.disabled = publishing; button.textContent = publishing ? "☁️ Se publică…" : "☁️ Publică în Cloud"; }
+    const badge = panel.querySelector("#ops-save-state");
+    if (badge) badge.textContent = saveStateText();
+    const note = panel.querySelector(".ops-notice");
+    if (note) note.textContent = notice;
+    showConflict();
   }
 
   function toggleResolveFeature(featureId) {
@@ -1478,8 +1580,7 @@ export function initOperations(ctx) {
     feat.properties.status = wasResolved ? "confirmed" : "resolved";
     feat.properties.observedAt = new Date().toISOString();
     try {
-      active = db.save(snapshot()); dirty = false;
-      try { cloudDb?.saveSituation?.(active); } catch (e) { console.warn(e); }
+      active = db.save(snapshot()); dirty = false; unpublished = true;
     } catch { changed(); }
     sync();
     render();
@@ -1487,44 +1588,99 @@ export function initOperations(ctx) {
     toast(wasResolved
       ? `Situația „${feat.properties.title || KINDS[feat.properties.kind]}” a fost reactivată.`
       : `Situația „${feat.properties.title || KINDS[feat.properties.kind]}” a fost marcată ca REZOLVATĂ.`);
+    // Resolving has always gone straight to every screen, but never over a colleague's newer version.
+    if (dirty || cloudConflict || !cloudDb?.saveSituation) return;
+    const version = { id: active.id, updatedAt: active.updatedAt };
+    const done = () => { markPublished(version); refreshPublishState(); };
+    publishToCloud(active, done).then(result => {
+      if (result === "ok") done();
+      else if (result === "failed" && active?.id === version.id) message("Starea marcajului e salvată în acest browser, dar nu a ajuns în Cloud. Apasă „Publică în Cloud” când revine conexiunea.");
+    });
   }
 
   function syncFromCloud(cloudEvents = []) {
-    if (!Array.isArray(cloudEvents) || !cloudEvents.length) return;
+    if (!Array.isArray(cloudEvents)) return;
+    // One malformed document must not stop the sync for every screen: each is checked on its
+    // own, and a repeated id keeps its newest version.
+    cloudCopies.clear();
+    for (const raw of cloudEvents) {
+      try {
+        const event = sanitizeEvent(raw);
+        if (!(cloudCopies.get(event.id)?.updatedAt >= event.updatedAt)) cloudCopies.set(event.id, event);
+      } catch (e) { console.warn(`Situația „${raw?.id ?? "fără id"}” din Cloud nu e validă și a fost ignorată:`, e); }
+    }
+    cloudSeen = true;
+    const remote = active ? cloudCopies.get(active.id) : null;
+    if (active && !remote) cloudConflict = null;
+    if (remote && remote.updatedAt === active.updatedAt && !cloudBase) { cloudBase = remote.updatedAt; persistSession(); }
+    // A Cloud version this screen did not start from and did not send. Clocks differ between
+    // computers, so with a known base any other version counts, not only a later timestamp.
+    const ours = remote && sentVersions.has(`${remote.id}@${remote.updatedAt}`);
+    const newer = Boolean(remote && !ours && remote.updatedAt !== active.updatedAt
+      && (cloudBase ? remote.updatedAt !== cloudBase : remote.updatedAt > active.updatedAt));
+    // Work that is not in the Cloud yet, or still on screen only, is never replaced silently.
+    const held = newer && (unpublished || dirty || pending || mode || itinerary.isPicking() || alertEditor.rejectedDates().length > 0);
+    const incoming = [...cloudCopies.values()].filter(event => !(held && event.id === active.id));
     try {
-      db.importArchive({ format: "harta-botosani-events", version: 1, events: cloudEvents });
+      if (incoming.length) db.importArchive({ format: "harta-botosani-events", version: 1, events: incoming });
     } catch (e) {
       console.warn("Nu s-au putut sincroniza evenimentele din cloud:", e);
+    }
+    if (held) {
+      const fresh = cloudConflict?.updatedAt !== remote.updatedAt;
+      cloudConflict = remote;
+      showConflict();
+      refreshArchive();
+      if (fresh) toast(`Altcineva a publicat o versiune nouă a situației „${remote.title}”. Modificările tale nu au fost înlocuite.`);
       return;
     }
-    if (active) {
-      const remote = cloudEvents.find(e => e.id === active.id);
-      if (remote && !dirty && remote.updatedAt && remote.updatedAt > active.updatedAt) {
-        active = structuredClone(remote);
-        persistSession();
-        // Isolation, tint and warning areas are baked into the style, so rebuild it.
-        sync(true);
-        render();
-        if (document.body.classList.contains("presenting")) renderPresentationOverlay();
-        toast(`Situația „${active.title}” a fost actualizată în direct din Cloud.`);
-        return;
-      }
+    if (newer) {
+      active = structuredClone(remote);
+      normalizeEventFeatures(active);
+      cloudBase = remote.updatedAt; unpublished = false; cloudConflict = null;
+      persistSession();
+      // Isolation, tint and warning areas are baked into the style, so rebuild it.
+      sync(true);
+      render();
+      if (document.body.classList.contains("presenting")) renderPresentationOverlay();
+      toast(`Situația „${active.title}” a fost actualizată în direct din Cloud.`);
+      return;
     }
-    render();
+    refreshArchive();
+  }
+
+  // Only the archive list follows other situations: rebuilding the panel would wipe what the
+  // operator is typing. A list in use waits for the next snapshot.
+  function refreshArchive() {
+    const bar = panel.querySelector(".ops-archive-bar");
+    if (!bar) return render();
+    if (bar.contains(document.activeElement)) return;
+    bar.outerHTML = archiveHTML(list());
   }
 
   function setActive(event) {
-    active = structuredClone(event);
+    // The Cloud copy wins when the archive here lags behind it.
+    const copy = cloudCopies.get(event.id);
+    active = structuredClone(copy && copy.updatedAt > event.updatedAt ? copy : event);
     active.places = active.places || [];
     active.isolateArea = active.isolateArea ?? false;
     active.tintAreas = active.tintAreas ?? true;
     pending = null; editingId = null; dirty = false; exported = false; notice = "";
+    // Without a Cloud copy the situation lives only here, once the Cloud has answered at all.
+    cloudBase = copy?.updatedAt ?? null; cloudConflict = null;
+    unpublished = copy ? active.updatedAt > copy.updatedAt : cloudSeen;
     stopDrawing();
     for (const key of Object.keys(state.visible)) if (typeof active.visible[key] === "boolean") state.visible[key] = active.visible[key];
     try { storage?.setItem("hb.visible.v2", JSON.stringify(state.visible)); } catch { /* */ }
     sync(true); renderLayerPanel(); render();
     if (active.view && map) map.jumpTo(active.view); else fit();
     selectTab("situatii");
+  }
+
+  function closeActive() {
+    active = null; pending = null; editingId = null;
+    unpublished = false; cloudBase = null; cloudConflict = null;
+    stopDrawing(); sync(true);
   }
 
   function canReplaceDraft() {
@@ -1772,7 +1928,7 @@ export function initOperations(ctx) {
       if (!canReplaceDraft()) { render(); return; }
       const val = target.value;
       if (!val) {
-        active = null; pending = null; stopDrawing(); sync(true); render();
+        closeActive(); render();
         return;
       }
       try {
@@ -1833,7 +1989,7 @@ export function initOperations(ctx) {
         active.places = [];
         active.isolateArea = false;
         active.tintAreas = true;
-        dirty = true; exported = false; notice = "";
+        dirty = true; unpublished = true; cloudBase = null; cloudConflict = null; exported = false; notice = "";
         if (applyPreset) applyPreset(type);
         sync(true); render();
       } catch { message("Introdu o denumire pentru situație."); }
@@ -1898,6 +2054,7 @@ export function initOperations(ctx) {
         const addedGeom = pending.geometry;
         pending = null; editingId = null;
         // Also auto-save to browser storage so the user never loses road closures
+        unpublished = true;
         try { active = db.save(snapshot()); dirty = false; } catch { changed(); }
         sync(); render();
         fitGeometry(addedGeom);
@@ -2012,6 +2169,14 @@ export function initOperations(ctx) {
     }
 
     if (action === "save") save();
+    if (action === "cloud-overwrite" && active && cloudConflict) save({ overwrite: true });
+    if (action === "cloud-take" && active && cloudConflict) {
+      if (pending || mode || itinerary.isPicking()) return message("Finalizează sau anulează marcajul în curs înainte de a încărca versiunea din Cloud.");
+      if (intervalRejected("Versiunea din Cloud nu a fost încărcată.")) return;
+      try { setActive(db.put(cloudConflict)); }
+      catch (error) { console.warn(error); return message("Versiunea din Cloud nu a putut fi salvată în acest browser."); }
+      toast(`Ai încărcat versiunea din Cloud a situației „${active.title}”.`);
+    }
     if (action === "fit") { setSheet("peek"); fit(); }
     if (action === "preset" && active) {
       if (applyPreset) applyPreset(active.type);
@@ -2019,7 +2184,7 @@ export function initOperations(ctx) {
     }
     if (action === "present") present();
     if (action === "discard-mark") { pending = null; editingId = null; sync(); render(); }
-    if (action === "new" && canReplaceDraft()) { active = null; stopDrawing(); sync(true); render(); }
+    if (action === "new" && canReplaceDraft()) { closeActive(); render(); }
     if (action === "open" && canReplaceDraft()) {
       try {
         const saved = db.load(panel.querySelector("#ops-archive").value);
@@ -2029,7 +2194,7 @@ export function initOperations(ctx) {
     if (action === "duplicate" && canReplaceDraft()) {
       const base = createEvent(active.title + " · copie", active.type);
       active = { ...structuredClone(active), id: base.id, title: base.title, createdAt: base.createdAt, updatedAt: base.updatedAt };
-      dirty = true; exported = false; render();
+      dirty = true; unpublished = true; cloudBase = null; cloudConflict = null; exported = false; render();
     }
     if (action === "event-export") {
       try {

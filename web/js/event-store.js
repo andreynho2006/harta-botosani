@@ -275,6 +275,17 @@ export class EventStore {
     return saved;
   }
 
+  // Stores a version exactly as given, even over a newer local copy: taking a colleague's
+  // Cloud version or undoing a deletion must keep its timestamp so the versions still compare.
+  put(event) {
+    const events = this._read();
+    const saved = sanitizeEvent(event);
+    const index = events.findIndex(item => item.id === saved.id);
+    if (index < 0) events.push(saved); else events[index] = saved;
+    this._write(events);
+    return saved;
+  }
+
   remove(id) {
     const events = this._read();
     const filtered = events.filter(item => item.id !== id);
