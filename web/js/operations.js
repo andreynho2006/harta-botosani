@@ -1886,8 +1886,12 @@ export function initOperations(ctx) {
       } else if (!known.base) {
         // Nothing known about its Cloud copy yet: the archive merges by timestamp, as before.
         kept.delete(id);
-      } else if (settled && remote.updatedAt !== known.base && !known.conflict) {
-        // A version held back by a screen in another tab waits for that screen to take it.
+      } else if (known.conflict) {
+        // A screen in another tab holds a colleague's version back: it waits for that screen, but
+        // stays the latest one, and goes once the Cloud is back at the base or drops its copy.
+        if (!remote || (settled && remote.updatedAt === known.base)) cloudStates.update(id, { conflict: null });
+        else if (settled) cloudStates.update(id, { conflict: remote });
+      } else if (settled && remote.updatedAt !== known.base) {
         try { db.put(remote); cloudStates.update(id, { base: remote.updatedAt, conflict: null }); }
         catch (e) { console.warn(e); kept.delete(id); }
       }

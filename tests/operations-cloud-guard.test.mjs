@@ -658,6 +658,23 @@ async function browserChecks({ initOperations, createEvent, EventStore }) {
       check('heldVersionOpenedElsewhereLoadsHere', title() === 'Zonă, deschisă apoi · coleg' && !$('.ops-conflict'));
     }
     {
+      // Tab 1 holds a version behind an area selection; a newer one reaches the passive tab 2 first.
+      const mine = situation('Ținută, apoi alta'), other = situation('Pasivă 2');
+      const first = boot({ active: mine, session: { cloudBase: mine.updatedAt } });
+      first.ops.syncFromCloud([structuredClone(mine), structuredClone(other)]);
+      const second = bootSecondTab(first);
+      pickIn(second.panel, other.id);
+      click('button[data-action="area"]');
+      const r1 = colleague(mine, 'Ținută, apoi alta · coleg 1', 1), r2 = colleague(mine, 'Ținută, apoi alta · coleg 2', 2);
+      first.ops.syncFromCloud([r1, structuredClone(other)]);
+      second.ops.syncFromCloud([r1, structuredClone(other)]);
+      second.ops.syncFromCloud([r2, structuredClone(other)]);
+      const held = () => JSON.parse(first.memory.get('hb.ops.cloud.v1'))[mine.id]?.conflict?.updatedAt;
+      check('heldVersionStaysLatestInPassiveTab', held() === r2.updatedAt);
+      second.ops.syncFromCloud([structuredClone(mine), structuredClone(other)]);
+      check('heldVersionGoesWhenCloudBackAtBase', !held());
+    }
+    {
       // Tab 2, still on the older copy, writes the shared session; tab 1, with unpublished edits, reloads.
       const mine = situation('Sesiune comună');
       const first = boot({ active: mine, session: { cloudBase: mine.updatedAt } });
@@ -760,6 +777,6 @@ test('Cloud snapshots keep work in progress, publishing reports the real result,
     assert.equal(result.error, undefined, result.error);
     const failed = Object.entries(result).filter(([, ok]) => !ok).map(([name]) => name);
     assert.deepEqual(failed, [], 'Cloud guard regressions');
-    assert.ok(Object.keys(result).length >= 93, 'Every scenario reported');
+    assert.ok(Object.keys(result).length >= 95, 'Every scenario reported');
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
