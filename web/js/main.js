@@ -208,6 +208,7 @@ async function init() {
   operations = initOperations({ map, state, uatAt, toast, selectTab, setSheet, applyStyle, renderLayerPanel,
     applyPreset: typeof applyPreset === "function" ? applyPreset : null,
     cloudDb: cloud,
+    isMapToolActive: () => Boolean(state.mode || pendingPick),
     stopOtherTools: () => { setMode(null); closeInfo(); closeContextMenu(); } });
   initSearch();
   initUI();

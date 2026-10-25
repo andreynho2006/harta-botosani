@@ -424,7 +424,8 @@ export function initOperations(ctx) {
       if (state.operations.presenting) renderPresentationOverlay();
     },
   });
-  attachAlertPopups(map, () => Boolean(active && !mode && !pending));
+  // Warning popups stay quiet while any other map tool owns the pointer.
+  attachAlertPopups(map, () => Boolean(active && !mode && !pending && !itinerary.isPicking() && !ctx.isMapToolActive?.()));
 
   function persistSession() {
     if (restoring) return;

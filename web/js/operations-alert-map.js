@@ -71,11 +71,11 @@ export function alertPopupHTML(features, now = Date.now()) {
   }
   if (!warnings.size) return '';
   const entries = [...warnings.values()].sort((a, b) => (rank[b.code] || 0) - (rank[a.code] || 0));
-  return `<div class="ops-alert-popup" style="max-height:45vh;overflow:auto;line-height:1.45"><strong>${[...names].map(escape).join(' · ')}</strong>${entries.map(warning => {
+  return `<div class="ops-alert-popup"><strong>${[...names].map(escape).join(' · ')}</strong>${entries.map(warning => {
     const start = Date.parse(warning.validFrom), end = Date.parse(warning.validTo);
     const timing = Number.isFinite(end) && end < now ? 'Încheiat' : Number.isFinite(start) && start > now ? 'Urmează' : Number.isFinite(start) && Number.isFinite(end) ? 'În vigoare' : 'Interval incomplet';
-    return `<div style="border-left:4px solid ${colors[warning.code] || '#64748b'};padding-left:8px;margin-top:10px"><strong>${escape(labels[warning.code] || warning.code)}</strong>${warning.source ? ` · ${escape(warning.source)}` : ''}<br>${escape(formatTime(warning.validFrom))} – ${escape(formatTime(warning.validTo))}<br><small>${timing} · ora României</small>${warning.text ? `<div>${escape(warning.text)}</div>` : ''}</div>`;
-  }).join('')}${approximate ? '<p style="margin-bottom:0"><small>Zona satului este orientativă (1,6 km).</small></p>' : ''}</div>`;
+    return `<div class="ops-alert-popup-item" data-code="${escape(warning.code)}"><strong>${escape(labels[warning.code] || warning.code)}</strong>${warning.source ? ` · ${escape(warning.source)}` : ''}<br>${escape(formatTime(warning.validFrom))} – ${escape(formatTime(warning.validTo))}<br><small>${timing} · ora României</small>${warning.text ? `<div>${escape(warning.text)}</div>` : ''}</div>`;
+  }).join('')}${approximate ? '<p class="ops-alert-popup-note"><small>Zona satului este orientativă (1,6 km).</small></p>' : ''}</div>`;
 }
 
 /** Hover on desktop and a tap on mobile. Returns a disposer for teardown. */
@@ -87,7 +87,7 @@ export function attachAlertPopups(map, getEnabled = () => true) {
     const features = map.queryRenderedFeatures(event.point, { layers: ['ops-alert-fill'] });
     const html = alertPopupHTML(features);
     if (!html) { clear(); return; }
-    popup ??= new maplibregl.Popup({ closeButton: true, closeOnClick: false, maxWidth: 'min(340px, calc(100vw - 32px))' });
+    popup ??= new maplibregl.Popup({ className: 'ops-alert-popup-wrap', closeButton: true, closeOnClick: false, maxWidth: 'min(340px, calc(100vw - 32px))' });
     popup.setLngLat(event.lngLat).setHTML(html).addTo(map);
   }
   map.on('mousemove', 'ops-alert-fill', show);

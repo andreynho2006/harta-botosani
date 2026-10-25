@@ -34,7 +34,7 @@ test('legacy event produces geometry while explicit cleared warnings produce non
 test('hover/tap handlers query all overlapping areas and respect drawing suppression',()=>{
   const handlers=new Map(); let shown=0, removed=0, enabled=true;
   const features=buildAlertGeography({alerts:[warning('a','red')]},{admin}).features;
-  globalThis.maplibregl={Popup:class {setLngLat(){return this;} setHTML(html){assert.match(html,/Cod roșu/);return this;} addTo(){shown++;return this;} remove(){removed++;}}};
+  globalThis.maplibregl={Popup:class {constructor(options){assert.equal(options.className,'ops-alert-popup-wrap');} setLngLat(){return this;} setHTML(html){assert.match(html,/Cod roșu/);assert.match(html,/data-code="red"/);assert.doesNotMatch(html,/style=/);return this;} addTo(){shown++;return this;} remove(){removed++;}}};
   const map={on(type,layer,handler){handlers.set(`${type}:${typeof layer==='string'?layer:''}`,handler||layer);},off(){},queryRenderedFeatures(){return features;}};
   const dispose=attachAlertPopups(map,()=>enabled), event={point:{x:1,y:1},lngLat:{lng:26,lat:47}};
   handlers.get('mousemove:ops-alert-fill')(event); handlers.get('click:ops-alert-fill')(event);
