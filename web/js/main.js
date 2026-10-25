@@ -1,6 +1,6 @@
 /* global maplibregl */
 import { POI, LAYER_GROUPS, LAYER_PRESETS, LABELS, START_VIEW, itemLabel } from "./config.js?v=20261018-itineraries-v2";
-import { buildStyle, PALETTES } from "./style.js?v=20261019-alert-tint";
+import { buildStyle, PALETTES } from "./style.js?v=20261019-multi-alerts";
 import { buildIcons, iconDataURL } from "./icons.js";
 import { SearchIndex, typeInfo, norm } from "./search.js";
 import { ensureLogin, decryptJSON, logout } from "./auth.js";
@@ -8,7 +8,7 @@ import { renderAdmin } from "./admin.js?v=20261018-itineraries-v2";
 import { formatRestriction } from "./restrictions.js";
 import { normalizeSubunitsDoc, mergeSubunitsIntoPois, SUBUNITS_DRAFT_KEY, isNewerSubunitsDocument } from "./subunits.js?v=20261018-itineraries-v2";
 import { openCommuneMap, isCommuneMapOpen } from "./commune.js";
-import { initOperations } from "./operations.js?v=20261019-alert-tint";
+import { initOperations } from "./operations.js?v=20261019-multi-alerts";
 import {
   saveSubunitsCloud, subscribeSubunits,
   saveSituationCloud, deleteSituationCloud, subscribeSituations, onCloudStatus,
@@ -176,7 +176,7 @@ async function init() {
     loadJSON("data/search.json", []),
     loadJSON("data/stats.json", null),
     loadJSON("data/roads.json", { roads: [] }),
-    loadJSON("data/situatii.json?v=20261019-saved-alerts", null),
+    loadJSON("data/situatii.json?v=20261019-multi-alerts", null),
     loadJSON("data/subunitati.json?v=20261018-itineraries-v2", null),
   ]);
   state.data.osmPois = { ...pois, features: pois.features.filter((f) => f.properties.cat !== "hidrant_osm") };

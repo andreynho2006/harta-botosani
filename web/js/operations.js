@@ -1,5 +1,8 @@
+import { normalizeAlerts, affectedAlertLocations } from "./operations-alerts.js?v=20261019-multi-alerts";
+import { buildAlertGeography, attachAlertPopups } from "./operations-alert-map.js?v=20261019-multi-alerts";
+import { createAlertEditor } from "./operations-alert-editor.js?v=20261019-multi-alerts";
 import { presentationFeatures, presentationRiskGroups, presentationKindLabel } from "./operations-risks.js?v=20261018-cards";
-import { EventStore, createEvent, sanitizeEvent, cleanupLegacyArchive } from "./event-store.js?v=20261018-itineraries-v2";
+import { EventStore, createEvent, sanitizeEvent, cleanupLegacyArchive } from "./event-store.js?v=20261019-multi-alerts";
 import {
   snapToRoad, buildRoadSegment, findRoadRoute, findRoadByRef, sliceRoadByKm, sliceRoadByPlaces,
   projectPointOnRoad, roadNetworkToFeatures, roadsListOf, lineLengthKm,
@@ -408,9 +411,19 @@ export function initOperations(ctx) {
   let restoring = false;
 
   state.operations = {
-    features: FC(), draft: FC(), selection: FC(), mask: FC(), endpoints: FC(),
+    features: FC(), draft: FC(), selection: FC(), alerts: FC(), mask: FC(), endpoints: FC(),
     focusGeometry: null, alertCode: "", tintAreas: true,
   };
+
+  const alertEditor = createAlertEditor({
+    panel, getActive: () => active, getData: () => state.data,
+    onChange: ({ render: rerender = false, refresh = false } = {}) => {
+      changed(); sync(refresh);
+      if (rerender) render();
+      if (state.operations.presenting) renderPresentationOverlay();
+    },
+  });
+  attachAlertPopups(map, () => Boolean(active && !mode && !pending));
 
   function persistSession() {
     if (restoring) return;
@@ -440,6 +453,7 @@ export function initOperations(ctx) {
         visible: { ...state.visible },
       });
       db.save(snap);
+      active.updatedAt = snap.updatedAt;
       dirty = false;
     } catch { /* keep draft in session storage until valid */ }
   }
@@ -690,8 +704,9 @@ export function initOperations(ctx) {
   }
 
   function selectedGeometry() {
-    const areaNames = new Set(active ? active.areas : standaloneFocus.areas);
-    const placeNames = active ? (active.places || []) : standaloneFocus.places;
+    const warningLocations = affectedAlertLocations(active);
+    const areaNames = new Set(active ? [...active.areas, ...warningLocations.areas] : standaloneFocus.areas);
+    const placeNames = active ? [...new Set([...(active.places || []), ...warningLocations.places])] : standaloneFocus.places;
     const uatFeatures = (state.data.admin?.features || []).filter(f => f.properties.kind === "uat" && areaNames.has(f.properties.name));
     const placeFeatures = [];
     for (const pName of placeNames) {
@@ -748,6 +763,7 @@ export function initOperations(ctx) {
       ...(pending?.geometry?.type === "LineString" ? [pending] : []),
     ]);
     state.operations.selection = FC(selected.features);
+    state.operations.alerts = buildAlertGeography(active, state.data);
     state.operations.focusGeometry = geometry;
     state.operations.mask = geometry ? outsideMask(geometry) : FC();
     state.operations.draft = FC(draftFeatures);
@@ -763,6 +779,7 @@ export function initOperations(ctx) {
         ["features", "ops-features"],
         ["endpoints", "ops-endpoints"],
         ["selection", "ops-selection"],
+        ["alerts", "ops-alerts"],
         ["mask", "ops-mask"],
         ["draft", "ops-draft"],
       ]) {
@@ -1234,20 +1251,13 @@ export function initOperations(ctx) {
           <label>Denumire situație<input data-field="title" maxlength="200" required value="${esc(active.title)}"></label>
           <div class="ops-grid">
             <label>Tip eveniment<select data-field="type">${options(TYPES, active.type)}</select></label>
-            <label>Cod ANM / RO-Alert<select data-alert="code">${options(ALERTS, active.alert.code)}</select></label>
-          </div>
-          <div class="ops-grid">
-            <label>Sursă avertizare<input data-alert="source" maxlength="300" value="${esc(active.alert.source)}" placeholder="ANM / INHGA / IGSU RO-Alert"></label>
-            <label>Valabil de la<input data-alert="validFrom" type="datetime-local" value="${localTime(active.alert.validFrom)}"></label>
-          </div>
-          <div class="ops-grid">
-            <label>Valabil până la<input data-alert="validTo" type="datetime-local" value="${localTime(active.alert.validTo)}"></label>
             <label>Straturi recomandate<button class="btn" type="button" data-action="preset" style="height:38px">Aplică straturi ${esc(TYPES[active.type] || "")}</button></label>
           </div>
-          <label>Fenomene vizate / Mesaj RO-Alert<textarea data-alert="text" rows="2" maxlength="5000" placeholder="Ex. Viscol puternic, intensificări ale vântului 70–85 km/h, troienirea zăpezii">${esc(active.alert.text)}</textarea></label>
           <label>Sinteză operativă / Dispoziții CJSU<textarea data-field="notes" rows="2" maxlength="10000" placeholder="Ex. S-a dispus închiderea temporară a sectoarelor afectate și intervenția SDN/DJDP/ISU">${esc(active.notes)}</textarea></label>
         </form>
       </section>
+
+      ${alertEditor.html()}
 
       <section class="ops-card" data-ops-card="add">
         <h3>Adaugă pe hartă (Drumuri, Situații, Localități, Forțe)</h3>
@@ -1338,7 +1348,7 @@ export function initOperations(ctx) {
         ${(active.places || []).length ? `<p class="muted">Pentru sate, evidențierea este orientativă în jurul localității. Pentru un contur administrativ exact, selectează comuna sau orașul.</p>` : ""}
         <label class="ops-check"><input type="checkbox" data-toggle="isolateArea" ${active.isolateArea ? "checked" : ""}> Izolează zona selectată (ascunde restul județului pe hartă)</label>
         <label class="ops-check"><input type="checkbox" data-toggle="tintAreas" ${active.tintAreas !== false ? "checked" : ""}> Evidențiază zona afectată în culoarea codului (tentă difuză)</label>
-        ${!active.areas.length && !(active.places || []).length ? `<p class="muted" role="note">Pentru evidențierea codului pe hartă, adaugă mai sus comunele, orașele sau satele afectate.</p>` : ""}
+        ${!active.areas.length && !(active.places || []).length ? `<p class="muted" role="note">Localitățile aflate sub cod se aleg separat pentru fiecare avertizare, în cardul „Avertizări și localități sub cod”.</p>` : ""}
         <div class="ops-actions">
           <button class="btn" type="button" data-action="area">Alege UAT-uri cu click pe hartă</button>
           <button class="btn" type="button" data-action="fit">Încadrează zona</button>
@@ -1469,7 +1479,7 @@ export function initOperations(ctx) {
     }
     if (active) {
       const remote = cloudEvents.find(e => e.id === active.id);
-      if (remote && remote.updatedAt && remote.updatedAt !== active.updatedAt) {
+      if (remote && !dirty && remote.updatedAt && remote.updatedAt > active.updatedAt) {
         active = structuredClone(remote);
         persistSession();
         sync();
@@ -1578,7 +1588,7 @@ export function initOperations(ctx) {
       ...((active.places || []).length ? [`Localități: ${active.places.join(", ")}`] : []),
     ].join(" · ") || "Județul Botoșani";
     const hasNotes = Boolean(active.notes && String(active.notes).trim());
-    const hasAlert = Boolean(active.alert && Object.values(active.alert).some(Boolean));
+    const warnings = normalizeAlerts(active);
 
     presentation.innerHTML = `
       ${panelToggle("messages", "Mesaje", messagesCollapsed, messagesCollapsed ? "▼" : "▲")}
@@ -1592,7 +1602,8 @@ export function initOperations(ctx) {
           <h1>${esc(active.title)}</h1>
           ${hasNotes ? `<p class="ops-slide-notes">${esc(active.notes)}</p>` : ""}
         </div>
-        ${hasAlert ? `<p id="ops-pres-alert" class="ops-alert" data-code="${esc(active.alert.code)}" tabindex="0" role="note"><b>${esc(ALERTS[active.alert.code] || active.alert.code)}</b> ${esc(active.alert.text)}${active.alert.source ? ` · ${esc(active.alert.source)}` : ""}${active.alert.validFrom || active.alert.validTo ? ` · ${dateLabel(active.alert.validFrom)} – ${dateLabel(active.alert.validTo)}` : ""}</p>` : ""}
+        ${warnings.map((warning, index) => `<p id="ops-pres-alert${index ? '-' + index : ''}" class="ops-alert" data-code="${esc(warning.code)}" tabindex="0" role="note"><b>${esc(ALERTS[warning.code] || warning.code)}</b> ${esc(warning.text)}${warning.source ? ` · ${esc(warning.source)}` : ""}<br>${esc([...warning.areas, ...warning.places].join(", ") || "Fără localități selectate")}${warning.validFrom || warning.validTo ? ` · ${dateLabel(warning.validFrom)} – ${dateLabel(warning.validTo)}` : " · Interval nespecificat"}</p>`).join("")}
+
       </header>
       <nav id="ops-pres-commands" class="ops-slide-controls" data-pres-panel="commands" data-pres-edge="right" ${commandsCollapsed ? "hidden" : ""} aria-label="Comenzi prezentare">
         <button class="btn" type="button" data-action="pres-toggle-resolved" aria-pressed="${!hideResolvedInPresentation}" title="Arată sau ascunde pe hartă situațiile rezolvate; lista lor rămâne disponibilă în Monitorizare">${hideResolvedInPresentation ? `Arată rezolvate pe hartă (${resolvedList.length})` : `Ascunde rezolvate de pe hartă (${resolvedList.length})`}</button>
@@ -1694,6 +1705,7 @@ export function initOperations(ctx) {
 
   panel.oninput = (event) => {
     const input = event.target;
+    if (alertEditor.handleInput(input)) return;
     if (["coordinate", "name"].includes(input.dataset?.itineraryField) && itinerary.handleChange(input)) return;
     if (input.id === "ops-archive-search") {
       archiveFilter = input.value;
@@ -1722,6 +1734,7 @@ export function initOperations(ctx) {
 
   panel.onchange = async (event) => {
     const target = event.target;
+    if (alertEditor.handleChange(target)) return;
     if (operationCards.handleChange(target)) return;
     if (itinerary.handleChange(target)) return;
     if (applyMetaInput(target)) return;
@@ -1868,6 +1881,7 @@ export function initOperations(ctx) {
   panel.onclick = async (event) => {
     const button = event.target.closest("button"); if (!button) return;
     if (operationCards.handleClick(button)) return;
+    if (alertEditor.handleClick(button)) return;
     if (button.dataset.action === "open-itinerary" && pending) return message("Finalizează marcajul curent înainte de a calcula itinerarul.");
     if (itinerary.handleClick(button)) return;
 

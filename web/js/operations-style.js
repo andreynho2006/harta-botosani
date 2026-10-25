@@ -25,7 +25,7 @@ export function decorateOperationalStyle(style, state = {}) {
   const operations = state.operations ?? {};
   style.sources ??= {};
   style.layers ??= [];
-  for (const key of ['features', 'draft', 'selection', 'mask', 'endpoints']) {
+  for (const key of ['features', 'draft', 'selection', 'mask', 'endpoints', 'alerts']) {
     const data = key === 'mask' && !operations.focusGeometry ? emptyCollection() : operations[key] ?? emptyCollection();
     style.sources[`ops-${key}`] = { type: 'geojson', data };
   }
@@ -47,12 +47,19 @@ export function decorateOperationalStyle(style, state = {}) {
   if (operations.focusGeometry) style.layers.push(...baseSymbols);
 
   const alertColor = ALERT_COLORS[operations.alertCode] || '#008b9e';
-  const hasAlertTint = Boolean(operations.tintAreas && ALERT_COLORS[operations.alertCode]);
+  const hasAlertTint = Boolean(!operations.alerts && operations.tintAreas && ALERT_COLORS[operations.alertCode]);
+  const alertOpacity = state.theme === 'noapte' ? 0.18 : state.basemap === 'satelit' ? 0.24 : 0.22;
 
   // Tint the affected geography, never blur the canvas. Both the translucent
   // fill and soft boundary sit BELOW road casings, labels and incident marks.
   // Reuse one GeoJSON source; no raster, extra geometry or per-frame work.
   const tintLayers = [
+    { id: 'ops-alert-fill', type: 'fill', source: 'ops-alerts',
+      layout: { 'fill-sort-key': ['coalesce', ['get', 'severity'], 0] },
+      paint: { 'fill-color': ['get', 'color'], 'fill-opacity': operations.tintAreas === false ? 0 : alertOpacity } },
+    { id: 'ops-alert-glow', type: 'line', source: 'ops-alerts', layout: rounded,
+      paint: { 'line-color': ['get', 'color'], 'line-width': 10, 'line-blur': 16,
+        'line-opacity': operations.tintAreas === false ? 0 : 0.24 } },
     { id: 'ops-selection-fill', type: 'fill', source: 'ops-selection',
       paint: { 'fill-color': alertColor, 'fill-opacity': hasAlertTint ? (state.theme === 'noapte' ? 0.18 : state.basemap === 'satelit' ? 0.24 : 0.22) : 0 } },
     { id: 'ops-selection-glow', type: 'line', source: 'ops-selection', layout: rounded,

@@ -130,16 +130,16 @@ async function browserChecks({ initOperations, createEvent }) {
     check('exitAlwaysReachable', clickable(exit));
     exit.click();
     check('exitRestoresSidebar', !document.body.classList.contains('presenting') && visible(document.querySelector('.side')));
-    for (const field of ['code', 'text', 'validFrom', 'validTo']) {
-      const input = document.querySelector('[data-alert="' + field + '"]');
-      input.value = ''; input.dispatchEvent(new Event('input', { bubbles: true }));
+    // Text fields update on input; date fields commit on change, as in the editor.
+    for (const field of ['text', 'validFrom', 'validTo']) {
+      const input = document.querySelector('[data-warning-field="' + field + '"]');
+      input.value = ''; input.dispatchEvent(new Event(field === 'text' ? 'input' : 'change', { bubbles: true }));
     }
     document.querySelector('[data-action="present"]').click();
     if (!visible(panel('messages'))) toggle('messages').click();
     check('sourceOnlyVisible', panel('messages').querySelector('.ops-alert')?.textContent.includes('Warning authority'));
     document.querySelector('.ops-pres-exit').click();
-    const source = document.querySelector('[data-alert="source"]');
-    source.value = ''; source.dispatchEvent(new Event('input', { bubbles: true }));
+    document.querySelector('[data-alert-action="remove"]').click();
     document.querySelector('[data-action="present"]').click();
     if (!visible(panel('messages'))) toggle('messages').click();
     check('emptyWarningOmitted', !panel('messages').querySelector('.ops-alert'));

@@ -1,4 +1,5 @@
 // Local, portable incident archive. No credentials or base-map data are stored.
+import { ALERT_CODES } from './operations-alerts.js?v=20261019-multi-alerts';
 export const EVENT_STORAGE_KEY = 'hb.events.v1';
 export const EVENT_TYPES = Object.freeze(Object.fromEntries(['fire', 'flood', 'snow', 'storm', 'other'].map(key => [key, key])));
 export const MARK_TYPES = Object.freeze(Object.fromEntries([
@@ -32,6 +33,23 @@ function identifier(value) {
   const id = string(value, 120);
   if (!id.trim()) throw new Error('Missing identifier.');
   return id;
+}
+
+function warning(value) {
+  const alert = object(value, 'warning');
+  if (!ALERT_CODES.includes(alert.code)) throw new Error('Unknown warning code.');
+  const areas = alert.areas ?? [], places = alert.places ?? [];
+  if (!Array.isArray(areas) || areas.length > 1000) throw new Error('Invalid warning areas.');
+  if (!Array.isArray(places) || places.length > 2000) throw new Error('Invalid warning places.');
+  const validFrom = alert.validFrom ? timestamp(alert.validFrom) : '';
+  const validTo = alert.validTo ? timestamp(alert.validTo) : '';
+  if (validFrom && validTo && validTo < validFrom) throw new Error('Warning validity dates are reversed.');
+  return {
+    id: identifier(alert.id), code: alert.code, source: string(alert.source, 300),
+    validFrom, validTo, text: string(alert.text, 5000),
+    areas: [...new Set(areas.map(a => string(a, 200)).filter(Boolean))],
+    places: [...new Set(places.map(p => string(p, 200)).filter(Boolean))],
+  };
 }
 
 function position(value, budget) {
@@ -139,6 +157,11 @@ export function sanitizeEvent(value, budget = { vertices: 0 }) {
     features: { type: 'FeatureCollection', features }, view, visible,
   };
   if (places.length) sanitized.places = [...new Set(places.map(p => string(p, 200)).filter(Boolean))];
+  if (Object.hasOwn(value, 'alerts')) {
+    if (!Array.isArray(value.alerts) || value.alerts.length > 100) throw new Error('Invalid or oversized warning list.');
+    sanitized.alerts = value.alerts.map(warning);
+    if (new Set(sanitized.alerts.map(alert => alert.id)).size !== sanitized.alerts.length) throw new Error('Duplicate warning identifiers.');
+  }
   if (typeof value.isolateArea === 'boolean') sanitized.isolateArea = value.isolateArea;
   if (typeof value.tintAreas === 'boolean') sanitized.tintAreas = value.tintAreas;
   return sanitized;
