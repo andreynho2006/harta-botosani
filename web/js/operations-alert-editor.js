@@ -91,7 +91,9 @@ export function createAlertEditor({ panel, getActive, getData, onChange }) {
     const dot = entry.querySelector('.ops-alert-dot');
     if (dot) dot.dataset.code = alert.code;
     const note = entry.querySelector('[data-alert-status]');
-    if (note) note.textContent = status(alert);
+    // A rejected date stays on screen until corrected, so keep saying so.
+    const rejected = [...entry.querySelectorAll('input[type="datetime-local"]')].some(input => input.validationMessage);
+    if (note) note.textContent = rejected ? 'Interval invalid: corectează data înainte de salvare.' : status(alert);
     for (const kind of ['areas', 'places']) {
       const count = entry.querySelector(`[data-alert-count="${kind}"]`);
       if (count) count.textContent = `${alert[kind]?.length || 0} selectate`;
