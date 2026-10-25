@@ -186,26 +186,42 @@ export function alertPopupHTML(features, now = Date.now()) {
 
 /** Hover on desktop and a tap on mobile. Returns a disposer for teardown. */
 export function attachAlertPopups(map, getEnabled = () => true) {
-  let popup = null;
-  function clear() { popup?.remove(); popup = null; }
-  function show(event) {
+  let popup = null, shown = '', hideTimer = 0;
+  const cancelHide = () => { clearTimeout(hideTimer); hideTimer = 0; };
+  function clear() { cancelHide(); const open = popup; popup = null; shown = ''; open?.remove(); }
+  // Moving from the area onto the popup leaves the layer; wait briefly so the pointer can
+  // reach the popup (to scroll it or press ×), and keep it while the pointer is over it.
+  function scheduleClear() { cancelHide(); hideTimer = setTimeout(clear, 300); }
+  function show(event, reposition = false) {
     if (!getEnabled()) { clear(); return; }
-    const features = map.queryRenderedFeatures(event.point, { layers: ['ops-alert-fill'] });
-    const html = alertPopupHTML(features);
+    const html = alertPopupHTML(map.queryRenderedFeatures(event.point, { layers: ['ops-alert-fill'] }));
     if (!html) { clear(); return; }
-    popup ??= new maplibregl.Popup({ className: 'ops-alert-popup-wrap', closeButton: true, closeOnClick: false, maxWidth: 'min(340px, calc(100vw - 32px))' });
-    popup.setLngLat(event.lngLat).setHTML(html).addTo(map);
+    cancelHide();
+    if (!popup) {
+      // focusAfterOpen: false keeps the caret in the warning editor while the pointer crosses the map.
+      popup = new maplibregl.Popup({ className: 'ops-alert-popup-wrap', closeButton: true, closeOnClick: false, focusAfterOpen: false, offset: 12, maxWidth: 'min(340px, calc(100vw - 32px))' });
+      popup.on?.('close', () => { popup = null; shown = ''; });
+    }
+    // The popup stays where it opened until the pointer reaches different areas, so it can be reached.
+    if (html !== shown || reposition) popup.setLngLat(event.lngLat);
+    if (html !== shown) { popup.setHTML(html); shown = html; }
+    if (!popup.isOpen()) {
+      popup.addTo(map);
+      popup.getElement()?.addEventListener('mouseenter', cancelHide);
+      popup.getElement()?.addEventListener('mouseleave', scheduleClear);
+    }
   }
+  const tap = event => show(event, true);
   map.on('mousemove', 'ops-alert-fill', show);
-  map.on('mouseleave', 'ops-alert-fill', clear);
-  map.on('click', 'ops-alert-fill', show);
+  map.on('mouseleave', 'ops-alert-fill', scheduleClear);
+  map.on('click', 'ops-alert-fill', tap);
   map.on('movestart', clear);
   map.on('styledata', clear);
   return () => {
     clear();
     map.off('mousemove', 'ops-alert-fill', show);
-    map.off('mouseleave', 'ops-alert-fill', clear);
-    map.off('click', 'ops-alert-fill', show);
+    map.off('mouseleave', 'ops-alert-fill', scheduleClear);
+    map.off('click', 'ops-alert-fill', tap);
     map.off('movestart', clear);
     map.off('styledata', clear);
   };

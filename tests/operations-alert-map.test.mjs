@@ -40,14 +40,36 @@ test('legacy event produces geometry while explicit cleared warnings produce non
   assert.equal(buildAlertGeography({alert:{code:'orange'},areas:['Botoșani']},{admin}).features.length,1);
   assert.equal(buildAlertGeography({alerts:[],alert:{code:'orange'},areas:['Botoșani']},{admin}).features.length,0);
 });
-test('hover/tap handlers query all overlapping areas and respect drawing suppression',()=>{
-  const handlers=new Map(); let shown=0, removed=0, enabled=true;
-  const features=buildAlertGeography({alerts:[warning('a','red')]},{admin}).features;
-  globalThis.maplibregl={Popup:class {constructor(options){assert.equal(options.className,'ops-alert-popup-wrap');} setLngLat(){return this;} setHTML(html){assert.match(html,/Cod roșu/);assert.match(html,/data-code="red"/);assert.doesNotMatch(html,/style=/);return this;} addTo(){shown++;return this;} remove(){removed++;}}};
-  const map={on(type,layer,handler){handlers.set(`${type}:${typeof layer==='string'?layer:''}`,handler||layer);},off(){},queryRenderedFeatures(){return features;}};
-  const dispose=attachAlertPopups(map,()=>enabled), event={point:{x:1,y:1},lngLat:{lng:26,lat:47}};
-  handlers.get('mousemove:ops-alert-fill')(event); handlers.get('click:ops-alert-fill')(event);
-  assert.equal(shown,2); enabled=false; handlers.get('mousemove:ops-alert-fill')(event); assert.equal(shown,2); assert.equal(removed,1); dispose(); delete globalThis.maplibregl;
+test('hover keeps one steady popup out of keyboard focus, lets the pointer enter it and respects drawing suppression', async () => {
+  const handlers = new Map(), element = new EventTarget();
+  let created = 0, added = 0, removed = 0, htmlSets = 0, moves = 0, enabled = true, options;
+  const features = buildAlertGeography({ alerts: [warning('a', 'red')] }, { admin }).features;
+  globalThis.maplibregl = { Popup: class {
+    constructor(o) { options = o; created++; this.open = false; }
+    on() { return this; }
+    setLngLat() { moves++; return this; }
+    setHTML(html) { assert.match(html, /Cod roșu/); assert.match(html, /data-code="red"/); assert.doesNotMatch(html, /style=/); htmlSets++; return this; }
+    addTo() { added++; this.open = true; return this; }
+    isOpen() { return this.open; }
+    getElement() { return element; }
+    remove() { removed++; this.open = false; return this; }
+  } };
+  const map = { on(type, layer, handler) { handlers.set(`${type}:${typeof layer === 'string' ? layer : ''}`, handler || layer); }, off() {}, queryRenderedFeatures() { return features; } };
+  const dispose = attachAlertPopups(map, () => enabled);
+  const fire = name => handlers.get(name)({ point: { x: 1, y: 1 }, lngLat: { lng: 26, lat: 47 } });
+  const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
+  for (let i = 0; i < 3; i++) fire('mousemove:ops-alert-fill');
+  assert.equal(options.className, 'ops-alert-popup-wrap');
+  assert.equal(options.focusAfterOpen, false, 'Hover must not move focus out of the editor');
+  assert.deepEqual([created, added, htmlSets, moves], [1, 1, 1, 1], 'Same areas: no rebuild and no move');
+  fire('click:ops-alert-fill');
+  assert.equal(moves, 2, 'A tap places the popup where it happened');
+  fire('mouseleave:ops-alert-fill'); element.dispatchEvent(new Event('mouseenter'));
+  await wait(350); assert.equal(removed, 0, 'Entering the popup keeps it open');
+  element.dispatchEvent(new Event('mouseleave'));
+  await wait(350); assert.equal(removed, 1, 'Leaving the popup closes it');
+  enabled = false; fire('mousemove:ops-alert-fill'); assert.equal(added, 1, 'No popup while another tool is active');
+  dispose(); delete globalThis.maplibregl;
 });
 test('a village inside a UAT tinted at the same or higher code merges into it; a more severe village stays', () => {
   const localities = [{ name: 'Agafton', lon: 26.5, lat: 47.6, uat: 'Botoșani' }, { name: 'Curtești', lon: 26.6, lat: 47.7, uat: 'Botoșani' }];
