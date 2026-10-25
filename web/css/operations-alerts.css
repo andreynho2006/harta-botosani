@@ -1,6 +1,6 @@
 .ops-alert-list, .ops-alert-fields { display: grid; gap: 10px; min-width: 0; }
-.ops-alert-entry, .ops-alert-picker { min-width: 0; border: 1px solid var(--line); border-radius: 9px; background: var(--panel-2); }
-.ops-alert-entry > summary, .ops-alert-picker > summary { min-height: 44px; padding: 10px; box-sizing: border-box; cursor: pointer; overflow-wrap: anywhere; }
+.ops-alert-entry, .ops-alert-picker, .ops-alert-paste { min-width: 0; border: 1px solid var(--line); border-radius: 9px; background: var(--panel-2); }
+.ops-alert-entry > summary, .ops-alert-picker > summary, .ops-alert-paste > summary { min-height: 44px; padding: 10px; box-sizing: border-box; cursor: pointer; overflow-wrap: anywhere; }
 .ops-alert-entry > summary { font-weight: 600; }
 .ops-alert-fields { padding: 0 10px 10px; }
 .ops-alert-fields input:not([type=checkbox]), .ops-alert-fields select, .ops-alert-fields textarea { width: 100%; max-width: 100%; min-width: 0; box-sizing: border-box; }
@@ -14,6 +14,13 @@
 .ops-alert-options input[type=checkbox] { flex: 0 0 20px; width: 20px; height: 20px; margin: 0; }
 .ops-alert-options span { overflow-wrap: anywhere; }
 .ops-alert-picker > p { padding: 0 8px; }
+/* Pasting a message: the box, its button and what the text gave, inside the same frame. */
+.ops-alert-paste { margin-top: 10px; }
+.ops-alert-paste > label, .ops-alert-paste > .btn, .ops-alert-report { margin: 0 10px 10px; }
+.ops-alert-paste textarea { width: 100%; max-width: 100%; box-sizing: border-box; }
+.ops-alert-paste > .btn { min-height: 44px; }
+.ops-alert-report p { margin: 0 0 4px; font-size: 13px; }
+.ops-alert-report:empty { display: none; }
 /* Zone presets and the map pick: one row of wide targets, wrapping on a phone. */
 .ops-alert-zone { display: flex; flex-wrap: wrap; gap: 6px; }
 .ops-alert-zone > .btn { flex: 1 1 auto; justify-content: center; }
@@ -50,6 +57,6 @@
 .ops-legend > .ops-legend-code { border-color: var(--code); background: color-mix(in srgb, var(--code) 16%, var(--panel-2)); color: var(--ink); }
 .ops-legend > .ops-legend-code i { width: 14px; height: 14px; border: 0; background: var(--code); }
 @media (max-width: 760px), (max-height: 520px) {
-  .ops-alert-fields input:not([type=checkbox]), .ops-alert-fields select, .ops-alert-fields textarea { font-size: 16px; }
+  .ops-alert-fields input:not([type=checkbox]), .ops-alert-fields select, .ops-alert-fields textarea, .ops-alert-paste textarea { font-size: 16px; }
   .ops-alert-options { max-height: 190px; }
 }

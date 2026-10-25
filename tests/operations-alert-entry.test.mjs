@@ -157,12 +157,76 @@ async function browserChecks({ initOperations, createEvent }) {
       click('[data-warning-id="w1"] [data-alert-pick]');
       check('pickWaitsForOpenMarker', !ops.isDrawing() && toasts.at(-1)?.startsWith('Salvează marcajul curent'));
     }
+    // A pasted message adds one warning per code for the county and says what to check.
+    {
+      const { stored } = boot({ alerts: [warn('w1', ['Vlădeni'])] });
+      const paste = text => {
+        const box = $('[data-alert-paste]');
+        box.value = text;
+        box.dispatchEvent(new Event('input', { bubbles: true }));
+        click('[data-alert-action="parse"]');
+      };
+      const report = () => $('[data-alert-report]')?.textContent || '';
+      paste('Informare meteorologică fără cod.');
+      check('pasteWithoutCodeAddsNothing', stored().alerts.length === 1 && report().includes('Nu am găsit') && $('[data-alert-paste]').value.startsWith('Informare'));
+      paste(`AVERTIZARE NOWCASTING
+Cod: PORTOCALIU
+Valabil de la: 20.10.2026 ora 18:30 până la: 20.10.2026 ora 19:30
+Zona: Județul Botoșani: Dorohoi, Curtești, Agafton, Tâmpești;
+Fenomene: vijelie`);
+      const added = stored().alerts[1];
+      check('pasteAddsTheWarning', stored().alerts.length === 2 && added?.code === 'orange' && added.source === 'ANM' && added.text === 'vijelie');
+      check('pasteFillsTheZone', added?.areas.join() === 'Dorohoi,Curtești' && added.places.join() === 'Agafton|Curtești');
+      check('pasteFillsTheInterval', added?.validFrom && added.validTo && Date.parse(added.validTo) - Date.parse(added.validFrom) === 3600000);
+      check('pasteOpensTheNewWarning', entry(added?.id)?.open && !entry('w1').open);
+      check('pasteReportsWhatToCheck', report().includes('Am adăugat 1 avertizare') && report().includes('Cod portocaliu (ANM): 2 UAT-uri și 1 sat') && report().includes('Nerecunoscute: „Tâmpești”'));
+      check('pasteClearsTheBox', $('[data-alert-paste]').value === '' && $('.ops-alert-paste').open);
+      click('[data-alert-action="add"]');
+      check('reportGoesWithTheNextAdd', !report() && stored().alerts.length === 3);
+    }
+    // Text pasted but not yet recognised survives a render, such as a colleague's version arriving.
+    {
+      const { ops, stored } = boot({ alerts: [warn('w1')] });
+      const box = $('[data-alert-paste]');
+      box.value = 'Cod galben. Zona: Curtești';
+      box.dispatchEvent(new Event('input', { bubbles: true }));
+      ops.syncFromCloud([{ ...stored(), title: 'Versiunea colegului', updatedAt: new Date(Date.now() + 60000).toISOString() }]);
+      check('colleagueVersionLoaded', $('[data-ops-card="event"] h2')?.textContent === 'Versiunea colegului');
+      check('pasteDraftSurvivesRender', $('[data-alert-paste]')?.value === 'Cod galben. Zona: Curtești' && $('.ops-alert-paste').open);
+      click('[data-alert-action="parse"]');
+      check('pasteDraftGoesOnceAdded', !$('[data-alert-paste]').value && stored().alerts.length === 2);
+    }
+    // Two codes in one message are two warnings; a county-wide one takes every UAT.
+    {
+      const { stored } = boot({ alerts: [] });
+      const box = $('[data-alert-paste]');
+      box.value = 'COD ROȘU\nZone afectate: județul Botoșani\nCOD GALBEN\nZona: Curtești';
+      click('[data-alert-action="parse"]');
+      const alerts = stored().alerts;
+      check('pasteTwoCodes', alerts.length === 2 && alerts[0].code === 'red' && alerts[0].areas.length === 4 && alerts[1].code === 'yellow');
+      check('pasteSaysWholeCounty', $('[data-alert-report]')?.textContent.includes('Cod roșu: tot județul; fără interval'));
+    }
+    // Without the map data the names cannot be matched, so nothing is added yet.
+    {
+      const { stored } = boot({ alerts: [], data: { admin: { features: [] }, localities: [] } });
+      $('[data-alert-paste]').value = 'Cod galben. Zona: Corni';
+      click('[data-alert-action="parse"]');
+      check('pasteWaitsForMapData', !(stored().alerts || []).length && $('[data-alert-report]')?.textContent.includes('se încarcă'));
+    }
+    // An open marker form would be lost to the re-render, so the paste waits for it.
+    {
+      const { ops, stored, toasts } = boot({ alerts: [] });
+      ops.openRoadCreator();
+      $('[data-alert-paste]').value = 'Cod galben. Zona: Corni';
+      click('[data-alert-action="parse"]');
+      check('pasteWaitsForOpenMarker', !(stored().alerts || []).length && toasts.at(-1)?.startsWith('Finalizează sau anulează marcajul'));
+    }
   } catch (error) { result.error = error.stack + (pageErrors.length ? '\n' + pageErrors.join('\n') : ''); }
   check('noPageErrors', !pageErrors.length || (result.pageErrors = pageErrors, false));
   out.textContent = JSON.stringify(result);
 }
 
-test('zone presets and the map pick fill a warning without re-rendering its picker', { skip: !existsSync(chrome) }, () => {
+test('zone presets, the map pick and a pasted message fill warnings in the real editor', { skip: !existsSync(chrome) }, () => {
   const dir = mkdtempSync(join(tmpdir(), 'cjsu-alert-entry-'));
   const web = new URL('../web/', import.meta.url).href;
   const page = `<!doctype html><meta charset="utf-8"><script src="${web}vendor/proj4.js"></script><div class="app"><aside class="side"><div id="tab-situatii"></div></aside><div class="mapwrap"><div id="map"></div></div></div><pre id="results"></pre><script type="module">import { initOperations } from "${web}js/operations.js"; import { createEvent } from "${web}js/event-store.js"; (${browserChecks.toString()})({ initOperations, createEvent })</script>`;
@@ -177,6 +241,6 @@ test('zone presets and the map pick fill a warning without re-rendering its pick
     assert.equal(result.error, undefined, result.error);
     const failed = Object.entries(result).filter(([, ok]) => !ok).map(([name]) => name);
     assert.deepEqual(failed, [], 'Warning entry regressions');
-    assert.ok(Object.keys(result).length >= 24, 'Every scenario reported');
+    assert.ok(Object.keys(result).length >= 39, 'Every scenario reported');
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });

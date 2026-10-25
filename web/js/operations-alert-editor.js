@@ -1,5 +1,6 @@
 import { normalizeAlerts, resolvePlace, placeKey, placeLabel, legacyNote, legacyNoteOverflow, notesWithLegacyNote, countLabel, ALERT_LABELS as CODES } from './operations-alerts.js?v=20261019-multi-alerts';
 import { localTime, isoTime, dateLabel } from './operations-time.js';
+import { parseWarningText } from './operations-alert-parse.js?v=20261025-alert-entry';
 
 const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const fold = value => String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
@@ -66,6 +67,10 @@ export function presetAreas(preset, data = {}) {
 export function createAlertEditor({ panel, getActive, getData, onChange, onPickMap }) {
   // The warning drawn open at the next render: a new one, or the one just picked on the map.
   let newId = null;
+  // What the last pasted message gave, shown under the paste box of that situation until the next add or removal.
+  let parseReport = null;
+  // Text pasted but not yet recognised: a render, such as a colleague's version arriving, keeps it.
+  let pasteDraft = null;
   const canonical = (kind, entry) => canonicalEntry(kind, entry, getData()?.localities || []);
   function warnings() { return normalizeAlerts(getActive()); }
   const legacyInterval = note => note.validFrom || note.validTo ? [note.validFrom, note.validTo].map(value => value ? dateLabel(value) : '…').join(' – ') : '';
@@ -136,7 +141,60 @@ export function createAlertEditor({ panel, getActive, getData, onChange, onPickM
         </div></details>`).join('')}</div>
       ${alerts.length ? '' : '<p class="muted">Nicio avertizare adăugată.</p>'}
       <button type="button" class="btn" data-alert-action="add">＋ Adaugă un cod / o avertizare</button>
+      ${pasteHTML()}
     </section>`;
+  }
+  const reportHTML = lines => lines.map(line => `<p>${esc(line)}</p>`).join('');
+  function pasteHTML() {
+    const lines = parseReport && parseReport.id === getActive()?.id ? parseReport.lines : [];
+    const draft = pasteDraft && pasteDraft.id === getActive()?.id ? pasteDraft.text : '';
+    return `<details class="ops-alert-paste" ${lines.length || draft ? 'open' : ''}><summary>Adaugă din textul ANM / INHGA</summary>
+      <label>Textul avertizării<textarea data-alert-paste rows="5" maxlength="20000" placeholder="Lipește aici mesajul primit, cu codul, intervalul și zonele afectate…">${esc(draft)}</textarea></label>
+      <button type="button" class="btn" data-alert-action="parse">Recunoaște și adaugă</button>
+      <div class="ops-alert-report" data-alert-report role="status">${reportHTML(lines)}</div>
+    </details>`;
+  }
+  const showReport = lines => {
+    parseReport = { id: getActive()?.id, lines };
+    const box = panel.querySelector('[data-alert-report]');
+    if (box) box.innerHTML = reportHTML(lines);
+  };
+  const quoted = names => names.slice(0, 8).map(name => `„${name}”`).join(', ') + (names.length > 8 ? ` și încă ${names.length - 8}` : '');
+  /** What the operator must check in each warning made from the text, in the order they were added. */
+  function reportLines(found, allUats) {
+    const lines = [`Am adăugat ${countLabel(found.length, 'avertizare', 'avertizări')} din text. Verifică-le înainte de publicare.`];
+    for (const warning of found) {
+      const zone = warning.county && warning.source === 'INHGA' ? 'privește râuri din județ, nu UAT-uri: alege UAT-urile riverane cu „Alege pe hartă”'
+        : warning.county && warning.areas.length === allUats ? 'tot județul'
+        : warning.areas.length || warning.places.length ? [warning.areas.length && countLabel(warning.areas.length, 'UAT', 'UAT-uri'), warning.places.length && countLabel(warning.places.length, 'sat', 'sate')].filter(Boolean).join(' și ')
+        : 'nicio zonă din județ recunoscută: alege-o cu butoanele zonei';
+      const interval = warning.validFrom && warning.validTo ? `${dateLabel(warning.validFrom)} – ${dateLabel(warning.validTo)}`
+        : warning.interval === 'reversed' ? 'sfârșitul intervalului era înaintea începutului, completează-l'
+        : warning.validFrom || warning.validTo ? 'interval incomplet, completează-l' : 'fără interval, completează-l';
+      lines.push(`${CODES[warning.code]}${warning.source ? ` (${warning.source})` : ''}: ${zone}; ${interval}.`);
+      if (warning.unmatched.length) lines.push(`Nerecunoscute: ${quoted(warning.unmatched)}.`);
+      for (const { name, count } of warning.ambiguous) lines.push(`„${name}”: ${count} sate cu acest nume în județ. Alege-l din „Localități / sate”.`);
+      if (warning.textCut) lines.push('Textul fenomenelor avea peste 5 000 de caractere: au rămas primele 5 000.');
+    }
+    return lines;
+  }
+  /** Adds one warning per code the pasted message holds for the county. */
+  function addFromText(button) {
+    const text = button.closest('.ops-alert-paste')?.querySelector('[data-alert-paste]')?.value || '';
+    if (!text.trim()) { showReport(['Lipește întâi textul avertizării în casetă.']); return; }
+    const data = getData() || {};
+    const uats = warningOptions('areas', data).map(option => option.value);
+    if (!uats.length) { showReport(['Lista UAT-urilor se încarcă odată cu harta. Încearcă din nou după încărcare.']); return; }
+    const found = parseWarningText(text, { uats, localities: data.localities || [] });
+    if (!found.length) { showReport(['Nu am găsit în text codul avertizării (galben, portocaliu, roșu sau RO-Alert). Nu am adăugat nimic.']); return; }
+    const alerts = editableOrExplain();
+    if (!alerts) return;
+    const added = found.map(warning => ({ id: crypto.randomUUID(), code: warning.code, source: warning.source, validFrom: warning.validFrom, validTo: warning.validTo, text: warning.text, areas: warning.areas, places: warning.places }));
+    alerts.push(...added);
+    newId = added[0].id;
+    pasteDraft = null;
+    parseReport = { id: getActive().id, lines: reportLines(found, uats.length) };
+    onChange({ render: true, geography: true });
   }
   function updateStatus(entry, alert) {
     const summary = entry.querySelector('[data-alert-summary]');
@@ -153,6 +211,8 @@ export function createAlertEditor({ panel, getActive, getData, onChange, onPickM
     }
   }
   function handleInput(target) {
+    // The pasted text is read only on "Recunoaște și adaugă"; typing there changes nothing in the situation.
+    if (target.dataset.alertPaste !== undefined) { pasteDraft = { id: getActive()?.id, text: target.value }; return true; }
     if (target.dataset.alertSearch) {
       const picker = target.closest('.ops-alert-picker');
       const query = fold(target.value);
@@ -256,6 +316,7 @@ export function createAlertEditor({ panel, getActive, getData, onChange, onPickM
     }
   }
   function handleChange(target) {
+    if (target.dataset.alertPaste !== undefined) return true;
     if (target.dataset.warningField) return editField(target);
     const kind = target.dataset.alertArea;
     if (!['areas', 'places'].includes(kind)) return false;
@@ -315,9 +376,11 @@ export function createAlertEditor({ panel, getActive, getData, onChange, onPickM
       return true;
     }
     const action = button?.dataset.alertAction;
-    if (!['add', 'remove'].includes(action)) return false;
+    if (!['add', 'remove', 'parse'].includes(action)) return false;
+    if (action === 'parse') { addFromText(button); return true; }
     const alerts = editableOrExplain();
     if (!alerts) return true;
+    parseReport = null;
     if (action === 'add') {
       newId = crypto.randomUUID();
       alerts.push({ id: newId, code: 'yellow', source: '', validFrom: '', validTo: '', text: '', areas: [], places: [] });
