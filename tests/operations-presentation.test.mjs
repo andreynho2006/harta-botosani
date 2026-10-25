@@ -43,7 +43,10 @@ async function browserChecks({ initOperations, createEvent }) {
     let frameId = 0;
     window.requestAnimationFrame = callback => { const id = ++frameId; frames.set(id, callback); return id; };
     window.cancelAnimationFrame = id => frames.delete(id);
-    const state = { data: {}, visible: {}, overlays: {}, basemap: 'harta', theme: 'zi' };
+    const state = { data: { localities: [
+      { name: 'Poiana', lon: 26.9, lat: 47.6, uat: 'Flămânzi' }, { name: 'Poiana', lon: 26.7, lat: 47.9, uat: 'Ștefănești' },
+      { name: 'Agafton', lon: 26.6, lat: 47.8, uat: 'Curtești' }, { name: 'Poiana', lon: 27.6, lat: 47.3, uat: '' },
+    ] }, visible: {}, overlays: {}, basemap: 'harta', theme: 'zi' };
     initOperations({ map, storage, state, toast: noop, selectTab: noop, applyStyle: () => styleCalls++, renderLayerPanel: noop });
     const nextFrame = async () => {
       for (let turn = 0; frames.size; turn++) {
@@ -140,6 +143,15 @@ async function browserChecks({ initOperations, createEvent }) {
     document.querySelector('[data-action="present"]').click();
     if (!visible(panel('messages'))) toggle('messages').click();
     check('sourceOnlyVisible', panel('messages').querySelector('.ops-alert')?.textContent.includes('Warning authority'));
+    document.querySelector('.ops-pres-exit').click();
+    const villages = [...document.querySelectorAll('[data-alert-area="places"]')];
+    check('villagesKeyedByUat', villages.map(input => input.value).join(';') === 'Agafton|Curtești;Poiana|Flămânzi;Poiana|Ștefănești'
+      && villages.map(input => input.closest('label').textContent.trim()).join(';') === 'Agafton (Curtești);Poiana (Flămânzi);Poiana (Ștefănești)');
+    villages[2].click();
+    document.querySelector('[data-action="present"]').click();
+    if (!visible(panel('messages'))) toggle('messages').click();
+    const villageWarning = panel('messages').querySelector('.ops-alert')?.textContent || '';
+    check('chosenVillageShownWithItsUat', villageWarning.includes('Poiana (Ștefănești)') && !villageWarning.includes('Flămânzi'));
     document.querySelector('.ops-pres-exit').click();
     document.querySelector('[data-alert-action="remove"]').click();
     document.querySelector('[data-action="present"]').click();

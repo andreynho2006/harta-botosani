@@ -20,6 +20,15 @@ test('villages use exact names and finite coordinates, never prefix matches', ()
   assert.equal(data.features[0].geometry.coordinates[0].length,49);
   assert.match(alertPopupHTML(data.features),/orientativă/);
 });
+test('same-named villages in different UATs get their own area and a legacy name joins its keyed village', () => {
+  const localities = [{ name: 'Poiana', lon: 26.9, lat: 47.6, uat: 'Flămânzi' }, { name: 'Poiana', lon: 26.7, lat: 47.9, uat: 'Ștefănești' }];
+  const data = buildAlertGeography({ alerts: [warning('a', 'yellow', { areas: [], places: ['Poiana|Ștefănești'] }), warning('b', 'red', { areas: [], places: ['Poiana|Flămânzi', 'Poiana'] })] }, { localities });
+  assert.deepEqual(data.features.map(f => f.properties.name).sort(), ['Poiana (Flămânzi)', 'Poiana (Ștefănești)']);
+  const stefanesti = data.features.find(f => f.properties.name === 'Poiana (Ștefănești)');
+  assert.equal(stefanesti.properties.code, 'yellow');
+  assert.ok(Math.abs(stefanesti.geometry.coordinates[0][0][1] - 47.9) < 0.02);
+  assert.equal(JSON.parse(data.features.find(f => f.properties.name === 'Poiana (Flămânzi)').properties.alerts).length, 1);
+});
 test('overlapping polygons merge warnings without duplicate popup entries and escape stored text', () => {
   const malicious = '<img src=x onerror=alert(1)>';
   const data = buildAlertGeography({ alerts:[warning('a','yellow',{source:malicious,text:'<script>bad()</script>',places:['Agafton']})] }, {admin,localities:[{name:'Agafton',lon:26.5,lat:47.7}]});

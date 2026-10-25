@@ -1,4 +1,4 @@
-import { normalizeAlerts, affectedAlertLocations } from "./operations-alerts.js?v=20261019-multi-alerts";
+import { normalizeAlerts, affectedAlertLocations, resolvePlace, placeLabel } from "./operations-alerts.js?v=20261019-multi-alerts";
 import { buildAlertGeography, attachAlertPopups } from "./operations-alert-map.js?v=20261019-multi-alerts";
 import { createAlertEditor } from "./operations-alert-editor.js?v=20261019-multi-alerts";
 import { presentationFeatures, presentationRiskGroups, presentationKindLabel } from "./operations-risks.js?v=20261018-cards";
@@ -708,11 +708,12 @@ export function initOperations(ctx) {
   function selectedGeometry() {
     const warningLocations = affectedAlertLocations(active);
     const areaNames = new Set(active ? [...active.areas, ...warningLocations.areas] : standaloneFocus.areas);
-    const placeNames = active ? [...new Set([...(active.places || []), ...warningLocations.places])] : standaloneFocus.places;
+    // Focus places keep their name search; warning villages resolve by exact `Name|UAT` key.
+    const focusPlaces = (active ? active.places || [] : standaloneFocus.places).map(findLocality);
+    const warningPlaces = active ? warningLocations.places.map(entry => resolvePlace(entry, allLocalities())) : [];
     const uatFeatures = (state.data.admin?.features || []).filter(f => f.properties.kind === "uat" && areaNames.has(f.properties.name));
     const placeFeatures = [];
-    for (const pName of placeNames) {
-      const loc = findLocality(pName);
+    for (const loc of new Set([...focusPlaces, ...warningPlaces])) {
       if (loc) {
         const poly = circle([loc.lon, loc.lat], 1600, 48);
         placeFeatures.push({ type: "Feature", properties: { kind: "place-focus", name: loc.name }, geometry: poly });
@@ -1603,7 +1604,7 @@ export function initOperations(ctx) {
           <h1>${esc(active.title)}</h1>
           ${hasNotes ? `<p class="ops-slide-notes">${esc(active.notes)}</p>` : ""}
         </div>
-        ${warnings.map((warning, index) => `<p id="ops-pres-alert${index ? '-' + index : ''}" class="ops-alert" data-code="${esc(warning.code)}" tabindex="0" role="note"><b>${esc(ALERTS[warning.code] || warning.code)}</b> ${esc(warning.text)}${warning.source ? ` · ${esc(warning.source)}` : ""}<br>${esc([...warning.areas, ...warning.places].join(", ") || "Fără localități selectate")}${warning.validFrom || warning.validTo ? ` · ${dateLabel(warning.validFrom)} – ${dateLabel(warning.validTo)}` : " · Interval nespecificat"}</p>`).join("")}
+        ${warnings.map((warning, index) => `<p id="ops-pres-alert${index ? '-' + index : ''}" class="ops-alert" data-code="${esc(warning.code)}" tabindex="0" role="note"><b>${esc(ALERTS[warning.code] || warning.code)}</b> ${esc(warning.text)}${warning.source ? ` · ${esc(warning.source)}` : ""}<br>${esc([...new Set([...warning.areas, ...warning.places.map(placeLabel)])].join(", ") || "Fără localități selectate")}${warning.validFrom || warning.validTo ? ` · ${dateLabel(warning.validFrom)} – ${dateLabel(warning.validTo)}` : " · Interval nespecificat"}</p>`).join("")}
 
       </header>
       <nav id="ops-pres-commands" class="ops-slide-controls" data-pres-panel="commands" data-pres-edge="right" ${commandsCollapsed ? "hidden" : ""} aria-label="Comenzi prezentare">

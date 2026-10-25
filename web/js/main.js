@@ -195,6 +195,8 @@ async function init() {
     .map((row) => ({ name: row[0], kind: row[1].slice(4), lon: row[2], lat: row[3], ctx: row[4] || "" }));
   stats = st;
   uatAt = makeUatLookup(admin);
+  // Warnings key villages by name and UAT: 25 village names repeat in the index.
+  for (const place of state.data.localities) place.uat = uatAt(place.lon, place.lat)?.name || "";
   search.add(searchRows.filter((row) => row[1] !== "poi:hidrant_osm"));
   search.add(hydrantSearchRows());
   updateDataInfo();

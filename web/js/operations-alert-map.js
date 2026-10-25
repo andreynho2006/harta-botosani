@@ -1,5 +1,5 @@
 /* global maplibregl */
-import { normalizeAlerts, ALERT_COLORS as colors, ALERT_RANK as rank, ALERT_LABELS as labels } from './operations-alerts.js?v=20261019-multi-alerts';
+import { normalizeAlerts, resolvePlace, placeKey, placeLabel, ALERT_COLORS as colors, ALERT_RANK as rank, ALERT_LABELS as labels } from './operations-alerts.js?v=20261019-multi-alerts';
 
 const escape = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
@@ -21,17 +21,19 @@ export function buildAlertGeography(event, { admin, localities = [] } = {}) {
   for (const warning of normalizeAlerts(event)) {
     for (const [kind, names] of [['uat', warning.areas], ['place', warning.places]]) {
       for (const name of names || []) {
-        const key = `${kind}:${name}`;
+        // A legacy plain name and its `Name|UAT` key are the same village: one feature.
+        const place = kind === 'place' ? resolvePlace(name, localities) : null;
+        const key = place ? `place:${placeKey(place)}` : `${kind}:${name}`;
         if (!targets.has(key)) {
           let geometry;
           if (kind === 'uat') {
             geometry = admin?.features?.find(f => f.properties?.kind === 'uat' && f.properties.name === name)?.geometry;
-          } else {
-            const loc = localities.find(l => l.name === name && Number.isFinite(l.lon) && Number.isFinite(l.lat));
-            if (loc) geometry = villageGeometry(loc.lon, loc.lat);
+          } else if (place) {
+            geometry = villageGeometry(place.lon, place.lat);
           }
           if (!geometry) continue;
-          targets.set(key, { type: 'Feature', properties: { name, kind, code: '', color: '', alerts: [] }, geometry });
+          const label = place ? placeLabel(placeKey(place)) : name;
+          targets.set(key, { type: 'Feature', properties: { name: label, kind, code: '', color: '', alerts: [] }, geometry });
         }
         const properties = targets.get(key).properties;
         if (!properties.alerts.some(a => a.id === warning.id)) properties.alerts.push(warning);

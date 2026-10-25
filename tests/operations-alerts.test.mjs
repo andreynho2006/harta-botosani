@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { normalizeAlerts, affectedAlertLocations, warningsForLocation } from '../web/js/operations-alerts.js';
+import { normalizeAlerts, affectedAlertLocations, warningsForLocation, placeKey, resolvePlace, placeLabel } from '../web/js/operations-alerts.js';
 import { createEvent, sanitizeEvent, EventStore } from '../web/js/event-store.js';
 
 const alert = (id, code, areas, places = []) => ({ id, code, source: 'ANM', validFrom: '2026-10-19T10:00:00+03:00', validTo: '2026-10-19T18:00:00+03:00', text: 'Vânt puternic', areas, places });
@@ -46,6 +46,26 @@ test('concurrent codes retain independent locations and validity through save, e
   assert.deepEqual(warningsForLocation(saved, 'uat', 'Agafton'), []);
   assert.deepEqual(warningsForLocation(saved, 'uat', 'Boto'), []);
   assert.deepEqual(affectedAlertLocations(saved), { areas: ['Botoșani', 'Dorohoi'], places: ['Agafton'] });
+});
+
+test('villages with the same name are told apart by UAT and legacy names prefer the county', () => {
+  const localities = [
+    { name: 'Poiana', lon: 27.6, lat: 47.3, uat: '' },
+    { name: 'Poiana', lon: 26.9, lat: 47.6, uat: 'Flămânzi' },
+    { name: 'Poiana', lon: 26.7, lat: 47.9, uat: 'Ștefănești' },
+    { name: 'Curtești', lon: 26.6, lat: 47.8, uat: 'Curtești' },
+  ];
+  assert.equal(placeKey(localities[2]), 'Poiana|Ștefănești');
+  assert.equal(placeKey(localities[0]), 'Poiana');
+  assert.equal(resolvePlace('Poiana|Ștefănești', localities), localities[2]);
+  assert.equal(resolvePlace('Poiana|Flămânzi', localities), localities[1]);
+  assert.equal(resolvePlace('Poiana', localities), localities[1], 'Legacy names skip villages outside the county');
+  assert.equal(resolvePlace('Poiana|Hudum', localities), null);
+  assert.equal(resolvePlace('Poia', localities), null, 'No prefix matches');
+  assert.equal(resolvePlace('Poiana', [{ name: 'Poiana', lon: 1, lat: 2 }]).lon, 1, 'Data without UATs still resolves');
+  assert.equal(placeLabel('Poiana|Flămânzi'), 'Poiana (Flămânzi)');
+  assert.equal(placeLabel('Curtești|Curtești'), 'Curtești');
+  assert.equal(placeLabel('Agafton'), 'Agafton');
 });
 
 test('saving derives the legacy warning summary from the most severe warning', () => {

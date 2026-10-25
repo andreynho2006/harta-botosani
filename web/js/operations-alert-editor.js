@@ -1,4 +1,4 @@
-import { normalizeAlerts, ALERT_LABELS as CODES } from './operations-alerts.js?v=20261019-multi-alerts';
+import { normalizeAlerts, resolvePlace, placeKey, placeLabel, ALERT_LABELS as CODES } from './operations-alerts.js?v=20261019-multi-alerts';
 import { localTime, isoTime } from './operations-time.js';
 
 const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -7,12 +7,21 @@ const dateValue = value => { try { return localTime(value); } catch { return '';
 
 export function createAlertEditor({ panel, getActive, getData, onChange }) {
   let newId = null;
+  /** Options as { value, label }. Villages outside the county are left out. */
   function geography(kind) {
     const data = getData() || {};
-    const names = kind === 'areas'
+    const values = kind === 'areas'
       ? (data.admin?.features || []).filter(f => f.properties?.kind === 'uat').map(f => f.properties.name)
-      : (data.localities || []).map(place => place.name);
-    return [...new Set(names.filter(Boolean))].sort((a, b) => a.localeCompare(b, 'ro'));
+      : (data.localities || []).filter(place => place.uat && place.name).map(placeKey);
+    return [...new Set(values.filter(Boolean))]
+      .map(value => ({ value, label: kind === 'places' ? placeLabel(value) : value }))
+      .sort((a, b) => a.label.localeCompare(b.label, 'ro'));
+  }
+  /** Stored legacy village names map to their current key; unknown entries are kept. */
+  function canonical(kind, entry) {
+    if (kind !== 'places') return entry;
+    const place = resolvePlace(entry, getData()?.localities || []);
+    return place?.uat ? placeKey(place) : entry;
   }
   function warnings() { return normalizeAlerts(getActive()); }
   function editable() {
@@ -22,13 +31,13 @@ export function createAlertEditor({ panel, getActive, getData, onChange }) {
     return active.alerts;
   }
   function listHTML(alert, kind, label) {
-    const selected = new Set(alert[kind] || []);
-    const names = geography(kind);
+    const selected = new Set((alert[kind] || []).map(entry => canonical(kind, entry)));
+    const options = geography(kind);
     return `<details class="ops-alert-picker"><summary>${label} <span data-alert-count="${kind}">${selected.size} selectate</span></summary>
       <label>Caută ${kind === 'areas' ? 'UAT' : 'localitate'}<input type="search" data-alert-search="${kind}" placeholder="Scrie numele…" autocomplete="off"></label>
-      <div class="ops-alert-options" role="group" aria-label="${label}">${names.map(name => `<label data-alert-option="${esc(fold(name))}"><input type="checkbox" data-alert-area="${kind}" value="${esc(name)}" ${selected.has(name) ? 'checked' : ''}><span>${esc(name)}</span></label>`).join('')}</div>
+      <div class="ops-alert-options" role="group" aria-label="${label}">${options.map(option => `<label data-alert-option="${esc(fold(option.label))}"><input type="checkbox" data-alert-area="${kind}" value="${esc(option.value)}" ${selected.has(option.value) ? 'checked' : ''}><span>${esc(option.label)}</span></label>`).join('')}</div>
       <p class="muted" data-alert-no-results hidden>Niciun rezultat.</p>
-      ${names.length ? '' : '<p class="muted">Lista se încarcă odată cu harta.</p>'}
+      ${options.length ? '' : '<p class="muted">Lista se încarcă odată cu harta.</p>'}
     </details>`;
   }
   function status(alert) {
@@ -116,11 +125,11 @@ export function createAlertEditor({ panel, getActive, getData, onChange }) {
     if (target.dataset.warningField) return editField(target);
     const kind = target.dataset.alertArea;
     if (!['areas', 'places'].includes(kind)) return false;
-    if (!geography(kind).includes(target.value)) return true;
+    if (!geography(kind).some(option => option.value === target.value)) return true;
     const entry = target.closest('[data-warning-id]');
     const alert = editable().find(item => item.id === entry?.dataset.warningId);
     if (!alert) return true;
-    const selected = new Set(alert[kind] || []);
+    const selected = new Set((alert[kind] || []).map(item => canonical(kind, item)));
     if (target.checked) selected.add(target.value); else selected.delete(target.value);
     alert[kind] = [...selected];
     updateStatus(entry, alert);
