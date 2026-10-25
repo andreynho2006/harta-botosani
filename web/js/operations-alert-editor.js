@@ -4,8 +4,14 @@ import { localTime, isoTime, dateLabel } from './operations-time.js';
 const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const fold = value => String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
 const dateValue = value => { try { return localTime(value); } catch { return ''; } };
-/** A displayed date as an instant: '' when empty, null when it is not a real time in Romania. */
-const displayedInstant = input => { try { return isoTime(input.value); } catch { return null; } };
+/**
+ * A displayed date as an instant: '' when empty, null when it is not a real time in Romania.
+ * A half-typed date reads as '' too, so the browser's badInput tells it apart from a cleared one.
+ */
+const displayedInstant = input => {
+  if (input.validity?.badInput) return null;
+  try { return isoTime(input.value); } catch { return null; }
+};
 const REVERSED = 'Sfârșitul intervalului trebuie să fie după început.';
 const UNREADABLE = 'Date sau ore invalide pentru România.';
 

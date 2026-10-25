@@ -225,6 +225,23 @@ test('a rejected start keeps the stored interval and the invalid status', () => 
   assert.equal(s.log.changes, 0);
 });
 
+test('a half-typed date is unreadable, not a cleared end of the interval', () => {
+  const s = intervalStub();
+  const before = s.stored();
+  // The browser reports an incomplete datetime-local as value '' with validity.badInput.
+  s.start.validity = { badInput: true };
+  s.type(s.start, '');
+  assert.deepEqual(s.stored(), before, 'The stored start is kept');
+  assert.ok(s.start.validationMessage);
+  assert.equal(s.status.textContent, INVALID);
+  assert.equal(s.log.changes, 0);
+  // Clearing the field for real still makes a single-ended interval.
+  s.start.validity = { badInput: false };
+  s.type(s.start, '');
+  assert.deepEqual(s.stored(), ['', before[1]]);
+  assert.equal(s.start.validationMessage, '');
+});
+
 test('an end is judged against the start as displayed, not the stored one', () => {
   const s = intervalStub();
   const before = s.stored();
