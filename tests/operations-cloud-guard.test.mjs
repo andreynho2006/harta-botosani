@@ -347,6 +347,63 @@ async function browserChecks({ initOperations, createEvent }) {
       check('undoGoesWithReplacedVersion', !$('.ops-undo') && title() === 'Marcaj și conflict · coleg');
     }
 
+    // Second review round: what the first fixes still left open.
+    {
+      const a = situation('Situație A'), b = situation('Situație B');
+      const { ops } = boot({ active: a });
+      ops.syncFromCloud([structuredClone(a), structuredClone(b)]);
+      click('[data-delete-id]'); click('[data-confirm-delete]'); await settle();
+      ops.syncFromCloud([structuredClone(b)]);
+      pick(b.id);
+      check('deleteUndoSurvivesOpeningAnother', title() === 'Situație B' && $('.ops-undo')?.textContent.includes('Situație A'));
+      click('[data-action="undo"]'); await settle();
+      check('deleteUndoAfterOpeningAnother', title() === 'Situație A');
+    }
+    {
+      const mine = situation('Coadă offline');
+      const { ops } = boot({ active: mine, session: { cloudBase: mine.updatedAt }, save: () => new Promise(() => {}) });
+      editTitle('Coadă offline · varianta mea');
+      ops.syncFromCloud([colleague(mine, 'Coadă offline · coleg', 1)]);
+      click('[data-action="cloud-overwrite"]'); await settle(80);
+      click('[data-action="cloud-take"]');
+      check('takeRefusedWhileWriteQueued', $('[data-field="title"]').value === 'Coadă offline · varianta mea' && notice().startsWith('Așteaptă răspunsul'));
+    }
+    {
+      const mine = situation('Refuz târziu');
+      let refuse;
+      boot({ active: mine, save: () => new Promise(resolve => { refuse = () => resolve(false); }) });
+      editTitle('Refuz târziu · trimis');
+      click('[data-action="save"]'); await settle(80);
+      refuse(); await settle();
+      check('lateRefusalReported', notice().startsWith('Cloud-ul a refuzat publicarea') && status().includes('nepublicat în Cloud'));
+    }
+    {
+      const mine = situation('Republicată între timp');
+      const { ops, calls } = boot({ active: mine, session: { cloudBase: mine.updatedAt }, del: () => new Promise(() => {}) });
+      ops.syncFromCloud([structuredClone(mine)]);
+      click('[data-delete-id]'); click('[data-confirm-delete]'); await settle();
+      const again = colleague(mine, 'Republicată între timp · coleg', 1);
+      ops.syncFromCloud([again]);
+      click('[data-action="undo"]'); await settle();
+      check('undoKeepsVersionPublishedMeanwhile', !calls.some(sent => sent.updatedAt === mine.updatedAt) && title() === 'Republicată între timp · coleg');
+    }
+    {
+      const mine = situation('După publicare');
+      let release;
+      const { ops } = boot({ active: mine, session: { cloudBase: mine.updatedAt }, save: () => new Promise(resolve => { release = () => resolve(true); }) });
+      editTitle('După publicare · a mea');
+      click('[data-action="save"]'); await settle();
+      ops.syncFromCloud([colleague(mine, 'După publicare · coleg', 1)]);
+      release(); await settle();
+      check('laterColleagueVersionLoadsAfterPublish', title() === 'După publicare · coleg' && !$('.ops-conflict'));
+    }
+    {
+      const mine = situation('Reîncărcare');
+      const theirs = colleague(mine, 'Reîncărcare · coleg', 1);
+      boot({ active: { ...mine, title: 'Reîncărcare · a mea' }, session: { cloudBase: mine.updatedAt, unpublished: true, cloudConflict: theirs } });
+      check('conflictSurvivesReload', $('.ops-conflict') && title() === 'Reîncărcare · a mea');
+    }
+
     // One malformed document does not stop the others from syncing.
     {
       const { ops, archive } = boot({});
@@ -374,6 +431,6 @@ test('Cloud snapshots keep work in progress, publishing reports the real result,
     assert.equal(result.error, undefined, result.error);
     const failed = Object.entries(result).filter(([, ok]) => !ok).map(([name]) => name);
     assert.deepEqual(failed, [], 'Cloud guard regressions');
-    assert.ok(Object.keys(result).length >= 45, 'Every scenario reported');
+    assert.ok(Object.keys(result).length >= 52, 'Every scenario reported');
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
