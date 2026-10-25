@@ -1883,6 +1883,8 @@ export function initOperations(ctx) {
   panel.onclick = async (event) => {
     const button = event.target.closest("button"); if (!button) return;
     if (operationCards.handleClick(button)) return;
+    // Adding or removing a warning re-renders the panel, which would drop unsubmitted marker input.
+    if (button.dataset.alertAction && pending) return message("Finalizează sau anulează marcajul curent înainte de a adăuga sau șterge o avertizare.");
     if (alertEditor.handleClick(button)) return;
     if (button.dataset.action === "open-itinerary" && pending) return message("Finalizează marcajul curent înainte de a calcula itinerarul.");
     if (itinerary.handleClick(button)) return;
