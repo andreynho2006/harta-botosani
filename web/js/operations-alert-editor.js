@@ -1,7 +1,7 @@
 import { normalizeAlerts, resolvePlace, placeKey, placeLabel, legacyNote, legacyNoteOverflow, notesWithLegacyNote, countLabel, ALERT_LABELS as CODES } from './operations-alerts.js?v=20261019-multi-alerts';
 import { localTime, isoTime, dateLabel, intervalLabel } from './operations-time.js?v=20261025-same-day';
-import { parseWarningText } from './operations-alert-parse.js?v=20261025-anm-review';
-import { anmWarnings } from './operations-alert-feed.js?v=20261025-anm-review';
+import { parseWarningText } from './operations-alert-parse.js?v=20261025-rivers';
+import { anmWarnings } from './operations-alert-feed.js?v=20261025-rivers';
 
 const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const fold = value => String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();

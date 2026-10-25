@@ -2,7 +2,7 @@
 // Pure and DOM-free; the editor turns each result into a warning the operator then checks.
 import { placeKey } from './operations-alerts.js?v=20261019-multi-alerts';
 import { localTime, isoTime } from './operations-time.js';
-import { readRivers } from './operations-rivers.js';
+import { readRivers } from './operations-rivers.js?v=20261025-rivers';
 
 const CODE_WORDS = { galben: 'yellow', portocaliu: 'orange', rosu: 'red' };
 const MONTHS = {

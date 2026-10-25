@@ -1,7 +1,7 @@
 // Reads the ANM warnings published on meteoromania.ro: the nowcasting and the general warnings that
 // concern the county, as warnings the editor adds and the operator then checks.
 // Pure apart from `fetchAnmFeeds`, which the editor gets injected.
-import { foldText, readZone, readValidity, parseWarningText } from './operations-alert-parse.js?v=20261025-anm-review';
+import { foldText, readZone, readValidity, parseWarningText } from './operations-alert-parse.js?v=20261025-rivers';
 import { isoTime, localTime } from './operations-time.js';
 
 const API = 'https://www.meteoromania.ro/wp-json/meteoapi/v2/';

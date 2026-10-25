@@ -2,7 +2,7 @@
 // Pure and DOM-free: the list is the `properties` of the loaded hydrography features, so the parser needs no map data.
 // Imports the parser's name folding and the parser imports `readRivers` back: neither module uses the other's exports
 // while it loads, only when called, so the cycle is harmless.
-import { foldText, nameKey, COUNTIES, CODE_HEADING } from './operations-alert-parse.js';
+import { foldText, nameKey, COUNTIES, CODE_HEADING } from './operations-alert-parse.js?v=20261025-rivers';
 
 // A course's code is its outlet's plus one segment, numbered from upstream to downstream: Jijia "RO_XIII_1.15",
 // its tributary Sitna "RO_XIII_1.15.18". A segment may carry a letter, "14a", which sorts between 14 and 15.
