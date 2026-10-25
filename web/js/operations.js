@@ -6,14 +6,14 @@ import { presentationFeatures, presentationRiskGroups, presentationKindLabel } f
 import { EventStore, CloudStates, createEvent, sanitizeEvent, cleanupLegacyArchive } from "./event-store.js?v=20261025-cloud-state";
 import {
   snapToRoad, buildRoadSegment, findRoadRoute, findRoadByRef, sliceRoadByKm, sliceRoadByPlaces,
-  projectPointOnRoad, roadNetworkToFeatures, roadsListOf, lineLengthKm,
-} from "./road-sketch.js";
+  projectPointOnRoad, roadNetworkToFeatures, roadsListOf, lineLengthKm, roadKmOrigin, kmBeyondRoad,
+} from "./road-sketch.js?v=20261025-safe-routes";
 import { outsideMask, geometryBounds } from "./commune-geometry.js";
 import { circle } from "./geo.js";
 import { LAYER_GROUPS, LAYER_PRESETS } from "./config.js?v=20261018-itineraries-v2";
 import { localTime, isoTime, dateLabel } from "./operations-time.js";
 import { createOperationsCards } from "./operations-cards.js?v=20261018-cards";
-import { createInterventionPlanner } from "./intervention-planner.js?v=20261019-unirii-access";
+import { createInterventionPlanner } from "./intervention-planner.js?v=20261025-safe-routes";
 
 const FC = (features = []) => ({ type: "FeatureCollection", features });
 const esc = (value) => String(value ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -280,6 +280,12 @@ export const STATUSES = {
   reported: "Raportat",
   threat: "Potențial",
   resolved: "Rezolvat / Redeschis",
+};
+
+// Spells out where the map's km 0 lies, since it is not the official kilometre post.
+const kmOriginNote = road => {
+  const origin = roadKmOrigin(road);
+  return `Kilometrii sunt măsurați pe hartă de la capătul drumului în județ${origin ? ` dinspre ${origin.name} (km ${origin.km})` : ""}, nu după bornele kilometrice oficiale; verifică sectorul pe hartă.`;
 };
 
 const options = (items, selected) => Object.entries(items).map(([value, label]) => `<option value="${esc(value)}" ${selected === value ? "selected" : ""}>${esc(label)}</option>`).join("");
@@ -622,7 +628,9 @@ export function initOperations(ctx) {
             title: `${KINDS[kind]} · ${meta.unit.name} → ${meta.destination.name}`.slice(0, 200),
             source: meta.unit.name, lengthKm: +route.distanceKm.toFixed(2),
             observedAt: new Date().toISOString(),
-            notes: "Propunere pe rețeaua hărții; accesul și gabaritul autospecialei trebuie verificate în teren.",
+            notes: [meta.vehicle && `Calculat pentru ${meta.vehicle.label}.`,
+              route.damagedKm >= 0.05 && `Trece prin ${route.damagedKm.toFixed(1)} km de drum deteriorat / restricționat.`,
+              "Propunere pe rețeaua hărții; accesul și gabaritul autospecialei trebuie verificate în teren."].filter(Boolean).join(" "),
           },
         }));
       const candidate = structuredClone(active);
@@ -1328,7 +1336,8 @@ export function initOperations(ctx) {
           <label>Indicativ drum (ex. DJ29, DN29, DJ291, DJ282, DC10)
             <input name="road" list="ops-roads-datalist" maxlength="100" value="${esc(p.road)}" placeholder="Scrie numărul drumului (ex. DJ29, DN29, DJ291…)" autocomplete="off">
           </label>
-          ${matchedRoad ? `<p class="ops-road-info">Drum găsit în baza de date: <b>${esc(matchedRoad.ref)}</b> · lungime în județ <b>${matchedRoad.lengthKm} km</b>${roadPlaces.length ? ` · ${roadPlaces.length} localități pe traseu` : ""}</p>` : ""}
+          ${matchedRoad ? `<p class="ops-road-info">Drum găsit în baza de date: <b>${esc(matchedRoad.ref)}</b> · lungime în județ <b>${matchedRoad.lengthKm} km</b>${roadPlaces.length ? ` · ${roadPlaces.length} localități pe traseu` : ""}</p>
+          <p class="ops-road-info muted" data-km-origin>${esc(kmOriginNote(matchedRoad))}</p>` : ""}
           <div class="ops-grid">
             <label>De la km<input name="kmFrom" type="number" min="0" step="any" value="${p.kmFrom ?? ""}" placeholder="Ex. 3"></label>
             <label>Până la km<input name="kmTo" type="number" min="0" step="any" value="${p.kmTo ?? ""}" placeholder="Ex. 6"></label>
@@ -1627,6 +1636,10 @@ export function initOperations(ctx) {
       }
       if (kt < kf) {
         message("Kilometrul final trebuie să fie mai mare sau egal cu kilometrul de început.");
+        return false;
+      }
+      if (kmBeyondRoad(roadObj, kf, kt)) {
+        message(`${roadObj.ref} are ${roadObj.lengthKm} km în județ, iar km ${Math.max(kf, kt)} e dincolo de capătul lui. ${kmOriginNote(roadObj)}`);
         return false;
       }
       sliced = sliceRoadByKm(roadObj, kf, kt);

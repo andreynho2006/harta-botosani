@@ -1,4 +1,6 @@
 // Local road routing over provider geometry. No network calls or off-road links.
+import { ROAD_ALIASES } from './road-sketch.js?v=20261025-safe-routes';
+
 const R = 6371008.8, RAD = Math.PI / 180;
 const GRAPH_KIND = 'hb-intervention-graph-v1';
 // z15 tile geometry rounds genuine junction coordinates by a few decimeters.
@@ -16,12 +18,35 @@ const NON_DRIVING = new Set(['footway', 'pedestrian', 'path', 'steps', 'cycleway
 // Octav Băncilă available; reject only this way, even if source tags change.
 const CONFIRMED_NON_MOTOR_WAYS = new Set(['w686307418']);
 const RESTRICTED = new Set(['no', 'private', 'agricultural', 'forestry', 'delivery', 'customers', 'destination']);
+// Operator-marked road sectors: these kinds close the road. A damaged or restricted sector stays
+// usable at a high relative cost, so a route crosses it only when the detour is much longer.
+const IMPASSABLE = new Set(['blocked', 'flooded', 'snow']);
+const DAMAGED_COST = 5;
+// A sector label may name an alias (DJ29 is signed on DN29), two roads ("DN29 ➔ DJ291") or free text.
+const ROAD_REF = /\b(dn|dj|dc)\s*-?\s*(\d+[a-z]?)\b/g;
 const list = value => Array.isArray(value) ? value : value?.features ?? [];
 const lines = geometry => geometry?.type === 'LineString' && Array.isArray(geometry.coordinates) ? [geometry.coordinates] : geometry?.type === 'MultiLineString' && Array.isArray(geometry.coordinates) ? geometry.coordinates.filter(Array.isArray) : [];
 const validPoint = p => Array.isArray(p) && p.length >= 2 && Number.isFinite(p[0]) && Number.isFinite(p[1]) && Math.abs(p[0]) <= 180 && Math.abs(p[1]) <= 90;
 const text = value => String(value ?? '').trim().toLowerCase();
 const flag = value => !['', 'no', '0', 'false', 'none'].includes(text(value));
 const normalizedRef = value => text(value).replace(/\s+/g, '');
+// OSM maxweight (t) and maxwidth (m); other units, "none" or zero mean no known limit.
+const limitOf = value => {
+  const match = /^\s*(\d+(?:[.,]\d+)?)\s*(?:t|m)?\s*$/i.exec(String(value ?? ''));
+  const number = match ? Number(match[1].replace(',', '.')) : NaN;
+  return number > 0 ? number : null;
+};
+function sectorIdentities(label) {
+  const raw = text(label), identities = new Set();
+  for (const [, prefix, number] of raw.matchAll(ROAD_REF)) {
+    identities.add(prefix + number);
+    const alias = ROAD_ALIASES[(prefix + number).toUpperCase()];
+    if (alias) identities.add(alias.toLowerCase());
+  }
+  if (!identities.size && raw) identities.add(normalizedRef(raw));
+  return identities;
+}
+const edgeIdentities = edge => [edge.road.ref, edge.road.name, edge.road.osm].flatMap(value => normalizedRef(value).split(/[;,/]/)).filter(Boolean);
 const meters = (a, b) => {
   const h = Math.sin((b[1] - a[1]) * RAD / 2) ** 2 + Math.cos(a[1] * RAD) * Math.cos(b[1] * RAD) * Math.sin((b[0] - a[0]) * RAD / 2) ** 2;
   return 2 * R * Math.asin(Math.min(1, Math.sqrt(h)));
@@ -123,7 +148,8 @@ export function prepareInterventionGraph(features) {
       endpoints.add(ids[0]); endpoints.add(ids.at(-1));
       for (let i = 1; i < ids.length; i++) {
         if (ids[i - 1] === ids[i]) continue;
-        segments.push({ a: ids[i - 1], b: ids[i], grade, direction, road: { osm: p.osm ?? null, ref: p.ref ?? '', name: p.name ?? '', cls: p.cls ?? p.hw ?? p.highway ?? '' }, splits: [] });
+        segments.push({ a: ids[i - 1], b: ids[i], grade, direction, road: { osm: p.osm ?? null, ref: p.ref ?? '', name: p.name ?? '', cls: p.cls ?? p.hw ?? p.highway ?? '' },
+          limits: { weight: limitOf(p.maxweight), width: limitOf(p.maxwidth) }, splits: [] });
       }
     }
   }
@@ -151,7 +177,7 @@ export function prepareInterventionGraph(features) {
       const length = meters(nodes[a].coordinate, nodes[b].coordinate);
       if (length < 0.01) continue;
       const id = edges.length;
-      edges.push({ a, b, length, direction: segment.direction, road: segment.road });
+      edges.push({ a, b, length, direction: segment.direction, road: segment.road, limits: segment.limits });
       edgeGrid.addSegment(nodes[a].xy, nodes[b].xy, id);
       if (segment.direction !== -1) adjacency[a].push({ to: b, edge: id, length });
       if (segment.direction !== 1) adjacency[b].push({ to: a, edge: id, length });
@@ -205,12 +231,15 @@ function segmentDistance(a, b, c, d) {
       Math.max(Math.min(a[1], b[1]), Math.min(c[1], d[1])) <= Math.min(Math.max(a[1], b[1]), Math.max(c[1], d[1]))) return 0;
   return Math.min(projectOn(a, c, d).distance, projectOn(b, c, d).distance, projectOn(c, a, b).distance, projectOn(d, a, b).distance);
 }
-function blockedEdges(graph, features, tolerance) {
-  const blocked = new Set();
+/** Edges under unresolved road sectors. The label narrows a sector to its own road; when it names
+ * no road found under the sector (free text, a missing ref in the data), the geometry alone decides.
+ */
+function hazardEdges(graph, features, tolerance) {
+  const blocked = new Set(), damaged = new Set();
   for (const feature of list(features)) {
-    const p = feature.properties ?? {};
-    if ((p.kind && p.kind !== 'blocked') || p.status === 'resolved') continue;
-    const identity = normalizedRef(p.road || p.ref);
+    const p = feature?.properties ?? {}, kind = p.kind || 'blocked';
+    if (p.status === 'resolved' || (!IMPASSABLE.has(kind) && kind !== 'damaged')) continue;
+    const near = new Set();
     for (const line of lines(feature.geometry)) {
       if (!Array.isArray(line) || !line.every(validPoint)) continue;
       for (let i = 1; i < line.length; i++) {
@@ -220,13 +249,16 @@ function blockedEdges(graph, features, tolerance) {
         for (let step = 0; step <= steps; step++) for (const id of graph.edgeGrid.near(interpolate(a, b, step / steps), tolerance)) candidates.add(id);
         for (const id of candidates) {
           const edge = graph.edges[id];
-          if (identity && ![edge.road.ref, edge.road.name, edge.road.osm].some(value => normalizedRef(value).split(/[;,/]/).includes(identity))) continue;
-          if (segmentDistance(a, b, graph.nodes[edge.a].xy, graph.nodes[edge.b].xy) <= tolerance) blocked.add(id);
+          if (segmentDistance(a, b, graph.nodes[edge.a].xy, graph.nodes[edge.b].xy) <= tolerance) near.add(id);
         }
       }
     }
+    const identities = sectorIdentities(p.road || p.ref);
+    const own = [...near].filter(id => edgeIdentities(graph.edges[id]).some(value => identities.has(value)));
+    for (const id of own.length ? own : near) (IMPASSABLE.has(kind) ? blocked : damaged).add(id);
   }
-  return blocked;
+  for (const id of blocked) damaged.delete(id);
+  return { blocked, damaged };
 }
 
 function geometricSharedMeters(primary, candidate, graph) {
@@ -256,7 +288,14 @@ export function computeInterventionRoutes(start, end, featuresOrGraph, options =
   const startSnap = snap(start, graph, limit), endSnap = snap(end, graph, limit);
   const snaps = { start: startSnap, end: endSnap };
   if (!startSnap || !endSnap) return fail(!startSnap ? 'start_too_far' : 'end_too_far', { snaps });
-  const blocked = blockedEdges(graph, options.blockedFeatures, Math.min(20, Math.max(0.05, Number(options.blockedToleranceMeters) || 8)));
+  const { blocked, damaged } = hazardEdges(graph, options.blockedFeatures, Math.min(20, Math.max(0.05, Number(options.blockedToleranceMeters) || 8)));
+  // The vehicle's gross weight (t) and width (m) against the mapped limits; 0 ignores them.
+  const vehicle = { weight: Math.max(0, Number(options.vehicle?.weight) || 0), width: Math.max(0, Number(options.vehicle?.width) || 0) };
+  const restricted = new Set();
+  if (vehicle.weight || vehicle.width) graph.edges.forEach(({ limits }, id) => {
+    if ((limits?.weight && vehicle.weight > limits.weight) || (limits?.width && vehicle.width > limits.width)) restricted.add(id);
+  });
+  const costOf = id => roadCost(graph.edges[id]) * (damaged.has(id) ? DAMAGED_COST : 1);
   const extra = new Map(), virtual = [], splits = new Map();
   const add = (from, to, edge, length) => { if (!extra.has(from)) extra.set(from, []); extra.get(from).push({ to, edge, length }); };
   const nodeForSnap = hit => {
@@ -281,7 +320,7 @@ export function computeInterventionRoutes(start, end, featuresOrGraph, options =
   }
   const count = graph.nodes.length + virtual.length;
   const coordinateFor = id => id < graph.nodes.length ? graph.nodes[id].coordinate : virtual[id - graph.nodes.length];
-  const search = (penalized = new Set(), penalty = 1) => {
+  const search = (penalized = new Set(), penalty = 1, closed = [blocked, restricted]) => {
     const distances = new Float64Array(count).fill(Infinity), previous = new Int32Array(count).fill(-1), previousEdge = new Int32Array(count).fill(-1), stepLength = new Float64Array(count);
     const heap = new MinHeap(); distances[source] = 0; heap.push({ node: source, cost: 0 });
     while (heap.values.length) {
@@ -289,8 +328,8 @@ export function computeInterventionRoutes(start, end, featuresOrGraph, options =
       if (current.cost !== distances[current.node]) continue;
       if (current.node === target) break;
       for (const arc of [...(graph.adjacency[current.node] ?? []), ...(extra.get(current.node) ?? [])]) {
-        if (blocked.has(arc.edge)) continue;
-        const cost = current.cost + arc.length * roadCost(graph.edges[arc.edge]) * (penalized.has(arc.edge) ? penalty : 1);
+        if (closed.some(edges => edges.has(arc.edge))) continue;
+        const cost = current.cost + arc.length * costOf(arc.edge) * (penalized.has(arc.edge) ? penalty : 1);
         if (cost >= distances[arc.to]) continue;
         distances[arc.to] = cost; previous[arc.to] = current.node; previousEdge[arc.to] = arc.edge; stepLength[arc.to] = arc.length;
         heap.push({ node: arc.to, cost });
@@ -309,11 +348,19 @@ export function computeInterventionRoutes(start, end, featuresOrGraph, options =
       const road = graph.edges[id].road, key = `${road.osm}:${road.ref}:${road.name}:${road.cls}`;
       if (!seenRoads.has(key)) { roads.push({ ...road }); seenRoads.add(key); }
     }
-    const routingCost = [...edgeMeters].reduce((sum, [id, length]) => sum + length * roadCost(graph.edges[id]), 0);
-    return { geometry: { type: 'LineString', coordinates }, distanceKm: distance / 1000, roads, edgeMeters, routingCost };
+    const routingCost = [...edgeMeters].reduce((sum, [id, length]) => sum + length * costOf(id), 0);
+    const damagedKm = [...edgeMeters].reduce((sum, [id, length]) => sum + (damaged.has(id) ? length : 0), 0) / 1000;
+    return { geometry: { type: 'LineString', coordinates }, distanceKm: distance / 1000, damagedKm, roads, edgeMeters, routingCost };
   };
   const primary = search();
-  if (!primary) return fail('disconnected_or_blocked', { snaps, blockedEdgeCount: blocked.size });
+  if (!primary) {
+    // Name the cause: the vehicle's limits first (a lighter vehicle is the dispatcher's way out),
+    // then the marked sectors, or else a link missing from the road data.
+    const reason = restricted.size && search(undefined, 1, [blocked]) ? 'vehicle_limits'
+      : blocked.size && search(undefined, 1, [restricted]) ? 'blocked'
+      : blocked.size && restricted.size && search(undefined, 1, []) ? 'blocked_and_vehicle_limits' : 'disconnected';
+    return fail(reason, { snaps, blockedEdgeCount: blocked.size });
+  }
   let alternative = null, alternativeScore = Infinity;
   const primaryEdges = new Set(primary.edgeMeters.keys());
   const maxShared = Math.min(0.95, Math.max(0, options.maxAlternativeSharedFraction ?? 0.7));
@@ -334,5 +381,5 @@ export function computeInterventionRoutes(start, end, featuresOrGraph, options =
     const { edgeMeters, routingCost, ...result } = route;
     return result;
   };
-  return { primary: publicRoute(primary), alternative: publicRoute(alternative), reason: '', alternativeReason: alternative ? '' : 'no_materially_different_alternative', snaps, blockedEdgeCount: blocked.size, stats: graph.stats };
+  return { primary: publicRoute(primary), alternative: publicRoute(alternative), reason: '', alternativeReason: alternative ? '' : 'no_materially_different_alternative', snaps, blockedEdgeCount: blocked.size, damagedEdgeCount: damaged.size, stats: graph.stats };
 }

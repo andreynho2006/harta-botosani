@@ -1,6 +1,8 @@
 const R = 6371008.8;
 const RAD = Math.PI / 180;
 const JOIN = 3;
+// Road lengths are stored to 2 decimals; a kilometre past this slack lies beyond the mapped road.
+const KM_SLACK = 0.05;
 const norm = (value) => String(value ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim().replace(/\s+/g, ' ');
 const refs = (value) => norm(value).replace(/\s/g, '').split(/[;/]/).filter(Boolean);
 const identity = (p = {}) => ({ osm: p.osm ?? null, ref: p.ref ?? null, name: p.name ?? null, cls: p.cls ?? null });
@@ -33,7 +35,7 @@ export function normalizeRoadRef(value) {
   return norm(value).replace(/[\s_-]+/g, '').toUpperCase();
 }
 
-const ROAD_ALIASES = {
+export const ROAD_ALIASES = {
   DJ29: 'DN29',
   DN290: 'DJ290',
   DN291: 'DJ291',
@@ -80,6 +82,8 @@ export function slicePolylineByKm(coordinates, kmFrom, kmTo) {
   const totalMeters = cumMeters.at(-1);
   if (totalMeters <= 0) return null;
   const totalKm = totalMeters / 1000;
+  // Refused rather than clamped onto the road's last 100 m, where it would mark the wrong place.
+  if (Math.max(startKm, endKm) > totalKm + KM_SLACK) return null;
 
   let aKm = Math.min(startKm, endKm);
   let bKm = Math.max(startKm, endKm);
@@ -132,6 +136,18 @@ export function slicePolylineByKm(coordinates, kmFrom, kmTo) {
     lengthKm: +(bKm - aKm).toFixed(2),
     totalKm: +totalKm.toFixed(2),
   };
+}
+
+/** The map's kilometres start at the road's first mapped point in the county, not at the official
+ * kilometre posts; the first locality on the road tells the operator which end that is. */
+export function roadKmOrigin(road) {
+  const first = Array.isArray(road?.places) ? road.places.reduce((best, place) => !best || place.km < best.km ? place : best, null) : null;
+  return first?.name ? { name: first.name, km: first.km } : null;
+}
+
+export function kmBeyondRoad(road, ...kms) {
+  const lengthKm = Number(road?.lengthKm ?? lineLengthKm(road?.coordinates));
+  return kms.some(km => Number.isFinite(km) && km > lengthKm + KM_SLACK);
 }
 
 export function sliceRoadByKm(roadOrNetwork, arg2, arg3, arg4) {

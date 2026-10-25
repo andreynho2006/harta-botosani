@@ -1,4 +1,4 @@
-import { prepareInterventionGraph, computeInterventionRoutes } from './intervention-routing.js?v=20261019-unirii-access';
+import { prepareInterventionGraph, computeInterventionRoutes } from './intervention-routing.js?v=20261025-safe-routes';
 
 let graphPromise = null;
 function graph() {
@@ -14,11 +14,11 @@ function graph() {
 
 self.onmessage = async ({ data }) => {
   if (!data || data.id == null) return;
-  const { id, start, end, blockedFeatures = [] } = data;
+  const { id, start, end, blockedFeatures = [], vehicle = null } = data;
   try {
     const prepared = await graph();
     const result = computeInterventionRoutes(start, end, prepared, {
-      blockedFeatures, maxSnapMeters: 150, maxAlternativeSharedFraction: 0.7,
+      blockedFeatures, vehicle, maxSnapMeters: 150, maxAlternativeSharedFraction: 0.7,
     });
     self.postMessage({ id, result });
   } catch {

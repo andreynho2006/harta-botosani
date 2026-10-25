@@ -11,6 +11,8 @@ import {
   projectPointOnRoad,
   roadNetworkToFeatures,
   lineLengthKm,
+  roadKmOrigin,
+  kmBeyondRoad,
 } from '../web/js/road-sketch.js';
 
 const A = [26, 47], B = [26.01, 47], C = [26.01, 47.01];
@@ -216,3 +218,17 @@ test('findRoadRoute connects different road classifications (DN, DJ, DC) across 
 });
 
 
+
+test('kilometres past the mapped road are refused and km 0 names its end', () => {
+  const roadsData = JSON.parse(fs.readFileSync(new URL('../web/data/roads.json', import.meta.url), 'utf8'));
+  const dn29 = findRoadByRef(roadsData, 'DN29');
+  assert.equal(sliceRoadByKm(dn29, 79, dn29.lengthKm + 5), null);
+  assert.equal(sliceRoadByKm(dn29, dn29.lengthKm + 1), null);
+  assert.equal(sliceRoadByKm(dn29, 79, dn29.lengthKm + 0.04).kmTo, dn29.lengthKm);
+  assert.equal(sliceRoadByKm(dn29, 0, dn29.lengthKm).lengthKm, dn29.lengthKm);
+  assert.equal(kmBeyondRoad(dn29, 3, dn29.lengthKm + 0.06), true);
+  assert.equal(kmBeyondRoad(dn29, 3, dn29.lengthKm, NaN), false);
+  assert.deepEqual(roadKmOrigin(dn29), { name: 'Huțani', km: 4.7 });
+  assert.deepEqual(roadKmOrigin({ places: [{ name: 'B', km: 9 }, { name: 'A', km: 2 }] }), { name: 'A', km: 2 });
+  assert.equal(roadKmOrigin({ places: [] }), null);
+});

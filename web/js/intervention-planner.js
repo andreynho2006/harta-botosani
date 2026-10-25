@@ -9,14 +9,28 @@ const distanceLabel = value => Number.isFinite(value) ? `${value.toFixed(1)} km`
 const failureMessages = {
   start_too_far: 'Subunitatea este prea departe de rețeaua de drumuri disponibilă (maximum 150 m).',
   end_too_far: 'Obiectivul este prea departe de rețeaua de drumuri disponibilă (maximum 150 m).',
-  disconnected_or_blocked: 'Nu există un traseu conectat în datele disponibile, evitând sectoarele blocate.',
+  blocked: 'Toate traseele trec prin sectoare blocate, inundate sau înzăpezite (sau obiectivul ori subunitatea sunt chiar pe un astfel de sector).',
+  vehicle_limits: 'Traseele găsite trec pe drumuri cu limită de tonaj sau de lățime sub vehiculul ales. Alege alt vehicul sau verifică accesul în teren.',
+  blocked_and_vehicle_limits: 'Singurele trasee trec prin sectoare blocate, inundate sau înzăpezite și pe drumuri cu limită de tonaj sau de lățime sub vehiculul ales.',
+  disconnected: 'Plecarea și obiectivul nu sunt legate în rețeaua de drumuri din date: lipsește o legătură, sectoarele marcate nu sunt cauza. Alege obiectivul pe un drum apropiat sau verifică traseul pe hartă.',
   empty_network: 'Rețeaua locală de drumuri nu este disponibilă.',
   invalid_coordinates: 'Verifică poziția subunității și a obiectivului.',
 };
+// Approximate gross weight (t) and width (m) checked against the limits mapped on bridges and roads.
+const VEHICLES = {
+  heavy: { label: 'Autospecială grea (≈ 16 t, 2,55 m)', weight: 16, width: 2.55 },
+  light: { label: 'Autospecială ușoară / descarcerare (≈ 7,5 t, 2,4 m)', weight: 7.5, width: 2.4 },
+  ambulance: { label: 'Ambulanță / SMURD (≈ 3,5 t, 2,2 m)', weight: 3.5, width: 2.2 },
+};
+// Unresolved road sectors the route avoids (damaged ones only when the detour is much longer).
+const ROUTE_HAZARDS = new Set(['blocked', 'flooded', 'snow', 'damaged']);
+const isRouteHazard = feature => ROUTE_HAZARDS.has(feature?.properties?.kind) && feature.properties.status !== 'resolved' &&
+  ['LineString', 'MultiLineString'].includes(feature.geometry?.type);
+const damagedNote = (label, route) => route?.damagedKm >= 0.05 ? ` ${label} trece prin ${route.damagedKm.toFixed(1)} km de drum deteriorat / restricționat.` : '';
 
 /** Event-scoped UI; the host delegates its existing click, change and map handlers here. */
 export function createInterventionPlanner(ctx) {
-  let opened = false, picking = false, eventId = null, unitId = '', destinationId = '';
+  let opened = false, picking = false, eventId = null, unitId = '', destinationId = '', vehicleId = 'heavy';
   let coordinateText = '', destinationName = '', feedback = '', lastResult = null;
   let worker = null, request = null, sequence = 0;
   const render = () => ctx.render?.();
@@ -76,7 +90,7 @@ export function createInterventionPlanner(ctx) {
   }
   function key(value) {
     return JSON.stringify([eventId, value?.unit.id, value?.unit.coordinate, value?.destination.id,
-      value?.destination.name, value?.destination.coordinate, active()?.features?.features]);
+      value?.destination.name, value?.destination.coordinate, vehicleId, active()?.features?.features]);
   }
   function cancelPick() {
     if (!picking) return false;
@@ -96,12 +110,14 @@ export function createInterventionPlanner(ctx) {
     return `<section id="ops-itinerary" class="ops-card"><div class="ops-card-title"><h3>Itinerar de intervenție</h3><button class="lnk" type="button" data-itinerary="close">Închide</button></div>
       <label>Subunitatea de plecare<select data-itinerary-field="unit" ${request ? 'disabled' : ''}><option value="">Alege subunitatea…</option>${options}</select></label>
       ${roster.some(unit => !unit.confirmed) ? '<p class="muted">Pentru subunitățile dezactivate sunt necesare coordonatele exacte, confirmate la ieșirea autospecialelor. Completează lista oficială din Administrare; punctele OSM nu sunt folosite ca plecări.</p>' : ''}
+      <label>Vehicul<select data-itinerary-field="vehicle" ${request ? 'disabled' : ''}>${Object.entries(VEHICLES).map(([id, vehicle]) =>
+        `<option value="${id}" ${id === vehicleId ? 'selected' : ''}>${esc(vehicle.label)}</option>`).join('')}</select></label>
       <label>Obiectiv<select data-itinerary-field="destination" ${request ? 'disabled' : ''}><option value="">Alege obiectivul…</option>${targetOptions}<option value="custom" ${destinationId === 'custom' ? 'selected' : ''}>Punct ales pe hartă / coordonate</option></select></label>
       <div class="ops-actions"><button class="btn" type="button" data-itinerary="pick" ${request ? 'disabled' : ''}>${picking ? 'Anulează alegerea' : 'Alege obiectiv pe hartă'}</button></div>
       ${destinationId === 'custom' ? `<label>Denumirea obiectivului<input data-itinerary-field="name" maxlength="200" value="${esc(destinationName)}" placeholder="Ex. obiectivul intervenției" ${request ? 'disabled' : ''}></label><label>Coordonate obiectiv (latitudine, longitudine)<input data-itinerary-field="coordinate" value="${esc(coordinateText)}" placeholder="47.750000, 26.660000" ${request ? 'disabled' : ''}></label>` : ''}
       ${picking ? '<p role="status">Alege punctul exact pe hartă; destinația nu este estimată din conturul unei zone.</p>' : ''}
       <div class="ops-actions"><button class="btn primary" type="button" data-itinerary="calculate" ${selected && !request && !picking ? '' : 'disabled'}>${request ? 'Se calculează local…' : 'Calculează itinerarele'}</button>${request ? '<button class="btn" type="button" data-itinerary="cancel">Anulează calculul</button>' : ''}</div>
-      <p class="muted">Trasee orientative; verifică accesul și gabaritul autospecialei. Sensurile și restricțiile din date pot fi incomplete. Sunt favorizate arterele principale; aleile de acces și drumurile de exploatare rămân disponibile când sunt necesare. Calcul local pe drumurile disponibile; sectoarele marcate „Drum blocat” și nerezolvate sunt evitate. Accesul de la punctele alese până la drum se verifică separat.</p>
+      <p class="muted">Trasee orientative; verifică accesul și gabaritul autospecialei. Sensurile și restricțiile din date pot fi incomplete: sunt respectate limitele de tonaj și de lățime cunoscute pentru vehiculul ales, înălțimea nu. Sunt favorizate arterele principale; aleile de acces și drumurile de exploatare rămân disponibile când sunt necesare. Calcul local pe drumurile disponibile; sectoarele de drum nerezolvate marcate blocate, inundate sau înzăpezite sunt evitate, iar cele deteriorate sunt folosite doar dacă ocolul e mult mai lung. Zonele desenate ca suprafață nu sunt evitate. Accesul de la punctele alese până la drum se verifică separat.</p>
       ${feedback ? `<p class="ops-notice" data-itinerary-feedback role="status">${esc(feedback)}</p>` : ''}
       ${lastResult?.primary ? `<p data-itinerary-result><b>Principal:</b> ${esc(distanceLabel(lastResult.primary.distanceKm))}${lastResult.alternative ? `<br><b>Rezervă:</b> ${esc(distanceLabel(lastResult.alternative.distanceKm))}` : '<br>Nu există o alternativă suficient de diferită în rețeaua disponibilă.'}</p>` : ''}
       </section>`;
@@ -114,7 +130,7 @@ export function createInterventionPlanner(ctx) {
     feedback = ''; lastResult = null;
     try {
       if (!worker) {
-        worker = ctx.createWorker ? ctx.createWorker() : new Worker(new URL('./intervention-route-worker.js?v=20261019-unirii-access', import.meta.url), { type: 'module' });
+        worker = ctx.createWorker ? ctx.createWorker() : new Worker(new URL('./intervention-route-worker.js?v=20261025-safe-routes', import.meta.url), { type: 'module' });
         worker.onmessage = ({ data }) => {
           const current = request;
           if (!current || data?.id !== current.id) return;
@@ -126,20 +142,22 @@ export function createInterventionPlanner(ctx) {
           if (!lastResult.primary) feedback = failureMessages[lastResult.reason] || 'Nu s-a găsit un traseu sigur în rețeaua disponibilă.';
           else {
             const gaps = lastResult.snaps;
-            feedback = `Distanțe până la rețeaua rutieră: plecare ${Math.round(gaps?.start?.distanceMeters ?? 0)} m, obiectiv ${Math.round(gaps?.end?.distanceMeters ?? 0)} m. Aceste legături nu sunt desenate ca drumuri.`;
+            feedback = `Distanțe până la rețeaua rutieră: plecare ${Math.round(gaps?.start?.distanceMeters ?? 0)} m, obiectiv ${Math.round(gaps?.end?.distanceMeters ?? 0)} m. Aceste legături nu sunt desenate ca drumuri.` +
+              damagedNote('Traseul principal', lastResult.primary) + damagedNote('Traseul de rezervă', lastResult.alternative);
             ctx.onRoutes?.(lastResult, current.meta);
           }
           render();
         };
         worker.onerror = () => { if (request) { invalidate(true); feedback = 'Calculul local nu a reușit. Reîncearcă.'; render(); } };
       }
-      request = { id, eventId: event.id, key: requestKey, meta: structuredClone(chosen), timer: null };
+      request = { id, eventId: event.id, key: requestKey, meta: structuredClone({ ...chosen, vehicle: VEHICLES[vehicleId] }), timer: null };
       request.timer = setTimeout(() => {
         if (request?.id !== id) return;
         invalidate(true); feedback = 'Calculul a durat prea mult și a fost oprit. Reîncearcă.'; render();
       }, ctx.routeTimeoutMs ?? 30000);
-      const blockedFeatures = (event.features?.features ?? []).filter(feature => feature.properties?.kind === 'blocked' && feature.properties?.status !== 'resolved');
-      worker.postMessage({ id, start: chosen.unit.coordinate, end: chosen.destination.coordinate, blockedFeatures });
+      const blockedFeatures = (event.features?.features ?? []).filter(isRouteHazard);
+      const { weight, width } = VEHICLES[vehicleId];
+      worker.postMessage({ id, start: chosen.unit.coordinate, end: chosen.destination.coordinate, blockedFeatures, vehicle: { weight, width } });
     } catch { invalidate(true); feedback = 'Calculul local nu este disponibil în acest browser.'; }
     render();
   }
@@ -167,10 +185,11 @@ export function createInterventionPlanner(ctx) {
   function handleChange(target) {
     context();
     const field = target?.dataset?.itineraryField;
-    if (!['unit', 'destination', 'coordinate', 'name'].includes(field)) return false;
+    if (!['unit', 'destination', 'vehicle', 'coordinate', 'name'].includes(field)) return false;
     invalidate(); feedback = '';
     if (field === 'unit') unitId = target.value;
     if (field === 'destination') destinationId = target.value;
+    if (field === 'vehicle' && VEHICLES[target.value]) vehicleId = target.value;
     if (field === 'coordinate') coordinateText = String(target.value ?? '');
     if (field === 'name') destinationName = String(target.value ?? '').slice(0, 200);
     if (field === 'coordinate' || field === 'name') {

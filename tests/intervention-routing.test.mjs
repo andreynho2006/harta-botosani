@@ -181,3 +181,61 @@ test('confirmed Octav Bancila pedestrian continuation stays excluded even if sou
   }
   assert.ok(route(A, C, [road([A, C], {osm:'w34140646', cls:'street', hw:'residential', name:'Strada Octav Băncilă'})]).primary, 'The drivable section is preserved');
 });
+
+test('flooded and snowed-in sectors close the road; a damaged one is crossed only when the detour is much longer', () => {
+  const roads = [road([A, B, C], { ref: 'DJ29' }), road([A, D, C], { ref: 'DC1' })];
+  for (const kind of ['flooded', 'snow']) {
+    const result = route(A, C, roads, { blockedFeatures: [blocked([[26.004, 47], [26.006, 47]], { road: 'DJ29', kind })] });
+    assert.deepEqual(result.primary.geometry.coordinates, [A, D, C], kind);
+  }
+  const damaged = blocked([[26.004, 47], [26.006, 47]], { road: 'DJ29', kind: 'damaged' });
+  const near = route(A, C, roads, { blockedFeatures: [damaged] });
+  assert.deepEqual(near.primary.geometry.coordinates, [A, D, C]);
+  assert.equal(near.primary.damagedKm, 0);
+  const far = [26.01, 47.05], detour = [road([A, B, C], { ref: 'DJ29' }), road([A, far, C], { ref: 'DC1' })];
+  const crossed = route(A, C, detour, { blockedFeatures: [damaged] });
+  assert.deepEqual(crossed.primary.geometry.coordinates, [A, B, C]);
+  assert.ok(crossed.primary.damagedKm > 0.7 && crossed.primary.damagedKm < 0.8);
+  assert.equal(crossed.damagedEdgeCount, 1);
+  for (const kind of ['threat', 'houses']) assert.deepEqual(route(A, C, roads, { blockedFeatures: [blocked([[26.004, 47], [26.006, 47]], { kind })] }).primary.geometry.coordinates, [A, B, C], kind);
+});
+
+test('a sector labelled with an alias, two roads or free text still closes the road under it', () => {
+  const roads = [road([A, B, C], { ref: 'DN29' }), road([A, D, C], { ref: 'DC1' })];
+  const closure = label => blocked([[26.004, 47], [26.006, 47]], { road: label });
+  for (const label of ['DJ29', 'DN29 ➔ DJ291', 'dn 29 Botoșani–Suceava', 'drumul spre Ripiceni', '']) {
+    assert.deepEqual(route(A, C, roads, { blockedFeatures: [closure(label)] }).primary.geometry.coordinates, [A, D, C], label);
+  }
+  const unnamed = [road([A, B, C]), road([A, D, C], { ref: 'DC1' })];
+  assert.deepEqual(route(A, C, unnamed, { blockedFeatures: [closure('DN29')] }).primary.geometry.coordinates, [A, D, C], 'ref missing from the data');
+  assert.deepEqual(route(A, C, roads, { blockedFeatures: [closure('DJ291')] }).primary.geometry.coordinates, [A, D, C], 'another road: geometry decides');
+  const closeLine = [[26, 47.00001], [26.02, 47.00001]];
+  const side = route(closeLine[0], closeLine[1], [road([A, C], { ref: 'DN29' }), road(closeLine, { ref: 'DC1' })], { blockedFeatures: [closure('DJ29')] });
+  assert.deepEqual(side.primary?.geometry.coordinates, closeLine, 'the alias keeps the adjacent road open');
+  assert.equal(side.blockedEdgeCount, 1);
+});
+
+test('the vehicle keeps off roads whose mapped weight or width limit it exceeds', () => {
+  const limited = limits => [road([A, B, C], limits), road([A, D, C])];
+  const via = (roads, vehicle) => route(A, C, roads, { vehicle }).primary.geometry.coordinates[1];
+  assert.deepEqual(via(limited({ maxweight: '3.5' }), { weight: 16, width: 2.55 }), D);
+  assert.deepEqual(via(limited({ maxweight: '3.5 t' }), { weight: 3.5, width: 2.2 }), B);
+  assert.deepEqual(via(limited({ maxweight: '7,5' }), { weight: 7.6 }), D);
+  assert.deepEqual(via(limited({ maxwidth: '2.3' }), { weight: 3.5, width: 2.4 }), D);
+  assert.deepEqual(via(limited({ maxwidth: '2.3' }), { weight: 3.5, width: 2.2 }), B);
+  assert.deepEqual(via(limited({ maxweight: 'none' }), { weight: 40 }), B);
+  assert.deepEqual(via(limited({ maxweight: '3.5' }), undefined), B);
+});
+
+test('a failed search names its cause: the marked sectors, the vehicle, both, or a missing link', () => {
+  const closure = blocked([[26.004, 47], [26.006, 47]]);
+  assert.equal(route(A, C, [road([A, B, C])], { blockedFeatures: [closure] }).reason, 'blocked');
+  assert.equal(route(A, C, [road([A, B, C], { maxweight: '5' })], { vehicle: { weight: 16 } }).reason, 'vehicle_limits');
+  const either = [road([A, B, C]), road([A, D, C], { maxweight: '5' })];
+  assert.equal(route(A, C, either, { blockedFeatures: [closure], vehicle: { weight: 16 } }).reason, 'vehicle_limits', 'a lighter vehicle gets through');
+  assert.equal(route(A, C, [road([A, B, C], { maxweight: '5' })], { blockedFeatures: [closure], vehicle: { weight: 16 } }).reason, 'blocked_and_vehicle_limits');
+  const islands = [road([A, B]), road([[26.03, 47], [26.04, 47]])];
+  const lost = route(A, [26.04, 47], islands, { blockedFeatures: [closure], vehicle: { weight: 16 } });
+  isFailure(lost);
+  assert.equal(lost.reason, 'disconnected');
+});

@@ -138,9 +138,9 @@ test('cancel terminates the worker, and a late result cannot overwrite a new req
 test('missing routes and worker errors are visible and allow a clean retry', () => {
   const h = setup(); h.ready(); h.click('calculate');
   let worker = h.workers[0];
-  worker.reply({ id: worker.messages[0].id, result: { primary: null, alternative: null, reason: 'disconnected_or_blocked' } });
+  worker.reply({ id: worker.messages[0].id, result: { primary: null, alternative: null, reason: 'disconnected' } });
   assert.equal(h.routes.length, 0);
-  assert.match(h.planner.html(), /Nu există un traseu conectat/);
+  assert.match(h.planner.html(), /lipsește o legătură, sectoarele marcate nu sunt cauza/);
   h.click('calculate'); worker.onerror();
   assert.equal(worker.terminated, true);
   h.click('calculate'); worker = h.workers[1];
@@ -185,6 +185,7 @@ test('route worker lazily fetches and prepares one local graph for repeated calc
   assert.equal(computations.length, 2);
   assert.equal(computations[0].graph, prepared);
   assert.equal(computations[1].options.maxSnapMeters, 150);
+  assert.equal(computations[0].options.vehicle, null);
   assert.equal(responses[1].id, 2);
 });
 
@@ -235,4 +236,33 @@ test('map picking remains active after the host cancels its previous tool', () =
   assert.equal(planner.handleMapClick({ lngLat: { lng: 26.7, lat: 47.8 } }), true);
   assert.equal(planner.isPicking(), false);
   assert.match(planner.html(), /47\.8000000, 26\.7000000/);
+});
+
+test('road sectors that close or slow the route are sent with the chosen vehicle', () => {
+  const h = setup();
+  const sector = (id, kind, status = 'confirmed', type = 'LineString') => ({ type: 'Feature', properties: { id, kind, status },
+    geometry: type === 'LineString' ? { type, coordinates: [[26.6, 47.7], [26.7, 47.76]] } : { type, coordinates: [[[26.6, 47.7], [26.7, 47.7], [26.7, 47.76], [26.6, 47.7]]] } });
+  h.active = { id: 'event-1', features: { type: 'FeatureCollection', features: [point('p1'), sector('f', 'flooded'), sector('s', 'snow', 'threat'),
+    sector('d', 'damaged'), sector('zone', 'flooded', 'confirmed', 'Polygon'), sector('t', 'threat'), sector('old', 'snow', 'resolved')] } };
+  h.ready();
+  assert.match(h.planner.html(), /data-itinerary-field="vehicle"[^>]*><option value="heavy" selected>/);
+  h.change('vehicle', 'ambulance'); h.change('vehicle', 'tank');
+  h.click('calculate');
+  const request = h.workers[0].messages[0];
+  assert.deepEqual(request.blockedFeatures.map(feature => feature.properties.id), ['f', 's', 'd']);
+  assert.deepEqual(request.vehicle, { weight: 3.5, width: 2.2 });
+  h.workers[0].reply({ id: request.id, result: { ...result(), primary: { ...result().primary, damagedKm: 1.24 } } });
+  assert.match(h.planner.html(), /Traseul principal trece prin 1\.2 km de drum deteriorat/);
+  assert.doesNotMatch(h.planner.html(), /Traseul de rezervă trece/);
+  assert.match(h.routes[0].meta.vehicle.label, /Ambulanță/);
+});
+
+test('each failure cause has its own message', () => {
+  for (const [reason, text] of [['blocked', /trec prin sectoare blocate, inundate sau înzăpezite/], ['vehicle_limits', /limită de tonaj sau de lățime sub vehiculul ales/],
+    ['blocked_and_vehicle_limits', /Singurele trasee/], ['disconnected', /nu sunt legate în rețeaua de drumuri/]]) {
+    const h = setup(); h.ready(); h.click('calculate');
+    const worker = h.workers[0];
+    worker.reply({ id: worker.messages[0].id, result: { primary: null, alternative: null, reason } });
+    assert.match(h.planner.html(), text, reason);
+  }
 });
