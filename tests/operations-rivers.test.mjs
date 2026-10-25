@@ -157,3 +157,37 @@ test('UATs keep the editor\'s order, a UAT outside its list is left aside, and n
   assert.deepEqual([none.rivers, none.areas, none.ambiguous, none.smallRivers, none.concerns], [[], [], [], true, true]);
   assert.deepEqual(readRivers('', rivers).rivers, []);
 });
+
+test('a river named like a county inside a county list is the county, not a river', () => {
+  // Synthetic courses that share a name with a county: "Suceava", and "Bistrița" inside "Bistrița Năsăud".
+  const named = [...rivers,
+    { name: 'Suceava', alt: [], code: 'RO_XII_1.20', uats: ['U7'] },
+    { name: 'Bistrița', alt: [], code: 'RO_XII_1.21', uats: ['U8'] }];
+  const names = text => readRivers(text, named, { uats: U }).rivers.map(river => river.name);
+  assert.deepEqual(names(`${head}Jijia (județul Botoșani)`), ['Jijia'], 'The control');
+  assert.deepEqual(names(`${head}Jijia (județele: Suceava, Botoșani și Iași)`), ['Jijia'], 'Suceava in the list adds no UATs');
+  assert.deepEqual(names(`${head}Jijia (județele: Botoșani, Suceava și Iași)`), ['Jijia']);
+  assert.deepEqual(names(`${head}Jijia (județele: Bistrița Năsăud, Botoșani și Iași)`), ['Jijia'], 'Nor does the first word of "Bistrița Năsăud"');
+  assert.deepEqual(names(`${head}Jijia – bazin superior, Suceava – bazin (județele: Suceava și Botoșani)`), ['Jijia', 'Suceava'],
+    'The river named outside the list is still read');
+});
+
+test('a county of two words is read whole, wrapped or hyphenated, so a Botoșani after it stays in the list', () => {
+  const found = text => summary(read(text));
+  assert.deepEqual(found(`${head}Jijia (județele: Bistrița Năsăud, Botoșani și Iași)`), [`Jijia basin false ${JIJIA}`]);
+  assert.deepEqual(found(`${head}Jijia (județele: Bistrița-Năsăud, Botoșani și Iași)`), [`Jijia basin false ${JIJIA}`]);
+  assert.deepEqual(found(`${head}Jijia (județele: Satu Mare, Botoșani și Iași)`), [`Jijia basin false ${JIJIA}`]);
+  assert.deepEqual(found(`${head}Jijia (județele: Satu\nMare, Botoșani și Iași)`), [`Jijia basin false ${JIJIA}`], 'Wrapped by a PDF');
+  assert.deepEqual(found(`${head}Jijia (județele: Bistrița\nNăsăud și Botoșani)`), [`Jijia basin false ${JIJIA}`]);
+  assert.deepEqual(found(`${head}Jijia (județele: Caraș\nSeverin și Botoșani)`), [`Jijia basin false ${JIJIA}`]);
+  assert.deepEqual(found(`${head}Jijia (județele: Satu\nMare, Maramureș și Iași)`), [], 'The list is still not ours without Botoșani');
+});
+
+test('the title\'s skipped lines end at any code heading the sections accept, "COD: GALBEN" too', () => {
+  const title = 'BAZINELE HIDROGRAFICE VIZATE: Bahna, Siret şi Jijia';
+  const entry = 'În intervalul 27.06.2025 ora 12:00 – 28.06.2025 ora 12:00 pe râurile din bazinele hidrografice: Miletin (judeţele: Botoşani şi Iaşi).';
+  for (const heading of ['COD GALBEN:', 'COD: GALBEN:', 'COD - GALBEN:', 'COD – PORTOCALIU:', 'Codul roşu:', 'COD DE CULOARE: GALBEN']) {
+    assert.deepEqual(summary(read(`${title}\n${heading} ${entry}`)), ['Miletin basin false U9,U10,U14'], heading);
+  }
+  assert.deepEqual(read(`${title}\nCOD: GALBEN: Jijia (judeţele: Iaşi şi Vaslui).`).rivers, [], 'The title\'s own names are still skipped');
+});

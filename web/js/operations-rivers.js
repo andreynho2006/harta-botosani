@@ -2,7 +2,7 @@
 // Pure and DOM-free: the list is the `properties` of the loaded hydrography features, so the parser needs no map data.
 // Imports the parser's name folding and the parser imports `readRivers` back: neither module uses the other's exports
 // while it loads, only when called, so the cycle is harmless.
-import { foldText, nameKey, COUNTIES } from './operations-alert-parse.js';
+import { foldText, nameKey, COUNTIES, CODE_HEADING } from './operations-alert-parse.js';
 
 // A course's code is its outlet's plus one segment, numbered from upstream to downstream: Jijia "RO_XIII_1.15",
 // its tributary Sitna "RO_XIII_1.15.18". A segment may carry a letter, "14a", which sorts between 14 and 15.
@@ -74,7 +74,7 @@ const endsSentence = (text, at) => text[at] === '.' && at >= 3 && /[a-z0-9]{3}$/
 function skippedRanges(folded) {
   return [...folded.matchAll(/^[ \t]*(?:bazinele[ \t]+hidrografice[ \t]+(?:vizate|afectate)\b|catre[ \t]*:)/gm)].map(m => {
     const from = m.index + m[0].length;
-    const heading = folded.slice(from, m.index + 500).search(/\bcod(?:ul)?\s+(?:de\s+culoare\s+)?(?:galben|portocaliu|rosu)\b|\bmomentul\s+producerii\b/);
+    const heading = folded.slice(from, m.index + 500).search(new RegExp(`${CODE_HEADING.source}|\\bmomentul\\s+producerii\\b`));
     const limit = heading < 0 ? Math.min(folded.length, m.index + 500) : from + heading;
     for (let at = from; at < limit; at++) if (endsSentence(folded, at)) return [m.index, at + 1];
     return [m.index, limit];
@@ -83,9 +83,10 @@ function skippedRanges(folded) {
 
 /**
  * The county lists, "județele: Botoșani și Iași", as { start, end, counties } on the folded text. A list
- * stops at the first word that is no county ("județul Botoșani și pe râurile"); "Satu Mare" counts by its first word.
+ * stops at the first word that is no county ("județul Botoșani și pe râurile"); a county of two words, "Satu Mare" or
+ * "Bistrița Năsăud", is taken whole, across a hyphen or a line break, and counts by its first word.
  */
-const COUNTY_WORD = /([a-z]+)(?:-[a-z]+|[ \t]+mare\b)?/y;
+const COUNTY_WORD = /(satu[\s-]+mare|bistrita[\s-]+nasaud|caras[\s-]+severin|[a-z]+)(?:-[a-z]+)?/y;
 const COUNTY_JOIN = /\s*,\s*(?:si\s+)?|\s+si\s+/y;
 function countyLists(folded) {
   const lists = [];
@@ -95,8 +96,9 @@ function countyLists(folded) {
     for (;;) {
       COUNTY_WORD.lastIndex = at;
       const word = COUNTY_WORD.exec(folded);
-      if (!word || !COUNTIES.has(word[1])) break;
-      counties.add(word[1]);
+      const county = word?.[1].split(/[\s-]+/)[0];
+      if (!county || !COUNTIES.has(county)) break;
+      counties.add(county);
       end = at = COUNTY_WORD.lastIndex;
       COUNTY_JOIN.lastIndex = at;
       if (!COUNTY_JOIN.exec(folded)) break;
@@ -204,8 +206,9 @@ export function readRivers(sectionText, properties, { uats = [] } = {}) {
   const smallRivers = SMALL_RIVERS.test(folded);
   const kept = [], clashing = [];
   if (index.scan) {
-    const skipped = skippedRanges(folded);
     const lists = countyLists(folded);
+    // A name inside a county list is the county ("Suceava", the "Bistrița" of "Bistrița Năsăud"), not the river.
+    const skipped = [...skippedRanges(folded), ...lists.map(list => [list.start, list.end])];
     const hits = [...folded.matchAll(index.scan)]
       .map(m => ({ start: m.index, end: m.index + m[0].length, key: nameKey(m[0]) }))
       .filter(hit => !skipped.some(([from, to]) => hit.start >= from && hit.start < to) && !isLandmark(folded, hit.start));

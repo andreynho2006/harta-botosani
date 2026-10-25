@@ -284,6 +284,9 @@ function namesInText(folded, uats) {
   }).map(uat => uat.name);
 }
 
+/** A code heading, "COD GALBEN", "COD: GALBEN" or "Codul de culoare portocaliu"; the sections and the rivers' skipped title both end at it. */
+export const CODE_HEADING = /\bcod(?:ul)?(?:\s+de\s+culoare)?\s*[:–-]?\s*(galben|portocaliu|rosu)\b/;
+
 /**
  * Splits a message into one section per code. A different code opens a new section on its own
  * line, or where it is written when the line already holds a section; a title naming two codes
@@ -292,7 +295,7 @@ function namesInText(folded, uats) {
  */
 function sections(original) {
   const { folded, origin } = foldText(original);
-  const mentions = [...folded.matchAll(/\bcod(?:ul)?(?:\s+de\s+culoare)?\s*[:–-]?\s*(galben|portocaliu|rosu)\b/g)];
+  const mentions = [...folded.matchAll(new RegExp(CODE_HEADING, 'g'))];
   if (!mentions.length) {
     return { head: 0, list: /\bro[\s-]?alert\b/.test(folded) ? [{ code: 'ro-alert', start: 0, end: original.length }] : [] };
   }

@@ -283,3 +283,10 @@ Se menţionează că fenomenele hidrologice potenţial periculoase prognozate se
   assert.deepEqual(found[1].rivers.map(river => [river.name, river.scope]), [['Miletin', 'basin']], 'Siret is for Suceava and Neamț, Jijia only places Miletin');
   assert.deepEqual([found[1].validFrom, found[1].validTo], [at('2026-04-03T09:00'), at('2026-04-04T12:00')]);
 });
+
+test('a title without a full stop ends at "COD: GALBEN" like at any other code heading, so the entries after it are read', () => {
+  const [found] = withRivers(`AVERTIZARE HIDROLOGICĂ
+BAZINELE HIDROGRAFICE VIZATE: Bahna, Siret şi Jijia
+COD: GALBEN: În intervalul 27.06.2025 ora 12:00 – 28.06.2025 ora 12:00 pe râurile din bazinele hidrografice: Miletin (judeţele: Botoşani şi Iaşi).`);
+  assert.deepEqual([found.rivers.map(river => river.name), found.areas, found.county], [['Miletin'], ['U9', 'U10', 'U14'], false]);
+});
