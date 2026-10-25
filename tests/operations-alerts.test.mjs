@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { normalizeAlerts, affectedAlertLocations, warningsForLocation, placeKey, resolvePlace, placeLabel } from '../web/js/operations-alerts.js';
+import { normalizeAlerts, affectedAlertLocations, warningsForLocation, placeKey, resolvePlace, placeLabel, legacyNote, notesWithLegacyNote } from '../web/js/operations-alerts.js';
 import { createEvent, sanitizeEvent, EventStore } from '../web/js/event-store.js';
 
 const alert = (id, code, areas, places = []) => ({ id, code, source: 'ANM', validFrom: '2026-10-19T10:00:00+03:00', validTo: '2026-10-19T18:00:00+03:00', text: 'Vânt puternic', areas, places });
@@ -46,6 +46,19 @@ test('concurrent codes retain independent locations and validity through save, e
   assert.deepEqual(warningsForLocation(saved, 'uat', 'Agafton'), []);
   assert.deepEqual(warningsForLocation(saved, 'uat', 'Boto'), []);
   assert.deepEqual(affectedAlertLocations(saved), { areas: ['Botoșani', 'Dorohoi'], places: ['Agafton'] });
+});
+
+test('a code-less legacy message is kept as a note instead of disappearing', () => {
+  const event = { alert: { code: '', source: 'IGSU', text: 'Viscol', validFrom: '', validTo: '' }, notes: 'Sinteză' };
+  assert.deepEqual(normalizeAlerts(event), [], 'Nothing to colour');
+  assert.deepEqual(legacyNote(event), { text: 'Viscol', source: 'IGSU', validFrom: '', validTo: '' });
+  assert.equal(legacyNote({ ...event, alerts: [] }), null, 'Once warnings exist the legacy field is only a summary');
+  assert.equal(legacyNote({ alert: { code: 'red', text: 'x' } }), null);
+  assert.equal(legacyNote({ alert: { code: '' } }), null);
+  assert.equal(notesWithLegacyNote('Sinteză', legacyNote(event), '25.10.2026, 12:00 – …'), 'Sinteză\n\nMesaj fără cod (arhivă): Viscol · IGSU · 25.10.2026, 12:00 – …');
+  assert.equal(notesWithLegacyNote('', legacyNote(event)), 'Mesaj fără cod (arhivă): Viscol · IGSU');
+  assert.equal(notesWithLegacyNote('x'.repeat(9990), legacyNote(event)).length, 10000, 'Notes never exceed the saved limit');
+  assert.equal(notesWithLegacyNote('Sinteză', null), 'Sinteză');
 });
 
 test('villages with the same name are told apart by UAT and legacy names prefer the county', () => {

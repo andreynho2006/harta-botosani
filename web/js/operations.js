@@ -1,4 +1,4 @@
-import { normalizeAlerts, affectedAlertLocations, resolvePlace, placeKey, placeLabel, ALERT_LABELS, ALERT_RANK } from "./operations-alerts.js?v=20261019-multi-alerts";
+import { normalizeAlerts, affectedAlertLocations, resolvePlace, placeKey, placeLabel, legacyNote, ALERT_LABELS, ALERT_RANK } from "./operations-alerts.js?v=20261019-multi-alerts";
 import { buildAlertGeography, buildAlertLabels, attachAlertPopups } from "./operations-alert-map.js?v=20261019-multi-alerts";
 import { createAlertEditor } from "./operations-alert-editor.js?v=20261019-multi-alerts";
 import { presentationFeatures, presentationRiskGroups, presentationKindLabel } from "./operations-risks.js?v=20261018-cards";
@@ -1604,6 +1604,8 @@ export function initOperations(ctx) {
       const time = Date.parse(value);
       return Number.isFinite(time) ? new Intl.DateTimeFormat("ro-RO", { timeZone: "Europe/Bucharest", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }).format(time) : "…";
     };
+    // A code-less message from an older archive still shows, on a neutral banner.
+    const note = warnings.length ? null : legacyNote(active);
     const scope = warning => [warning.areas.length ? `${warning.areas.length} UAT` : "", warning.villages.length ? `${warning.villages.length} ${warning.villages.length === 1 ? "sat" : "sate"}` : ""].filter(Boolean).join(", ") || "fără localități";
 
     presentation.innerHTML = `
@@ -1618,7 +1620,7 @@ export function initOperations(ctx) {
           <h1>${esc(active.title)}</h1>
           ${hasNotes ? `<p class="ops-slide-notes">${esc(active.notes)}</p>` : ""}
         </div>
-        ${warnings.length ? `<div class="ops-alert-grid">${warnings.map((warning, index) => `<p id="ops-pres-alert${index ? '-' + index : ''}" class="ops-alert" data-code="${esc(warning.code)}" tabindex="0" role="note"><b class="ops-alert-code">${esc(ALERT_LABELS[warning.code] || warning.code)}</b><span class="ops-alert-when">${[warning.source, warning.validFrom || warning.validTo ? `${dateLabel(warning.validFrom)} – ${dateLabel(warning.validTo)}` : "Interval nespecificat"].filter(Boolean).map(esc).join(" · ")}</span>${warning.text ? `<span class="ops-alert-text">${esc(warning.text)}</span>` : ""}<span class="ops-alert-areas">${esc([...warning.areas, ...warning.villages].join(", ") || "Fără localități selectate")}</span></p>`).join("")}</div>` : ""}
+        ${warnings.length ? `<div class="ops-alert-grid">${warnings.map((warning, index) => `<p id="ops-pres-alert${index ? '-' + index : ''}" class="ops-alert" data-code="${esc(warning.code)}" tabindex="0" role="note"><b class="ops-alert-code">${esc(ALERT_LABELS[warning.code] || warning.code)}</b><span class="ops-alert-when">${[warning.source, warning.validFrom || warning.validTo ? `${dateLabel(warning.validFrom)} – ${dateLabel(warning.validTo)}` : "Interval nespecificat"].filter(Boolean).map(esc).join(" · ")}</span>${warning.text ? `<span class="ops-alert-text">${esc(warning.text)}</span>` : ""}<span class="ops-alert-areas">${esc([...warning.areas, ...warning.villages].join(", ") || "Fără localități selectate")}</span></p>`).join("")}</div>` : note ? `<div class="ops-alert-grid"><p id="ops-pres-alert" class="ops-alert" data-code="" tabindex="0" role="note"><b class="ops-alert-code">Mesaj</b><span class="ops-alert-when">${[note.source, note.validFrom || note.validTo ? `${dateLabel(note.validFrom)} – ${dateLabel(note.validTo)}` : ""].filter(Boolean).map(esc).join(" · ")}</span>${note.text ? `<span class="ops-alert-text">${esc(note.text)}</span>` : ""}</p></div>` : ""}
 
       </header>
       <nav id="ops-pres-commands" class="ops-slide-controls" data-pres-panel="commands" data-pres-edge="right" ${commandsCollapsed ? "hidden" : ""} aria-label="Comenzi prezentare">

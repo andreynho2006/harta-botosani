@@ -47,6 +47,23 @@ export function normalizeAlerts(event) {
   return [copyAlert({ ...event.alert, id: 'legacy-alert' }, 0, event)];
 }
 
+/**
+ * A message saved before multiple warnings existed, with "Fără cod": it has text but no
+ * colour. It stays visible and moves into the notes once real warnings are added.
+ */
+export function legacyNote(event) {
+  if (Array.isArray(event?.alerts) || event?.alert?.code) return null;
+  const { text = '', source = '', validFrom = '', validTo = '' } = event?.alert || {};
+  return text || source || validFrom || validTo ? { text, source, validFrom, validTo } : null;
+}
+
+/** Notes with the legacy message appended, kept within the 10 000-character notes limit. */
+export function notesWithLegacyNote(notes, note, interval = '') {
+  if (!note) return notes || '';
+  const line = `Mesaj fără cod (arhivă): ${[note.text, note.source, interval].filter(Boolean).join(' · ')}`;
+  return [notes, line].filter(Boolean).join('\n\n').slice(0, 10000);
+}
+
 export function affectedAlertLocations(event) {
   const alerts = normalizeAlerts(event);
   return {

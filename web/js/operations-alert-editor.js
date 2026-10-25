@@ -1,5 +1,5 @@
-import { normalizeAlerts, resolvePlace, placeKey, placeLabel, ALERT_LABELS as CODES } from './operations-alerts.js?v=20261019-multi-alerts';
-import { localTime, isoTime } from './operations-time.js';
+import { normalizeAlerts, resolvePlace, placeKey, placeLabel, legacyNote, notesWithLegacyNote, ALERT_LABELS as CODES } from './operations-alerts.js?v=20261019-multi-alerts';
+import { localTime, isoTime, dateLabel } from './operations-time.js';
 
 const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const fold = value => String(value || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
@@ -27,7 +27,15 @@ export function createAlertEditor({ panel, getActive, getData, onChange }) {
   function editable() {
     const active = getActive();
     if (!active) return [];
-    if (!Array.isArray(active.alerts)) active.alerts = warnings();
+    if (!Array.isArray(active.alerts)) {
+      // Saving rewrites the legacy field from the warning list, so keep a code-less message in the notes.
+      const note = legacyNote(active);
+      if (note) {
+        const interval = note.validFrom || note.validTo ? [note.validFrom, note.validTo].map(value => value ? dateLabel(value) : '…').join(' – ') : '';
+        active.notes = notesWithLegacyNote(active.notes, note, interval);
+      }
+      active.alerts = warnings();
+    }
     return active.alerts;
   }
   function listHTML(alert, kind, label) {
@@ -51,6 +59,7 @@ export function createAlertEditor({ panel, getActive, getData, onChange }) {
     const alerts = warnings();
     return `<section class="ops-card" data-ops-card="alerts"><h3>Avertizări și localități sub cod</h3>
       <p class="muted">Fiecare cod are propria zonă și propriul interval. Poți suprapune mai multe avertizări.</p>
+      ${legacyNote(getActive()) ? `<p class="muted" role="note">Mesaj fără cod din arhivă: „${esc(legacyNote(getActive()).text || legacyNote(getActive()).source)}”. Apare în prezentare; la prima avertizare adăugată, textul trece în „Sinteză operativă”.</p>` : ''}
       <div class="ops-alert-list">${alerts.map((alert, i) => `<details class="ops-alert-entry" data-warning-id="${esc(alert.id)}" ${alerts.length === 1 || alert.id === newId ? 'open' : ''}>
         <summary><span class="ops-alert-dot" data-code="${esc(alert.code)}" aria-hidden="true"></span><span data-alert-summary>${esc(CODES[alert.code] || 'Avertizare')} · ${(alert.areas?.length || 0) + (alert.places?.length || 0)} zone</span></summary>
         <div class="ops-alert-fields">
