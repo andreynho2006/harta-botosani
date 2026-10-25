@@ -694,8 +694,11 @@ export function initOperations(ctx) {
   function findLocality(name) {
     if (!name) return null;
     const q = String(name).trim().toLowerCase();
-    return allLocalities().find(l => l.name.toLowerCase() === q) ||
-           allLocalities().find(l => l.name.toLowerCase().startsWith(q));
+    // Ten names also exist across the border; like warnings, prefer the village inside the county.
+    const exact = allLocalities().filter(l => l.name.toLowerCase() === q);
+    if (exact.length) return exact.find(l => l.uat) || exact[0];
+    const prefix = allLocalities().filter(l => l.name.toLowerCase().startsWith(q));
+    return prefix.find(l => l.uat) || prefix[0] || null;
   }
 
   function selectedGeometry() {
