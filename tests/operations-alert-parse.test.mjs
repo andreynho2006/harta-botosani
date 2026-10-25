@@ -247,3 +247,39 @@ COD PORTOCALIU: Prut – afluenţii mici (judeţele: Iaşi şi Vaslui)`);
   const [clash] = withRivers('Cod galben. Pe râurile din bazinele hidrografice: Valea Mare – bazin (județul Botoșani), Miletin (județul Botoșani)');
   assert.deepEqual([clash.riverAmbiguous, clash.ambiguous, clash.rivers.map(river => river.name)], [['Valea Mare'], [], ['Miletin']]);
 });
+
+test('a national bulletin pasted from a PDF: wrapped entries, its title and addressees skipped, one warning per code', () => {
+  const found = withRivers(`AVERTIZARE HIDROLOGICĂ NR. 35 DIN 02.04.2026
+Către: Ministerul Mediului, Apelor şi Pădurilor, S.C. Hidroelectrica S.A., Administraţiile Bazinale de Apă: Jiu,
+Olt, Siret şi Prut-Bârlad.
+
+BAZINELE HIDROGRAFICE VIZATE:
+
+Prut, Siret, Jijia.
+
+MOMENTUL PRODUCERII FENOMENELOR VIZATE:
+Data: 02.04.2026 ora 18:00 – 04.04.2026 ora 23:00
+
+COD GALBEN
+
+În intervalul 02.04.2026 ora 18:00 – 04.04.2026 ora 23:00 pe râurile din bazinele hidrografice: Jijia – bazin superior şi afluenţi
+bazin mijlociu şi inferior (judeţele: Botoşani şi Iaşi), Siret – afluenţii mici aferenţi sectorului aval confluenţă cu râul Suceava –
+amonte confluenţă cu râul Bahna (judeţele: Suceava, Botoşani, Neamţ şi
+Iaşi), Prut – afluenţii de dreapta aferenţi sectorului aval confluenţă cu râul
+Vorona (judeţele: Botoşani şi Iaşi).
+
+COD PORTOCALIU
+
+În intervalul 03.04.2026 ora 09:00 – 04.04.2026 ora 12:00 pe râurile din bazinele hidrografice: Siret – afluenţii aferenţi sectorului aval S.H. Dorna – amonte confluenţă cu râul Bahna (judeţele: Suceava şi Neamţ), Miletin (afluent al râului
+Jijia) - judeţele: Botoşani şi Iaşi.
+
+Harta cu codurile se anexează.
+
+Se menţionează că fenomenele hidrologice potenţial periculoase prognozate se pot produce şi pe afluenţi de grad inferior ai râurilor marcate pe hartă, precum şi pe cursurile de apă necadastrate, în bazinele hidrografice vizate, conform textului mesajului.`, { now: new Date('2026-04-02T12:00:00+03:00') });
+  assert.deepEqual(found.map(warning => [warning.code, warning.source, warning.county]), [['yellow', 'INHGA', false], ['orange', 'INHGA', false]]);
+  assert.deepEqual(found[0].rivers.map(river => [river.name, river.scope, river.sector, river.after, river.before]),
+    [['Jijia', 'basin', false, undefined, undefined], ['Siret', 'tributaries', true, undefined, 'Bahna'], ['Prut', 'tributaries', true, 'Vorona', undefined]]);
+  assert.deepEqual(found[0].areas, ['U1', 'U2', 'U3', 'U8', 'U9', 'U10', 'U11', 'U12', 'U13', 'U14']);
+  assert.deepEqual(found[1].rivers.map(river => [river.name, river.scope]), [['Miletin', 'basin']], 'Siret is for Suceava and Neamț, Jijia only places Miletin');
+  assert.deepEqual([found[1].validFrom, found[1].validTo], [at('2026-04-03T09:00'), at('2026-04-04T12:00')]);
+});

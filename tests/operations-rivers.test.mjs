@@ -64,6 +64,27 @@ test('tributaries below or above a confluence are told by the order of their seg
   assert.deepEqual([both.rivers[0].after, both.rivers[0].before], ['Vorona', 'Jijia']);
 });
 
+test('what the index cannot cut is approximated: a confluence it lacks, a station, a bank, and the sector says so', () => {
+  const station = read(`${head}Prut – afluenţii aferenţi sectorului aval S.H. Foieşti – amonte confluenţă cu râul Jijia (judeţele: Botoşani şi Iaşi)`);
+  assert.deepEqual(summary(station), ['Prut tributaries true U3,U4,U5,U6,U7,U8'], 'The upstream end cuts, the station does not');
+  assert.equal(station.rivers[0].before, 'Jijia');
+  const bank = read(`${head}Prut – afluenţii de dreapta aferenţi sectorului aval confluenţă cu râul Vorona (judeţele: Botoşani şi Iaşi)`);
+  assert.deepEqual([bank.rivers[0].sector, bank.rivers[0].after], [true, 'Vorona']);
+  assert.equal(read(`${head}Prut – afluenţii aferenţi sectorului aval confluenţă cu râul Vorona (judeţele: Botoşani)`).rivers[0].sector, false, 'A cut that is made is not approximate');
+  assert.equal(read(`${head}Prut – afluenţii din judeţul Botoşani`).rivers[0].sector, false, 'All the tributaries, said as such');
+  assert.equal(read(`${head}Prut – afluenţii aferenţi sectorului S.H. Foieşti (judeţul Botoşani)`).rivers[0].sector, true);
+});
+
+test('lines wrapped by a PDF do not cut an entry, and a list of names with no commas ends at the next name', () => {
+  const wrapped = read(`În intervalul 02.04.2026 ora 18:00 – 04.04.2026 ora 24:00 pe râurile din bazinele hidrografice: Jijia – bazin superior şi afluenţi
+bazin mijlociu şi inferior (judeţele: Botoşani şi
+Iaşi), Prut – afluenţii aferenţi sectorului amonte confluenţă cu râul
+Jijia (judeţele: Botoşani şi Iaşi).`);
+  assert.deepEqual(summary(wrapped), [`Jijia basin false ${JIJIA}`, 'Prut tributaries false U3,U4,U5,U6,U7,U8']);
+  assert.equal(wrapped.rivers[1].before, 'Jijia', 'The river a wrapped "confluenţă cu râul" ends with is still the cut');
+  assert.deepEqual(summary(read('Cod galben: râurile din bazinele hidrografice:\nBaseu\nVolovat\n(judeţul Botoşani)')), ['Bașeu basin false U4,U5,U6', 'Volovăț basin false U3']);
+});
+
 test('a confluence that is not a direct tributary does not cut: all tributaries stand for the sector', () => {
   const found = read(`${head}Jijia – afluenţii aferenţi sectorului aval confluenţă cu râul Morişca (judeţele: Botoşani)`);
   assert.deepEqual(summary(found), ['Jijia tributaries true U9,U10,U11,U12,U13,U14']);
@@ -99,6 +120,23 @@ test('the national title names basins without counties and other counties\' entr
   const twice = read(`${head}Prut – afluenţii aferenţi sectorului amonte confluenţă cu râul Jijia (judeţele: Botoşani şi Iaşi), Prut – afluenţii aferenţi sectorului aval confluenţă cu râul Jijia (judeţele: Iaşi, Vaslui şi Galaţi)`);
   assert.deepEqual(summary(twice), ['Prut tributaries false U3,U4,U5,U6,U7,U8'], 'The same river twice, only the upstream sector is ours');
   assert.equal(read(`${title} Miletin (judeţele: Botoşani şi Iaşi)`).rivers.length, 1, 'A title that ends in a full stop leaves the rest of its line');
+});
+
+test('the title\'s list on the lines after it, and the addressees\' basins administrations, name no river for the county', () => {
+  const national = `Către: Ministerul Mediului, Apelor şi Pădurilor, S.C. Hidroelectrica S.A., Administraţiile Bazinale de Apă: Jiu,
+Olt, Siret şi Prut-Bârlad.
+
+BAZINELE HIDROGRAFICE VIZATE:
+
+Siret, Jijia şi Prut.
+
+MOMENTUL PRODUCERII FENOMENELOR VIZATE:
+Data: 02.04.2026 ora 18:00 – 04.04.2026 ora 24:00
+COD GALBEN
+În intervalul 02.04.2026 ora 18:00 – 04.04.2026 ora 24:00 pe râurile din bazinele hidrografice: Miletin (judeţele: Botoşani şi Iaşi).`;
+  assert.deepEqual(summary(read(national)), ['Miletin basin false U9,U10,U14']);
+  const open = read('BAZINELE HIDROGRAFICE AFECTATE: Siret, Jijia\nCOD GALBEN: pe râurile: Miletin (județul Botoșani)');
+  assert.deepEqual(open.rivers.map(river => river.name), ['Miletin'], 'A title with no full stop ends at the code');
 });
 
 test('"unele râuri mici" from counties naming Botoșani is flagged, not read as a river, and a name of several courses is reported', () => {

@@ -66,13 +66,18 @@ const isLandmark = (folded, at) => { const before = folded.slice(Math.max(0, at 
 /** A full stop that ends a sentence: after a word, not the stops of "S.H." or "ac.". */
 const endsSentence = (text, at) => text[at] === '.' && at >= 3 && /[a-z0-9]{3}$/.test(text.slice(at - 3, at)) && (at + 1 >= text.length || /\s/.test(text[at + 1]));
 
-/** The national title "BAZINELE HIDROGRAFICE VIZATE: …" names basins without their counties; its rivers are skipped. */
-function titleRanges(folded) {
-  return [...folded.matchAll(/^[ \t]*bazinele[ \t]+hidrografice[ \t]+(?:vizate|afectate)\b/gm)].map(m => {
-    const next = folded.indexOf('\n', m.index);
-    const lineEnd = next < 0 ? folded.length : next;
-    for (let at = m.index + m[0].length; at < lineEnd; at++) if (endsSentence(folded, at)) return [m.index, at + 1];
-    return [m.index, lineEnd];
+/**
+ * The national title "BAZINELE HIDROGRAFICE VIZATE: …" and the addressees "Către: … Administrațiile Bazinale de Apă: Siret și
+ * Prut-Bârlad" name basins without their counties. Their rivers are skipped, to the end of the sentence (its list may
+ * wrap onto the next lines), or to the first code or "momentul producerii" heading, or 500 characters.
+ */
+function skippedRanges(folded) {
+  return [...folded.matchAll(/^[ \t]*(?:bazinele[ \t]+hidrografice[ \t]+(?:vizate|afectate)\b|catre[ \t]*:)/gm)].map(m => {
+    const from = m.index + m[0].length;
+    const heading = folded.slice(from, m.index + 500).search(/\bcod(?:ul)?\s+(?:de\s+culoare\s+)?(?:galben|portocaliu|rosu)\b|\bmomentul\s+producerii\b/);
+    const limit = heading < 0 ? Math.min(folded.length, m.index + 500) : from + heading;
+    for (let at = from; at < limit; at++) if (endsSentence(folded, at)) return [m.index, at + 1];
+    return [m.index, limit];
   });
 }
 
@@ -115,14 +120,17 @@ function assignLists(hits, lists) {
   for (const name of waiting) name.list = last;
 }
 
-/** Where an entry ends: a comma, a semicolon, a sentence or a line break outside brackets, or the bracket it sits in. */
+// An entry is a line or two; a text pasted from a PDF wraps lines inside it, so a line break does not end it.
+const ENTRY_LIMIT = 300;
+
+/** Where an entry ends: a comma, a semicolon or a sentence outside brackets, or the bracket it sits in. */
 function entryEnd(folded, from, limit) {
   let depth = 0;
   for (let at = from; at < limit; at++) {
     const char = folded[at];
     if (char === '(') depth++;
     else if (char === ')') { if (--depth < 0) return at; }
-    else if (depth === 0 && (char === ',' || char === ';' || char === '\n' || endsSentence(folded, at))) return at;
+    else if (depth === 0 && (char === ',' || char === ';' || endsSentence(folded, at))) return at;
   }
   return limit;
 }
@@ -140,8 +148,9 @@ function opening(folded, at) {
 const SECTOR_END = /\b(aval|amonte)\s+confluent\w*\s+cu\s+(?:raul\s+)?/g;
 
 /** What one entry covers: its scope, the courses in it and whether the text's sector was only approximated. */
-function readEntry(folded, hit, course, index, lists) {
-  const limit = lists.find(list => list.start >= hit.end)?.start ?? folded.length;
+function readEntry(folded, hit, next, course, index, lists) {
+  // The entry stops where its county list or the next river begins.
+  const limit = Math.min(lists.find(list => list.start >= hit.end)?.start ?? Infinity, next?.start ?? Infinity, hit.end + ENTRY_LIMIT, folded.length);
   const entry = folded.slice(hit.end, entryEnd(folded, hit.end, limit));
   // "Miletin (afluent al râului Jijia)" says what Miletin is, not that its tributaries are warned.
   const qualifier = entry.replace(/\bafluent(?:ul)?\s+al\s+(?:raului\s+)?[a-z0-9]+/g, ' ');
@@ -160,8 +169,10 @@ function readEntry(folded, hit, course, index, lists) {
       domain = domain.filter(other => (side === 'aval' ? 1 : -1) * compareRank(rank(branchOf(other, course)), cut) > 0);
       river[side === 'aval' ? 'after' : 'before'] = mark.name;
     }
-    // Without a confluence the index knows, the whole of the tributaries stands for the sector.
-    Object.assign(river, { scope: 'tributaries', sector: ends.length ? usable.length < ends.length : /\bsector|\baval\b|\bamonte\b/.test(qualifier) });
+    // What the text delimits and the index could not cut (a station, a bank, a confluence it lacks) is approximated
+    // by the whole of the tributaries.
+    const limits = (qualifier.match(/\b(?:aval|amonte)\b/g) || []).length + (/\b(?:dreapta|stanga)\b/.test(qualifier) ? 1 : 0);
+    Object.assign(river, { scope: 'tributaries', sector: (limits || (/\bsector/.test(qualifier) ? 1 : 0)) > usable.length });
   } else {
     const sector = /\bsector/.test(qualifier);
     const named = /raul\s+$/.test(folded.slice(Math.max(0, hit.start - 12), hit.start));
@@ -185,7 +196,7 @@ const SMALL_RIVERS = /rauri(?:le)?\s+mici\s+din\s+judet\w*\s*:?\s*[^.]*\bbotosan
  * `rivers` are { name, scope: 'basin' | 'river' | 'tributaries', sector, uats, after?, before? } with `uats` in the order of
  * the `uats` option; `sector` marks a sector the text gives that the whole river or tributaries stand in for.
  * `ambiguous` names rivers whose name belongs to unrelated courses. Rivers named only as landmarks, in the national
- * title or for other counties are left out.
+ * title or the addressees, or for other counties are left out.
  */
 export function readRivers(sectionText, properties, { uats = [] } = {}) {
   const { folded } = foldText(sectionText);
@@ -193,19 +204,19 @@ export function readRivers(sectionText, properties, { uats = [] } = {}) {
   const smallRivers = SMALL_RIVERS.test(folded);
   const kept = [], clashing = [];
   if (index.scan) {
-    const titles = titleRanges(folded);
+    const skipped = skippedRanges(folded);
     const lists = countyLists(folded);
     const hits = [...folded.matchAll(index.scan)]
       .map(m => ({ start: m.index, end: m.index + m[0].length, key: nameKey(m[0]) }))
-      .filter(hit => !titles.some(([from, to]) => hit.start >= from && hit.start < to) && !isLandmark(folded, hit.start));
+      .filter(hit => !skipped.some(([from, to]) => hit.start >= from && hit.start < to) && !isLandmark(folded, hit.start));
     assignLists(hits, lists);
     const mentioned = /\bbotosani\b/.test(folded);
-    for (const hit of hits) {
-      if (!(hit.list ? hit.list.counties.has('botosani') : mentioned)) continue;
+    hits.forEach((hit, i) => {
+      if (!(hit.list ? hit.list.counties.has('botosani') : mentioned)) return;
       const course = index.names.get(hit.key);
-      if (course) kept.push(readEntry(folded, hit, course, index, lists));
+      if (course) kept.push(readEntry(folded, hit, hits[i + 1], course, index, lists));
       else clashing.push(index.clashes.get(hit.key));
-    }
+    });
   }
   // The same river and scope named twice is one.
   const rivers = [];
