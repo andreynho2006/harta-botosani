@@ -54,12 +54,12 @@ Run `node --test tests/*.test.mjs` and `python3 -m unittest discover -s tests -p
 2. **Zone afectate și forțe în teren:**
    - Zone inundate, posibil inundabile / amenințate (contur punctat), incendiu de amploare, perimetru de evacuare.
    - Sate / localități izolate, localități fără curent electric, Punct de Comandă Mobil (PCM), echipaje ISU, filtre IPJ / IJJ, echipaje SAJ / SMURD, utilaje SDN / DJDP / SGA și puncte de adăpostire / evacuare.
-   - Colorare opțională a UAT-urilor selectate în culoarea codului ANM / RO-Alert (galben, portocaliu, roșu).
+   - Avertizări multiple (cod galben, portocaliu sau roșu ANM / INHGA, RO-Alert), fiecare cu propriile UAT-uri, sate și interval de valabilitate; harta colorează fiecare UAT în culoarea celui mai sever cod.
 3. **Bază de date JSON (`web/data/situatii.json`) și Arhivă:**
    - La pornire, aplicația încarcă automat evenimentele din `web/data/situatii.json` și le sincronizează cu `localStorage`.
    - Orice modificare este salvată instant local; butonul **Salvează în JSON (`situatii.json`)** descarcă fișierul JSON actualizat cu toate evenimentele pentru arhivare sau publicare în repository.
 4. **Mod Prezentare CJSU (`Prezintă în ședință`):**
-   - Afișează harta pe tot ecranul cu antetul ședinței, codul ANM / RO-Alert, legenda operativă și un **panou de sinteză CJSU interactiv** (clic pe orice drum blocat, zonă, forță sau UAT centrează harta pe acel element), plus comenzi rapide pentru *Hartă / Satelit*, *Zi / Noapte*, *Izolează zona* și *Încadrează*.
+   - Afișează harta pe tot ecranul cu antetul ședinței, avertizările (cod, sursă, interval, localități), legenda operativă și un **panou de sinteză CJSU interactiv** (clic pe orice drum blocat, zonă, forță sau UAT centrează harta pe acel element), plus comenzi rapide pentru *Hartă / Satelit*, *Zi / Noapte*, *Izolează zona* și *Încadrează*.
 
 ## Itinerare de intervenție
 
@@ -86,4 +86,6 @@ web/        aplicația (MapLibre GL, fără server, fără conturi externe)
 
 Datele OpenStreetMap pot fi incomplete. Informațiile critice se verifică din surse oficiale.
 
-Codurile galben, portocaliu și roșu evidențiază localitățile selectate în **Zona afectată** printr-o tentă transparentă cu margine difuză, sub drumuri și etichete. Efectul funcționează și în prezentarea CJSU, în mod de zi/noapte și pe satelit. Pentru comune/orașe folosește conturul administrativ existent; pentru sate, zona orientativă din jurul localității. Se poate opri din opțiunea **Evidențiază zona afectată în culoarea codului**.
+Avertizările se completează în cardul **Avertizări și localități sub cod**. Fiecare are propriul cod, sursă, interval (ora României), text și propria listă de UAT-uri și sate; se pot suprapune mai multe. Pe hartă, fiecare UAT sub cod primește o tentă în culoarea celui mai sever cod, sub drumuri și etichete, în mod de zi/noapte, pe satelit și în prezentarea CJSU. Comunele și orașele folosesc conturul administrativ; satele, o zonă orientativă de 1,6 km. Satele se aleg după nume și UAT (de exemplu „Poiana (Flămânzi)”), pentru că multe nume se repetă. La trecerea cu mouse-ul sau la atingere apar avertizările zonei respective. Lista **Zona afectată** servește doar la focalizare și izolare. Tenta se poate opri din **Evidențiază zona afectată în culoarea codului**.
+
+În export, câmpul `alerts` păstrează toate avertizările. Câmpul vechi `alert` rămâne doar un rezumat al celei mai severe, pentru versiunile mai vechi ale aplicației.
