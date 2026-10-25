@@ -33,7 +33,7 @@ export function buildAlertGeography(event, { admin, localities = [] } = {}) {
           }
           if (!geometry) continue;
           const label = place ? placeLabel(placeKey(place)) : name;
-          targets.set(key, { type: 'Feature', properties: { name: label, kind, uat: place?.uat || '', code: '', color: '', alerts: [] }, geometry });
+          targets.set(key, { type: 'Feature', properties: { name: label, kind, key: place ? placeKey(place) : name, uat: place?.uat || '', code: '', color: '', alerts: [] }, geometry });
         }
         const properties = targets.get(key).properties;
         if (!properties.alerts.some(a => a.id === warning.id)) properties.alerts.push(warning);
@@ -57,6 +57,20 @@ export function buildAlertGeography(event, { admin, localities = [] } = {}) {
   const features = [...targets.values()].sort((a, b) => rank[a.properties.code] - rank[b.properties.code]);
   for (const feature of features) feature.properties.alerts = JSON.stringify(feature.properties.alerts);
   return { type: 'FeatureCollection', features };
+}
+
+/**
+ * Which focus outlines a code outline already draws, read off the features that
+ * buildAlertGeography actually emitted so its absorption rules live in one place.
+ * A village merged into its UAT's outline has no feature of its own, so its circle stays.
+ */
+export function alertOutlined(geography) {
+  const uats = new Set(), places = new Set();
+  for (const { properties: p } of geography?.features || []) {
+    if (p?.kind === 'uat') uats.add(p.key);
+    else if (p?.kind === 'place') places.add(p.key);
+  }
+  return { uat: name => uats.has(name), place: place => places.has(placeKey(place)) };
 }
 
 /**

@@ -1,5 +1,5 @@
 import { normalizeAlerts, affectedAlertLocations, resolvePlace, placeKey, placeLabel, legacyNote, ALERT_LABELS, ALERT_RANK } from "./operations-alerts.js?v=20261019-multi-alerts";
-import { buildAlertGeography, buildAlertLabels, attachAlertPopups } from "./operations-alert-map.js?v=20261019-multi-alerts";
+import { buildAlertGeography, buildAlertLabels, alertOutlined, attachAlertPopups } from "./operations-alert-map.js?v=20261019-multi-alerts";
 import { createAlertEditor } from "./operations-alert-editor.js?v=20261019-multi-alerts";
 import { presentationFeatures, presentationRiskGroups, presentationKindLabel } from "./operations-risks.js?v=20261018-cards";
 import { EventStore, createEvent, sanitizeEvent, cleanupLegacyArchive } from "./event-store.js?v=20261019-multi-alerts";
@@ -701,23 +701,23 @@ export function initOperations(ctx) {
     return prefix.find(l => l.uat) || prefix[0] || null;
   }
 
-  function selectedGeometry() {
+  function selectedGeometry(alerts = buildAlertGeography(active, state.data)) {
     const warningLocations = affectedAlertLocations(active);
     const areaNames = new Set(active ? [...active.areas, ...warningLocations.areas] : standaloneFocus.areas);
     // Focus places keep their name search; warning villages resolve by exact `Name|UAT` key.
     const focusPlaces = (active ? active.places || [] : standaloneFocus.places).map(findLocality);
     const warningPlaces = active ? warningLocations.places.map(entry => resolvePlace(entry, allLocalities())) : [];
-    // `alert` marks areas that already carry a code outline, so the focus outline can step aside.
-    const warningAreas = new Set(warningLocations.areas), warningPlaceSet = new Set(warningPlaces);
+    // `alert` marks shapes a code outline already draws, so the focus outline can step aside
+    // there and only there: a village the warnings merged into its UAT keeps its circle.
+    const outlined = alertOutlined(alerts);
     const uatFeatures = (state.data.admin?.features || [])
       .filter(f => f.properties.kind === "uat" && areaNames.has(f.properties.name))
-      .map(f => active && warningAreas.has(f.properties.name) ? { ...f, properties: { ...f.properties, alert: true } } : f);
+      .map(f => outlined.uat(f.properties.name) ? { ...f, properties: { ...f.properties, alert: true } } : f);
     const placeFeatures = [];
     for (const loc of new Set([...focusPlaces, ...warningPlaces])) {
       if (loc) {
         const poly = circle([loc.lon, loc.lat], 1600, 48);
-        const underAlert = warningPlaceSet.has(loc) || (loc.uat && warningAreas.has(loc.uat));
-        placeFeatures.push({ type: "Feature", properties: { kind: "place-focus", name: loc.name, alert: Boolean(underAlert) }, geometry: poly });
+        placeFeatures.push({ type: "Feature", properties: { kind: "place-focus", name: loc.name, alert: outlined.place(loc) }, geometry: poly });
       }
     }
     const features = [...uatFeatures, ...placeFeatures];
@@ -748,7 +748,8 @@ export function initOperations(ctx) {
   }
 
   function sync(refresh = false) {
-    const selected = selectedGeometry();
+    const alerts = buildAlertGeography(active, state.data);
+    const selected = selectedGeometry(alerts);
     const isolate = active ? (active.isolateArea ?? true) : standaloneFocus.isolate;
     const geometry = mode === "area" || !isolate ? null : selected.geometry;
     const allFeatures = active?.features?.features || [];
@@ -767,8 +768,8 @@ export function initOperations(ctx) {
       ...(pending?.geometry?.type === "LineString" ? [pending] : []),
     ]);
     state.operations.selection = FC(selected.features);
-    state.operations.alerts = buildAlertGeography(active, state.data);
-    state.operations.alertLabels = buildAlertLabels(state.operations.alerts);
+    state.operations.alerts = alerts;
+    state.operations.alertLabels = buildAlertLabels(alerts);
     state.operations.focusGeometry = geometry;
     state.operations.mask = geometry ? outsideMask(geometry) : FC();
     state.operations.draft = FC(draftFeatures);

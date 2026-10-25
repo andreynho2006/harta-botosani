@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildAlertGeography, buildAlertLabels, labelPoint, alertPopupHTML, attachAlertPopups } from '../web/js/operations-alert-map.js';
+import { buildAlertGeography, alertOutlined, buildAlertLabels, labelPoint, alertPopupHTML, attachAlertPopups } from '../web/js/operations-alert-map.js';
 const geometry = { type: 'Polygon', coordinates: [[[26,47],[27,47],[27,48],[26,47]]] };
 const admin = { features: [{ properties: { kind: 'uat', name: 'Botoșani' }, geometry }] };
 const warning = (id, code, extra = {}) => ({ id, code, areas: ['Botoșani'], places: [], source: 'ANM', validFrom: '2026-10-19T06:00:00Z', validTo: '2026-10-19T12:00:00Z', ...extra });
@@ -80,6 +80,35 @@ test('a village inside a UAT tinted at the same or higher code merges into it; a
   ] }, { admin, localities });
   assert.deepEqual(data.features.map(f => [f.properties.kind, f.properties.name, f.properties.code]), [['uat', 'Botoșani', 'orange'], ['place', 'Curtești (Botoșani)', 'red']]);
   assert.deepEqual(JSON.parse(data.features[0].properties.alerts).map(a => a.id), ['uat', 'village'], 'The absorbed warning stays in the UAT popup');
+});
+test('the focus outline steps aside only where a code outline draws that same shape', () => {
+  const agafton = { name: 'Agafton', lon: 26.5, lat: 47.6, uat: 'Botoșani' }, curtesti = { name: 'Curtești', lon: 26.6, lat: 47.7, uat: 'Botoșani' };
+  const localities = [agafton, curtesti, { name: 'Poiana', lon: 26.9, lat: 47.6, uat: 'Flămânzi' }, { name: 'Poiana', lon: 26.7, lat: 47.9, uat: 'Ștefănești' }];
+  const outlined = alerts => alertOutlined(buildAlertGeography({ alerts }, { admin, localities }));
+
+  // One UAT warning and no village warning: the UAT has its outline, a focused village inside has none.
+  let drawn = outlined([warning('uat', 'orange')]);
+  assert.equal(drawn.uat('Botoșani'), true, 'The warned UAT keeps its code outline');
+  assert.equal(drawn.uat('Dorohoi'), false, 'An unwarned UAT has none');
+  assert.equal(drawn.place(agafton), false, 'A village in a warned UAT has no outline of its own, so its focus circle shows');
+
+  // A village warned more severely than its UAT keeps its own feature; a milder one is merged into the UAT.
+  drawn = outlined([warning('uat', 'orange'), warning('mild', 'yellow', { areas: [], places: ['Agafton|Botoșani'] }), warning('worse', 'red', { areas: [], places: ['Curtești|Botoșani'] })]);
+  assert.equal(drawn.place(curtesti), true, 'A more severe village has its own outline');
+  assert.equal(drawn.place(agafton), false, 'A village absorbed into the UAT outline keeps its focus circle');
+
+  // Equal severity is absorbed as well, and a legacy plain name resolves to the same village key.
+  drawn = outlined([warning('uat', 'orange'), warning('same', 'orange', { areas: [], places: ['Agafton|Botoșani'] })]);
+  assert.equal(drawn.place(agafton), false);
+  drawn = outlined([warning('legacy', 'red', { areas: [], places: ['Curtești'] })]);
+  assert.equal(drawn.place(curtesti), true, 'A village warned alone is outlined, whichever way the warning names it');
+
+  // Same-named villages: only the warned one is outlined.
+  drawn = outlined([warning('poiana', 'red', { areas: [], places: ['Poiana|Ștefănești'] })]);
+  assert.deepEqual([drawn.place(localities[2]), drawn.place(localities[3])], [false, true]);
+
+  // Without warnings nothing is outlined.
+  for (const none of [outlined([]), alertOutlined(null), alertOutlined({ features: [] })]) assert.deepEqual([none.uat('Botoșani'), none.place(agafton)], [false, false]);
 });
 test('label points sit inside concave UATs and carry the upper-case code label', () => {
   // A "C" shape: its bounding-box centre and vertex mean both fall in the empty bay.
