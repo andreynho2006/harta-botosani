@@ -81,6 +81,18 @@ Traseele sunt propuneri de planificare: snapshotul nu conține toate sensurile, 
 
 Reconstrucția offline, fără descărcări OSM: instalează `mapbox-vector-tile==2.2.0`, apoi rulează `python pipeline/build-routing-snapshot.py <director-tiles> web/data/routing-roads.json --zoom 15`. Testele suplimentare ale constructorului sunt în `tests/test_routing_snapshot.py`.
 
+## Cadastrul apelor (ABA)
+
+Cursurile din cadastrul ABA Prut-Bârlad (`HidrografieABAPB.kmz`) se transformă offline într-un GeoJSON cu un curs pe cod ABA: numele cu diacritice (din OSM, unde există), emisarul, ordinul, lungimea cadastrală, suprafața bazinului și UAT-urile prin care trece albia pe cel puțin 200 m. Geometria e tăiată la județ + 1 km și simplificată la 10 m. Scriptul are nevoie de `shapely`:
+
+```
+python3 pipeline/hydrography.py HidrografieABAPB.kmz admin.geojson search.json hidrografie-botosani.geojson
+```
+
+`admin.geojson` și `search.json` sunt cele de pe ramura `date`. Scriptul tipărește un rezumat: câte cursuri, câți km, câte UAT-uri sunt atinse și ce coduri s-au unit. Testele (`tests/test_hydrography.py`) folosesc date inventate.
+
+Licența datelor ABA nu e clară, iar depozitul și pagina sunt publice, așa că hidrografia se publică numai criptată, ca hidranții. GeoJSON-ul rezultat se încarcă în aplicație, la Administrare → „Hidrografie”, apoi apeși „Descarcă hidrografie.enc” și urci fișierul în `web/data/`. GeoJSON-ul clar nu se urcă nicăieri: nu intră în depozit, nu se publică și nu se trimite la servicii externe.
+
 ## Structură
 
 ```
