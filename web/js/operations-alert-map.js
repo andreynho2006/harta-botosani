@@ -15,11 +15,33 @@ function villageGeometry(lon, lat) {
   return { type: 'Polygon', coordinates: [ring] };
 }
 
-/** One feature per exact named target, with every warning retained for hover. */
+/** Adds a warning to an area and raises the area to the warning's code when it is more severe. */
+function addWarning(properties, warning) {
+  if (!properties.alerts.some(a => a.id === warning.id)) properties.alerts.push(warning);
+  if ((rank[warning.code] || 0) > (rank[properties.code] || 0)) {
+    properties.code = warning.code;
+    properties.color = colors[warning.code];
+    properties.severity = rank[warning.code];
+  }
+}
+
+/**
+ * One feature per exact named target, with every warning retained for hover. A warning on every
+ * UAT is the county's: one area along the county border, not 78 outlines in a grid.
+ */
 export function buildAlertGeography(event, { admin, localities = [] } = {}) {
   const targets = new Map();
+  const countyShape = admin?.features?.find(f => f.properties?.kind === 'judet');
+  const uatNames = (admin?.features || []).filter(f => f.properties?.kind === 'uat').map(f => f.properties.name);
+  const wholeCounty = warning => Boolean(countyShape?.geometry) && uatNames.length > 1 && uatNames.every(name => warning.areas?.includes(name));
   for (const warning of normalizeAlerts(event)) {
-    for (const [kind, names] of [['uat', warning.areas], ['place', warning.places]]) {
+    const county = wholeCounty(warning);
+    if (county) {
+      if (!targets.has('county')) targets.set('county', { type: 'Feature', geometry: countyShape.geometry,
+        properties: { name: `Județul ${countyShape.properties.name}`, kind: 'county', key: 'county', uat: '', code: '', color: '', alerts: [] } });
+      addWarning(targets.get('county').properties, warning);
+    }
+    for (const [kind, names] of [['uat', county ? [] : warning.areas], ['place', warning.places]]) {
       for (const name of names || []) {
         // A legacy plain name and its `Name|UAT` key are the same village: one feature.
         const place = kind === 'place' ? resolvePlace(name, localities) : null;
@@ -35,13 +57,7 @@ export function buildAlertGeography(event, { admin, localities = [] } = {}) {
           const label = place ? placeLabel(placeKey(place)) : name;
           targets.set(key, { type: 'Feature', properties: { name: label, kind, key: place ? placeKey(place) : name, uat: place?.uat || '', code: '', color: '', alerts: [] }, geometry });
         }
-        const properties = targets.get(key).properties;
-        if (!properties.alerts.some(a => a.id === warning.id)) properties.alerts.push(warning);
-        if ((rank[warning.code] || 0) > (rank[properties.code] || 0)) {
-          properties.code = warning.code;
-          properties.color = colors[warning.code];
-          properties.severity = rank[warning.code];
-        }
+        addWarning(targets.get(key).properties, warning);
       }
     }
   }
@@ -54,7 +70,11 @@ export function buildAlertGeography(event, { admin, localities = [] } = {}) {
     for (const warning of properties.alerts) if (!parent.alerts.some(a => a.id === warning.id)) parent.alerts.push(warning);
     targets.delete(key);
   }
-  const features = [...targets.values()].sort((a, b) => rank[a.properties.code] - rank[b.properties.code]);
+  // An area under the county's code or a milder one would only repaint the county's tint or wash it
+  // out: it draws nothing of its own and stays for the popup, which lists its warnings too.
+  const county = targets.get('county')?.properties;
+  if (county) for (const { properties } of targets.values()) if (properties !== county && properties.severity <= county.severity) properties.covered = true;
+  const features = [...targets.values()].sort((a, b) => rank[a.properties.code] - rank[b.properties.code] || (b.properties.kind === 'county') - (a.properties.kind === 'county'));
   for (const feature of features) feature.properties.alerts = JSON.stringify(feature.properties.alerts);
   return { type: 'FeatureCollection', features };
 }
@@ -66,11 +86,14 @@ export function buildAlertGeography(event, { admin, localities = [] } = {}) {
  */
 export function alertOutlined(geography) {
   const uats = new Set(), places = new Set();
+  let county = false;
   for (const { properties: p } of geography?.features || []) {
     if (p?.kind === 'uat') uats.add(p.key);
     else if (p?.kind === 'place') places.add(p.key);
+    else if (p?.kind === 'county') county = true;
   }
-  return { uat: name => uats.has(name), place: place => places.has(placeKey(place)) };
+  // The county's band marks every UAT inside it.
+  return { uat: name => county || uats.has(name), place: place => places.has(placeKey(place)) };
 }
 
 /**
@@ -152,6 +175,7 @@ export function buildAlertLabels(geography) {
   const features = [];
   for (const feature of geography?.features || []) {
     const p = feature.properties || {};
+    if (p.covered) continue;
     let point = labelPoints.get(feature.geometry);
     if (!point) {
       // Village areas are circles: their centre is the mean of the ring.

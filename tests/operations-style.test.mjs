@@ -89,8 +89,9 @@ test('warning tint uses the theme palette, a dense county-zoom fill and a solid 
     }
     const opacity = fill.paint['fill-opacity'];
     assert.deepEqual(opacity.slice(0, 3), ['interpolate', ['linear'], ['zoom']]);
-    assert.equal(opacity[4], dark ? 0.5 : 0.42, 'County zoom stays readable on a projector');
-    assert.ok(opacity.at(-1) < opacity[4], 'Street zoom thins the tint');
+    assert.deepEqual(opacity[4], ['case', ['to-boolean', ['get', 'covered']], 0, dark ? 0.5 : 0.42], 'County zoom stays readable on a projector');
+    assert.ok(opacity.at(-1).at(-1) < opacity[4].at(-1), 'Street zoom thins the tint');
+    for (const line of [glow, outline]) assert.deepEqual(line.filter, ['!', ['to-boolean', ['get', 'covered']]], 'An area under the county band draws no line');
     assert.ok(outline.paint['line-opacity'] > 0.9);
     const ids = style.layers.map(l => l.id);
     for (const id of ['roads', 'places', 'ops-features-line', 'ops-features-label']) {

@@ -17,6 +17,9 @@ const rounded = { 'line-cap': 'round', 'line-join': 'round' };
 const byCode = (palette, fallback = '#64748b') => ['match', ['get', 'code'],
   'yellow', palette.yellow, 'orange', palette.orange, 'red', palette.red, 'ro-alert', palette['ro-alert'], fallback];
 const isPlace = ['==', ['get', 'kind'], 'place'];
+const isCounty = ['==', ['get', 'kind'], 'county'];
+// An area under the county's code draws nothing over the county's band; it stays for the popup.
+const covered = ['to-boolean', ['get', 'covered']];
 
 /** Decorate a freshly built base style with operational incident overlays. */
 export function decorateOperationalStyle(style, state = {}) {
@@ -51,9 +54,8 @@ export function decorateOperationalStyle(style, state = {}) {
   const tint = operations.tintAreas !== false;
   const darkMap = state.theme === 'noapte' || state.basemap === 'satelit';
   const codeColor = byCode(darkMap ? ALERT_COLORS_DARK : ALERT_COLORS);
-  const fillOpacity = tint
-    ? ['interpolate', ['linear'], ['zoom'], ...(darkMap ? [7, 0.5, 10, 0.46, 13, 0.34, 16, 0.26] : [7, 0.42, 10, 0.38, 13, 0.28, 16, 0.2])]
-    : 0;
+  const fillStops = darkMap ? [7, 0.5, 10, 0.46, 13, 0.34, 16, 0.26] : [7, 0.42, 10, 0.38, 13, 0.28, 16, 0.2];
+  const fillOpacity = tint ? ['interpolate', ['linear'], ['zoom'], ...fillStops.map((value, i) => i % 2 ? ['case', covered, 0, value] : value)] : 0;
 
   // Tint the affected geography, never blur the canvas. Both the translucent
   // fill and soft boundary sit BELOW road casings, labels and incident marks.
@@ -62,7 +64,7 @@ export function decorateOperationalStyle(style, state = {}) {
     { id: 'ops-alert-fill', type: 'fill', source: 'ops-alerts',
       layout: { 'fill-sort-key': ['coalesce', ['get', 'severity'], 0] },
       paint: { 'fill-color': codeColor, 'fill-opacity': fillOpacity } },
-    { id: 'ops-alert-glow', type: 'line', source: 'ops-alerts', layout: rounded,
+    { id: 'ops-alert-glow', type: 'line', source: 'ops-alerts', layout: rounded, filter: ['!', covered],
       paint: { 'line-color': codeColor, 'line-width': 10, 'line-blur': 16, 'line-opacity': tint ? 0.24 : 0 } },
   ];
   const foreground = style.layers.findIndex(layer => layer.type === 'symbol' || layer.type === 'circle' ||
@@ -70,10 +72,10 @@ export function decorateOperationalStyle(style, state = {}) {
   style.layers.splice(foreground < 0 ? style.layers.length : foreground, 0, ...tintLayers);
 
   // A solid boundary in the code colour sits above roads and below every label.
-  // Village areas are approximate, so their line stays thinner.
-  const outline = { id: 'ops-alert-outline', type: 'line', source: 'ops-alerts', layout: rounded,
+  // Village areas are approximate, so their line stays thinner; the county's is a wide band.
+  const outline = { id: 'ops-alert-outline', type: 'line', source: 'ops-alerts', layout: rounded, filter: ['!', covered],
     paint: { 'line-color': codeColor, 'line-opacity': tint ? 0.95 : 0,
-      'line-width': ['interpolate', ['linear'], ['zoom'], 7, ['case', isPlace, 1.5, 2.5], 11, ['case', isPlace, 2, 3.5], 15, ['case', isPlace, 2.5, 4.5]] } };
+      'line-width': ['interpolate', ['linear'], ['zoom'], 7, ['case', isPlace, 1.5, isCounty, 6, 2.5], 11, ['case', isPlace, 2, isCounty, 9, 3.5], 15, ['case', isPlace, 2.5, isCounty, 12, 4.5]] } };
   const firstLabel = style.layers.findIndex(layer => layer.type === 'symbol');
   style.layers.splice(firstLabel < 0 ? style.layers.length : firstLabel, 0, outline);
 

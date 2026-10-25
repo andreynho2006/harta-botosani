@@ -124,3 +124,30 @@ test('label points sit inside concave UATs and carry the upper-case code label',
   assert.ok(Math.hypot(village.geometry.coordinates[0] - 26.5, village.geometry.coordinates[1] - 47.6) < 1e-6, 'Village label sits on the village');
   assert.equal(village.properties.codeLabel, 'COD GALBEN');
 });
+
+test('a warning on every UAT is one county band; milder areas under it draw nothing but keep their warnings', () => {
+  const square = (x, y) => ({ type: 'Polygon', coordinates: [[[x, y], [x + 0.1, y], [x + 0.1, y + 0.1], [x, y + 0.1], [x, y]]] });
+  const county = { type: 'Polygon', coordinates: [[[26, 47], [26.3, 47], [26.3, 47.1], [26, 47.1], [26, 47]]] };
+  const names = ['Botoșani', 'Dorohoi', 'Săveni'];
+  const countyAdmin = { features: [{ properties: { kind: 'judet', name: 'Botoșani' }, geometry: county },
+    ...names.map((name, i) => ({ properties: { kind: 'uat', name }, geometry: square(26 + i * 0.1, 47) }))] };
+  const data = buildAlertGeography({ alerts: [warning('all', 'orange', { areas: [...names].reverse() }), warning('red', 'red', { areas: ['Dorohoi'] }),
+    warning('mild', 'yellow', { areas: ['Săveni'] })] }, { admin: countyAdmin });
+  const by = Object.fromEntries(data.features.map(f => [f.properties.key, f.properties]));
+  assert.deepEqual(data.features.map(f => f.properties.key), ['Săveni', 'county', 'Dorohoi']);
+  assert.equal(data.features[1].geometry, county);
+  assert.deepEqual([by.county.name, by.county.kind, by.county.code, JSON.parse(by.county.alerts).map(a => a.id)], ['Județul Botoșani', 'county', 'orange', ['all']]);
+  assert.equal(by.Dorohoi.covered, undefined, 'a more severe UAT draws over the band');
+  assert.equal(by['Săveni'].covered, true);
+  assert.deepEqual(JSON.parse(by['Săveni'].alerts).map(a => a.id), ['mild'], 'its own warning stays for the popup');
+  assert.deepEqual(buildAlertLabels(data).features.map(f => f.properties.name), ['Județul Botoșani', 'Dorohoi']);
+  const outlined = alertOutlined(data);
+  assert.equal(outlined.uat('Botoșani'), true, 'the band stands for every UAT, so no focus outline grid');
+  const popup = alertPopupHTML(data.features.filter(f => ['county', 'Săveni'].includes(f.properties.key)));
+  assert.match(popup, /Săveni · Județul Botoșani|Județul Botoșani · Săveni/);
+  assert.ok(popup.indexOf('Cod portocaliu') < popup.indexOf('Cod galben'));
+  const partial = buildAlertGeography({ alerts: [warning('two', 'orange', { areas: names.slice(0, 2) })] }, { admin: countyAdmin });
+  assert.deepEqual(partial.features.map(f => f.properties.kind), ['uat', 'uat'], 'a warning that leaves out a UAT stays per UAT');
+  const noCounty = buildAlertGeography({ alerts: [warning('all', 'orange', { areas: names })] }, { admin: { features: countyAdmin.features.slice(1) } });
+  assert.equal(noCounty.features.length, 3, 'without the county shape the UATs are drawn one by one');
+});
