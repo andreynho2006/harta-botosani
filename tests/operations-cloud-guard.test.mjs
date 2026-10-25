@@ -1,12 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { spawnSync } from 'node:child_process';
+import { chrome, skipWithoutChrome } from './chrome.mjs';
 
-const chrome = process.env.CHROME_BIN || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 
 // Runs in the page: boots the real initOperations with a stub Cloud and feeds it snapshots
 // the way Firestore's onSnapshot does, then reports what the operator would see.
@@ -852,7 +852,7 @@ async function browserChecks({ initOperations, createEvent, EventStore }) {
   out.textContent = JSON.stringify(result);
 }
 
-test('Cloud snapshots keep work in progress, publishing reports the real result, and removals can be undone', { skip: !existsSync(chrome) }, () => {
+test('Cloud snapshots keep work in progress, publishing reports the real result, and removals can be undone', { skip: skipWithoutChrome }, () => {
   const dir = mkdtempSync(join(tmpdir(), 'cjsu-cloud-guard-'));
   const web = new URL('../web/', import.meta.url).href;
   const page = `<!doctype html><meta charset="utf-8"><script src="${web}vendor/proj4.js"></script><div class="app"><aside class="side"><div id="tab-situatii"></div></aside><div class="mapwrap"><div id="map"></div></div></div><pre id="results"></pre><script type="module">import { initOperations } from "${web}js/operations.js"; import { createEvent, EventStore } from "${web}js/event-store.js"; (${browserChecks.toString()})({ initOperations, createEvent, EventStore })</script>`;

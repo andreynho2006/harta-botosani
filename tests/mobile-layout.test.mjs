@@ -1,12 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, mkdtempSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { spawnSync } from 'node:child_process';
+import { chrome, skipWithoutChrome } from './chrome.mjs';
 
-const chrome = process.env.CHROME_BIN || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 const sizes = [[320, 568], [390, 844], [844, 390], [900, 480], [1366, 768]];
 
 function layoutChecks() {
@@ -47,7 +47,7 @@ function layoutChecks() {
   } catch (error) { parent.postMessage({ viewport: innerWidth + 'x' + innerHeight, error: error.stack }, '*'); }
 }
 
-test('main-map CSS can collapse all normal panels and preserve the mobile restore arrow', { skip: !existsSync(chrome) }, () => {
+test('main-map CSS can collapse all normal panels and preserve the mobile restore arrow', { skip: skipWithoutChrome }, () => {
   const dir = mkdtempSync(join(tmpdir(), 'main-mobile-layout-'));
   try {
     const web = new URL('../web/', import.meta.url);

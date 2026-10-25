@@ -1,12 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { spawnSync } from 'node:child_process';
+import { chrome, skipWithoutChrome } from './chrome.mjs';
 
-const chrome = process.env.CHROME_BIN || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 async function browserChecks({ initOperations, createEvent }) {
   try {
     const active = createEvent('Card disclosure regression', 'snow');
@@ -63,7 +63,7 @@ async function browserChecks({ initOperations, createEvent }) {
   } catch (error) { parent.postMessage({ viewport: innerWidth + 'x' + innerHeight, error: error.stack }, '*'); }
 }
 
-test('operational cards preserve forms and disclosure state while the action menu uses existing handlers', { skip: !existsSync(chrome) }, () => {
+test('operational cards preserve forms and disclosure state while the action menu uses existing handlers', { skip: skipWithoutChrome }, () => {
   const dir = mkdtempSync(join(tmpdir(), 'operations-cards-'));
   try {
     const web = new URL('../web/', import.meta.url).href;

@@ -1,12 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { spawnSync } from 'node:child_process';
+import { chrome, skipWithoutChrome } from './chrome.mjs';
 
-const chrome = process.env.CHROME_BIN || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 const sizes = [[1920, 1080], [1366, 768], [1024, 768], [320, 568], [390, 844], [844, 390], [900, 480]];
 
 async function browserChecks({ initOperations, createEvent }) {
@@ -353,7 +353,7 @@ async function browserChecks({ initOperations, createEvent }) {
   } catch (error) { parent.postMessage({ viewport: innerWidth + 'x' + innerHeight, error: error.stack }, '*'); }
 }
 
-test('CJSU panels collapse independently, preserve the map, and keep full warnings accessible', { skip: !existsSync(chrome) }, () => {
+test('CJSU panels collapse independently, preserve the map, and keep full warnings accessible', { skip: skipWithoutChrome }, () => {
   const dir = mkdtempSync(join(tmpdir(), 'cjsu-presentation-'));
   const web = new URL('../web/', import.meta.url).href;
   const child = `<!doctype html><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><script src="${web}vendor/proj4.js"></script><link rel="stylesheet" href="${web}css/app.css"><link rel="stylesheet" href="${web}css/operations.css"><link rel="stylesheet" href="${web}css/operations-cards.css"><link rel="stylesheet" href="${web}css/operations-alerts.css"><div class="app"><aside class="side"><div id="tab-situatii"></div></aside><div class="mapwrap"><div id="map" style="background:#dce6df"></div></div></div><script type="module">import { initOperations } from "${web}js/operations.js"; import { createEvent } from "${web}js/event-store.js"; (${browserChecks.toString()})({ initOperations, createEvent })</script>`;

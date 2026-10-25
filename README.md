@@ -41,7 +41,9 @@ After publishing a password reset in `web/users.json`, saved sessions require a 
 
 ## Validation
 
-Run `node --test tests/*.test.mjs` and `python3 -m unittest discover -s tests -p 'test_*.py'`. These checks do not download or rebuild map data.
+Run `node --test tests/*.test.mjs` and `python3 -m unittest discover -s tests -p 'test_*.py'`. These checks do not download or rebuild map data. The browser tests drive Chrome headless: `CHROME_BIN`, else the usual macOS or Linux install (`tests/chrome.mjs`); without one they are skipped with a reason. The snapshot-builder tests need `mapbox-vector-tile==2.2.0` and are skipped without it.
+
+The `Site` workflow runs both suites on every push that touches `web/`, `tests/` or `pipeline/`, with Chrome required (`REQUIRE_CHROME=1`) and the snapshot-builder dependency installed. GitHub Pages is updated only when every test passes; a red run leaves the published site as it was.
 
 ## Situații operative CJSU
 

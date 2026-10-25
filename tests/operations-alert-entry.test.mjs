@@ -1,13 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import { urbanUats, presetAreas } from '../web/js/operations-alert-editor.js';
+import { chrome, skipWithoutChrome } from './chrome.mjs';
 
-const chrome = process.env.CHROME_BIN || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 
 const data = {
   admin: { features: ['Botoșani', 'Curtești', 'Dorohoi', 'Vlădeni'].map(name => ({ properties: { kind: 'uat', name } })).concat({ properties: { kind: 'judet', name: 'Botoșani' } }) },
@@ -370,7 +370,7 @@ Fenomene: vijelie`);
   out.textContent = JSON.stringify(result);
 }
 
-test('zone presets, the map pick and a pasted message fill warnings in the real editor', { skip: !existsSync(chrome) }, () => {
+test('zone presets, the map pick and a pasted message fill warnings in the real editor', { skip: skipWithoutChrome }, () => {
   const dir = mkdtempSync(join(tmpdir(), 'cjsu-alert-entry-'));
   const web = new URL('../web/', import.meta.url).href;
   const page = `<!doctype html><meta charset="utf-8"><script src="${web}vendor/proj4.js"></script><div class="app"><aside class="side"><div id="tab-situatii"></div></aside><div class="mapwrap"><div id="map"></div></div></div><pre id="results"></pre><script type="module">import { initOperations } from "${web}js/operations.js"; import { createEvent } from "${web}js/event-store.js"; (${browserChecks.toString()})({ initOperations, createEvent })</script>`;

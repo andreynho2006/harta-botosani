@@ -1,11 +1,12 @@
 name: Site
 
-# Pune împreună aplicația (web/) și datele (ramura date) pe ramura site, publicată cu GitHub Pages.
+# Rulează testele, apoi pune împreună aplicația (web/) și datele (ramura date) pe ramura site,
+# publicată cu GitHub Pages. Cu un test roșu, site-ul rămâne la versiunea de dinainte.
 on:
   workflow_dispatch:
   push:
     branches: [main]
-    paths: ["web/**", ".github/workflows/site.yml"]
+    paths: ["web/**", "tests/**", "pipeline/**", ".github/workflows/site.yml"]
   workflow_run:
     workflows: ["Date hartă"]
     types: [completed]
@@ -18,8 +19,42 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  site:
+  teste:
     if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Chrome pentru testele de browser
+        run: |
+          # Fără Chrome testele de browser s-ar sări; aici lipsa lui e o eroare.
+          printf '#!/bin/sh\nexec /usr/bin/google-chrome --no-sandbox "$@"\n' > "$RUNNER_TEMP/chrome"
+          chmod +x "$RUNNER_TEMP/chrome"
+          echo "CHROME_BIN=$RUNNER_TEMP/chrome" >> "$GITHUB_ENV"
+          echo "REQUIRE_CHROME=1" >> "$GITHUB_ENV"
+          /usr/bin/google-chrome --version
+
+      - name: Teste JavaScript
+        run: node --test tests/*.test.mjs
+
+      - name: Teste Python
+        run: |
+          pip install --quiet mapbox-vector-tile==2.2.0
+          python -m unittest discover -s tests -p 'test_*.py' -v
+
+  site:
+    needs: teste
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4

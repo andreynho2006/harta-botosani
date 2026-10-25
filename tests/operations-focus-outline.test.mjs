@@ -1,12 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { spawnSync } from 'node:child_process';
+import { chrome, skipWithoutChrome } from './chrome.mjs';
 
-const chrome = process.env.CHROME_BIN || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 
 // Runs in the page: boots the real initOperations against a stub map and reports which
 // focus outlines the selection source hands to the style (it hides those with alert=true).
@@ -83,7 +83,7 @@ async function browserChecks({ initOperations, createEvent }) {
   } catch (error) { out.textContent = JSON.stringify({ error: error.stack }); }
 }
 
-test('the real focus outline hides only where a code outline draws the same shape, and a map focus is only a view', { skip: !existsSync(chrome) }, () => {
+test('the real focus outline hides only where a code outline draws the same shape, and a map focus is only a view', { skip: skipWithoutChrome }, () => {
   const dir = mkdtempSync(join(tmpdir(), 'cjsu-focus-outline-'));
   const web = new URL('../web/', import.meta.url).href;
   const page = `<!doctype html><meta charset="utf-8"><script src="${web}vendor/proj4.js"></script><div class="app"><aside class="side"><div id="tab-situatii"></div></aside><div class="mapwrap"><div id="map"></div></div></div><pre id="results"></pre><script type="module">import { initOperations } from "${web}js/operations.js"; import { createEvent } from "${web}js/event-store.js"; (${browserChecks.toString()})({ initOperations, createEvent })</script>`;
