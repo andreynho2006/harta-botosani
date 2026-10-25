@@ -63,8 +63,8 @@ const LANDMARKS = [/confluent\w*\s+cu\s+(?:raul\s+)?$/, /afluent(?:ul)?\s+al\s+(
   /statiei\s+hidrometrice\s+$/, /statia\s+hidrometrica\s+$/, /acumularea\s+$/, /acumulare\s+$/, /(?<![a-z])ac\.\s*$/, /lacul\s+$/, /barajul\s+$/];
 const isLandmark = (folded, at) => { const before = folded.slice(Math.max(0, at - 60), at); return LANDMARKS.some(re => re.test(before)); };
 
-/** A full stop that ends a sentence: after a word, not the stops of "S.H." or "ac.". */
-const endsSentence = (text, at) => text[at] === '.' && at >= 3 && /[a-z0-9]{3}$/.test(text.slice(at - 3, at)) && (at + 1 >= text.length || /\s/.test(text[at + 1]));
+/** A full stop that ends a sentence: after a word or a closing bracket, not the stops of "S.H." or "ac.". */
+const endsSentence = (text, at) => text[at] === '.' && /(?:[a-z0-9]{3}|\))$/.test(text.slice(Math.max(0, at - 3), at)) && (at + 1 >= text.length || /\s/.test(text[at + 1]));
 
 /**
  * The national title "BAZINELE HIDROGRAFICE VIZATE: …" and the addressees "Către: … Administrațiile Bazinale de Apă: Siret și
@@ -72,8 +72,8 @@ const endsSentence = (text, at) => text[at] === '.' && at >= 3 && /[a-z0-9]{3}$/
  * wrap onto the next lines), or to the first code or "momentul producerii" heading, or 500 characters.
  */
 function skippedRanges(folded) {
-  // The title may share its line with the text pasted before it; the addressees open their own.
-  return [...folded.matchAll(/\bbazinele\s+hidrografice\s+(?:vizate|afectate)\s*:|^[ \t]*catre[ \t]*:/gm)].map(m => {
+  // The title may share its line with the text pasted before it, or lose its colon; the addressees open their own line.
+  return [...folded.matchAll(/\bbazinele\s+hidrografice\s+(?:vizate|afectate)\b\s*:?|^[ \t]*catre[ \t]*:/gm)].map(m => {
     const from = m.index + m[0].length;
     const heading = folded.slice(from, m.index + 500).search(new RegExp(`${CODE_HEADING.source}|\\bmomentul\\s+producerii\\b`));
     const limit = heading < 0 ? Math.min(folded.length, m.index + 500) : from + heading;

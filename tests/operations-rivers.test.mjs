@@ -208,3 +208,10 @@ test('the national title is skipped on a line it shares, and names past the sent
   assert.deepEqual(later.rivers.map(river => river.name), ['Miletin'], 'Buhai and Podriga come after the sentence the list closed');
   assert.deepEqual(read('Bașeu și Volovăț, sub cod portocaliu. ISU Botoșani').rivers.map(river => river.name), ['Bașeu', 'Volovăț'], 'Without any list, a text naming Botoșani keeps its rivers');
 });
+
+test('a list closed by a bracket ends its sentence too, and the title is skipped without its colon', () => {
+  const closed = read(`${head}Miletin (judeţele: Botoşani şi Iaşi). Pe râuri din bazinele hidrografice: Buhai şi Podriga.`);
+  assert.deepEqual(closed.rivers.map(river => river.name), ['Miletin']);
+  const bare = read('BAZINELE HIDROGRAFICE VIZATE\nSiret, Prut și Jijia\nCOD GALBEN: pe râurile din bazinele hidrografice: Miletin (judeţele: Botoşani şi Iaşi)');
+  assert.deepEqual(bare.rivers.map(river => river.name), ['Miletin']);
+});

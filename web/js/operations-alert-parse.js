@@ -327,13 +327,15 @@ function sections(original) {
 }
 
 function sourceOf(folded) {
-  // A section pasted without the bulletin's title still reads as INHGA by its river wording:
-  // "bazinele hidrografice", "afluenții (mici) aferenți", "bazin superior", "sector aval".
-  if (/\binhga\b|hidrolog|bazin(?:ele|ul)?\s+hidrografic|\bafluent\w*\s+(?:mici\s+|de\s+(?:stanga|dreapta)\s+)?aferent|\bbazin\s+(?:superior|mijlociu|inferior|amonte)\b|\bsector(?:ul|ului)?\s+(?:aval|amonte)\b/.test(folded)) return 'INHGA';
+  if (/\binhga\b|hidrolog/.test(folded)) return 'INHGA';
   if (/\banm\b|meteorolog|nowcasting|srpv/.test(folded)) return 'ANM';
   if (/\bro[\s-]?alert\b|\bigsu\b/.test(folded)) return 'IGSU';
   return '';
 }
+
+// A text that names no source of its own, such as a section pasted without the bulletin's title, is INHGA by its
+// river wording: "bazinele hidrografice", "afluenții (mici) aferenți", "bazin superior", "sector aval".
+const RIVER_WORDING = /\bbazin(?:ele|ul)?\s+hidrografic|\bafluent\w*\s+(?:mici\s+|de\s+(?:stanga|dreapta)\s+)?aferent|\bbazin\s+(?:superior|mijlociu|inferior|amonte)\b|\bsector(?:ul|ului)?\s+(?:aval|amonte)\b/;
 
 /** The county's UATs and villages, keyed once for matching names. */
 function nameIndex(uats, localities) {
@@ -428,7 +430,7 @@ export function parseWarningText(text, { uats = [], localities = [], rivers = []
   const results = list.map(({ code, start, end }) => {
     const body = original.slice(start, end);
     const { folded } = foldText(body);
-    const source = sourceOf(folded) || wholeSource;
+    const source = sourceOf(folded) || wholeSource || (RIVER_WORDING.test(folded) ? 'INHGA' : '');
     const zone = withRivers(zoneOf(body, index, source), source === 'INHGA' && rivers.length ? readRivers(body, rivers, { uats }) : null);
     const { text: warningText, cut } = readText(body);
     const own = readInterval(folded, today);

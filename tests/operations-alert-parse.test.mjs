@@ -311,3 +311,8 @@ test('a section pasted without the bulletin\'s title is INHGA by its river wordi
   const [upper] = parse('COD GALBEN: Jijia – bazin superior şi afluenţi bazin mijlociu şi inferior (judeţele: Botoşani şi Iaşi).', { rivers });
   assert.equal(upper.source, 'INHGA');
 });
+
+test('river wording makes a text INHGA only when it names no source: an ANM message stays ANM', () => {
+  const [anm] = parse('AVERTIZARE METEOROLOGICĂ ANM\nCOD GALBEN\nInterval de valabilitate: 20.10 ora 12:00 – 21.10 ora 12:00\nFenomene: ploi abundente în bazin superior al Prutului, scurgeri pe sector aval.\nZona: județul Botoșani', { rivers });
+  assert.deepEqual([anm.source, anm.county, anm.areas.length, anm.rivers], ['ANM', true, uats.length, []]);
+});
