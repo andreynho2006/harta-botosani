@@ -1484,7 +1484,8 @@ export function initOperations(ctx) {
       if (remote && !dirty && remote.updatedAt && remote.updatedAt > active.updatedAt) {
         active = structuredClone(remote);
         persistSession();
-        sync();
+        // Isolation, tint and warning areas are baked into the style, so rebuild it.
+        sync(true);
         render();
         if (document.body.classList.contains("presenting")) renderPresentationOverlay();
         toast(`Situația „${active.title}” a fost actualizată în direct din Cloud.`);
