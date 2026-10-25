@@ -242,7 +242,7 @@ function namesCounty(text) {
 const otherCountyList = folded => [...folded.matchAll(/\bjud(?:etul|\.)\s*([a-z\-]+)\s*[:–-]/g)].some(m => m[1] !== 'botosani');
 
 /** Romania's counties, folded, by their first word: "a județului, respectiv" names none. */
-const COUNTIES = new Set(['alba', 'arad', 'arges', 'bacau', 'bihor', 'bistrita', 'botosani', 'braila', 'brasov', 'bucuresti', 'buzau',
+export const COUNTIES = new Set(['alba', 'arad', 'arges', 'bacau', 'bihor', 'bistrita', 'botosani', 'braila', 'brasov', 'bucuresti', 'buzau',
   'calarasi', 'caras', 'cluj', 'constanta', 'covasna', 'dambovita', 'dolj', 'galati', 'giurgiu', 'gorj', 'harghita', 'hunedoara',
   'ialomita', 'iasi', 'ilfov', 'maramures', 'mehedinti', 'mures', 'neamt', 'olt', 'prahova', 'salaj', 'satu', 'sibiu', 'suceava',
   'teleorman', 'timis', 'tulcea', 'valcea', 'vaslui', 'vrancea']);
