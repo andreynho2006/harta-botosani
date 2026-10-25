@@ -49,11 +49,37 @@ async function browserChecks({ initOperations, createEvent }) {
       initOperations({ map, storage, state, toast: noop, selectTab: noop, applyStyle: noop, renderLayerPanel: noop });
       result[name] = state.operations.selection.features.map(f => f.properties.kind + ':' + f.properties.name + ':' + f.properties.alert);
     }
+
+    // "Focalizează UAT" from the map while a situation is open is a view, not an edit.
+    {
+      const active = createEvent('View focus', 'snow');
+      Object.assign(active, { areas: [], places: ['Poiana'], alerts: [warn('w1', 'orange', ['Curtești'])], isolateArea: false });
+      const memory = new Map([['hb.ops.session.v1', JSON.stringify({ active })]]);
+      const storage = { getItem: key => memory.get(key) ?? null, setItem: (key, value) => memory.set(key, value) };
+      const noop = () => {};
+      const map = {
+        on: noop, getSource: noop, getLayer: noop, getCenter: () => ({ lng: 26.6, lat: 47.7 }), getZoom: () => 8, getBearing: () => 0, getPitch: () => 0,
+        getPadding: () => ({}), getContainer: () => document.querySelector('#map'), fitBounds: noop, flyTo: noop, setPadding: noop, resize: noop, jumpTo: noop,
+      };
+      const state = { data: { admin, localities }, visible: {}, overlays: {}, basemap: 'harta', theme: 'zi' };
+      document.querySelector('#tab-situatii').replaceChildren();
+      initOperations({ map, storage, state, toast: noop, selectTab: noop, stopOtherTools: noop, applyStyle: noop, renderLayerPanel: noop });
+      const bar = [...document.querySelectorAll('.ops-focusbar')].at(-1);
+      const saved = () => JSON.parse(memory.get('hb.ops.session.v1')).active;
+      const selection = () => state.operations.selection.features.map(f => f.properties.kind + ':' + f.properties.name).join(',');
+      state.focusUat({ name: 'Flămânzi', feature: admin.features[1] });
+      result.view = { areasAfterFocus: saved().areas, selectionDuringView: selection(), barLabel: bar.querySelector('strong')?.textContent, masked: Boolean(state.operations.focusGeometry) };
+      bar.querySelector('[data-faction="clear-focus"]').click();
+      Object.assign(result.view, { selectionAfterBack: selection(), barHiddenAfterBack: bar.hidden });
+      state.focusUat({ name: 'Flămânzi', feature: admin.features[1] });
+      bar.querySelector('[data-faction="adopt-view"]').click();
+      Object.assign(result.view, { areasAfterAdopt: saved().areas, barAfterAdopt: bar.querySelector('strong')?.textContent });
+    }
     out.textContent = JSON.stringify(result);
   } catch (error) { out.textContent = JSON.stringify({ error: error.stack }); }
 }
 
-test('the real focus outline hides only where a code outline draws the same shape', { skip: !existsSync(chrome) }, () => {
+test('the real focus outline hides only where a code outline draws the same shape, and a map focus is only a view', { skip: !existsSync(chrome) }, () => {
   const dir = mkdtempSync(join(tmpdir(), 'cjsu-focus-outline-'));
   const web = new URL('../web/', import.meta.url).href;
   const page = `<!doctype html><meta charset="utf-8"><script src="${web}vendor/proj4.js"></script><div class="app"><aside class="side"><div id="tab-situatii"></div></aside><div class="mapwrap"><div id="map"></div></div></div><pre id="results"></pre><script type="module">import { initOperations } from "${web}js/operations.js"; import { createEvent } from "${web}js/event-store.js"; (${browserChecks.toString()})({ initOperations, createEvent })</script>`;
@@ -71,5 +97,10 @@ test('the real focus outline hides only where a code outline draws the same shap
     assert.deepEqual(result.villageOutlined, ['uat:Curtești:true', 'place-focus:Agafton:true'], 'A village with its own code outline hands over to it');
     assert.deepEqual(result.villageUnwarned, ['uat:Curtești:true', 'place-focus:Poiana:false']);
     assert.deepEqual(result.uatFocus, ['uat:Curtești:true'], 'A focused UAT under a code keeps stepping aside');
+    assert.deepEqual(result.view, {
+      areasAfterFocus: [], selectionDuringView: 'uat:Flămânzi', barLabel: 'Vizualizare:', masked: true,
+      selectionAfterBack: 'uat:Curtești,place-focus:Poiana', barHiddenAfterBack: false,
+      areasAfterAdopt: ['Flămânzi'], barAfterAdopt: 'Focus:',
+    }, 'A map focus frames a view; only "Adaugă în situație" changes the open situation');
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });

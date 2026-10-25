@@ -406,6 +406,9 @@ export function initOperations(ctx) {
   // from, so a colleague's newer copy is told apart from the echo of our own publish.
   let unpublished = false, cloudBase = null, cloudConflict = null, publishing = false, cloudSeen = false;
   let confirmDeleteId = null, undo = null;
+  // With a situation open, "Focalizează UAT / satul" from the map only frames the view:
+  // exploring the map in a meeting must not add areas to what is saved and published.
+  let viewFocus = null;
   const cloudCopies = new Map(), sentVersions = new Set();
 
   state.operations = {
@@ -723,10 +726,11 @@ export function initOperations(ctx) {
   }
 
   function selectedGeometry(alerts = buildAlertGeography(active, state.data)) {
-    const warningLocations = affectedAlertLocations(active);
-    const areaNames = new Set(active ? [...active.areas, ...warningLocations.areas] : standaloneFocus.areas);
+    // A view frames only what was explored; the situation's own areas and warnings return with it.
+    const warningLocations = viewFocus ? { areas: [], places: [] } : affectedAlertLocations(active);
+    const areaNames = new Set(viewFocus ? viewFocus.areas : active ? [...active.areas, ...warningLocations.areas] : standaloneFocus.areas);
     // Focus places keep their name search; warning villages resolve by exact `Name|UAT` key.
-    const focusPlaces = (active ? active.places || [] : standaloneFocus.places).map(findLocality);
+    const focusPlaces = (viewFocus ? viewFocus.places : active ? active.places || [] : standaloneFocus.places).map(findLocality);
     const warningPlaces = active ? warningLocations.places.map(entry => resolvePlace(entry, allLocalities())) : [];
     // `alert` marks shapes a code outline already draws, so the focus outline can step aside
     // there and only there: a village the warnings merged into its UAT keeps its circle.
@@ -747,9 +751,9 @@ export function initOperations(ctx) {
   }
 
   function renderFocusBar() {
-    const areas = active ? active.areas : standaloneFocus.areas;
-    const places = active ? (active.places || []) : standaloneFocus.places;
-    const isolate = active ? !!active.isolateArea : standaloneFocus.isolate;
+    const areas = viewFocus ? viewFocus.areas : active ? active.areas : standaloneFocus.areas;
+    const places = viewFocus ? viewFocus.places : active ? (active.places || []) : standaloneFocus.places;
+    const isolate = viewFocus ? viewFocus.isolate : active ? !!active.isolateArea : standaloneFocus.isolate;
     if ((!areas.length && !places.length) || document.body.classList.contains("presenting")) {
       focusbar.hidden = true;
       return;
@@ -759,11 +763,12 @@ export function initOperations(ctx) {
       ...places.map(p => `<button type="button" class="ops-fchip" data-fremove-place="${esc(p)}" title="Elimină localitatea din focalizare">${esc(p)} ×</button>`),
     ].join("");
     focusbar.innerHTML = `
-      <div class="ops-fbar-chips"><strong>Focus:</strong> ${tags}</div>
+      <div class="ops-fbar-chips"><strong>${viewFocus ? "Vizualizare:" : "Focus:"}</strong> ${tags}</div>
       <div class="ops-fbar-btns">
+        ${viewFocus ? `<button type="button" data-faction="adopt-view" title="Adaugă zona vizualizată în situația deschisă">Adaugă în situație</button>` : ""}
         <button type="button" data-faction="toggle-isolate" aria-pressed="${isolate}">${isolate ? "Exterior mascat" : "Izolează conturul"}</button>
         <button type="button" data-faction="fit">Încadrează</button>
-        <button type="button" data-faction="clear-focus">Tot județul</button>
+        <button type="button" data-faction="clear-focus">${viewFocus ? "Înapoi la situație" : "Tot județul"}</button>
       </div>`;
     focusbar.hidden = false;
   }
@@ -771,7 +776,7 @@ export function initOperations(ctx) {
   function sync(refresh = false) {
     const alerts = buildAlertGeography(active, state.data);
     const selected = selectedGeometry(alerts);
-    const isolate = active ? (active.isolateArea ?? true) : standaloneFocus.isolate;
+    const isolate = viewFocus ? viewFocus.isolate : active ? (active.isolateArea ?? true) : standaloneFocus.isolate;
     const geometry = mode === "area" || !isolate ? null : selected.geometry;
     const allFeatures = active?.features?.features || [];
     const mapFeatures = state.operations.presenting
@@ -828,7 +833,7 @@ export function initOperations(ctx) {
   function fit() {
     if (!map) return;
     const selected = selectedGeometry();
-    const allFeatures = active?.features?.features || [];
+    const allFeatures = viewFocus ? [] : active?.features?.features || [];
     const mapFeatures = state.operations.presenting
       ? presentationFeatures(allFeatures, active?.type, hideResolvedInPresentation)
       : allFeatures;
@@ -858,18 +863,21 @@ export function initOperations(ctx) {
     if (!uat?.name) return;
     stopOtherTools();
     if (active) {
-      if (!active.areas.includes(uat.name)) active.areas = [...active.areas, uat.name];
-      active.isolateArea = true;
-      changed();
+      // The presentation has no focus bar to leave a view, so there the map is only framed.
+      if (!state.operations.presenting) {
+        viewFocus ??= { areas: [], places: [], isolate: true };
+        if (!viewFocus.areas.includes(uat.name)) viewFocus.areas = [...viewFocus.areas, uat.name];
+        sync(true);
+      }
     } else {
       if (!standaloneFocus.areas.includes(uat.name)) standaloneFocus.areas = [...standaloneFocus.areas, uat.name];
       standaloneFocus.isolate = true;
+      sync(true);
+      render();
     }
-    sync(true);
-    render();
     const b = geometryBounds(uat.feature?.geometry);
     if (b && map) map.fitBounds(b, { padding: { top: 80, bottom: 80, left: 50, right: 50 }, maxZoom: 14.5, duration: 500 });
-    toast(`Focalizat pe UAT ${uat.name} (direct pe harta principală)`);
+    toast(active ? `Vizualizare pe UAT ${uat.name}. Situația deschisă nu a fost modificată.` : `Focalizat pe UAT ${uat.name} (direct pe harta principală)`);
   };
 
   state.focusPlace = (placeOrName, llArg) => {
@@ -878,18 +886,19 @@ export function initOperations(ctx) {
     if (!placeName) return;
     stopOtherTools();
     if (active) {
-      active.places = active.places || [];
-      if (!active.places.includes(placeName)) active.places = [...active.places, placeName];
-      active.isolateArea = true;
-      changed();
+      if (!state.operations.presenting) {
+        viewFocus ??= { areas: [], places: [], isolate: true };
+        if (!viewFocus.places.includes(placeName)) viewFocus.places = [...viewFocus.places, placeName];
+        sync(true);
+      }
     } else {
       if (!standaloneFocus.places.includes(placeName)) standaloneFocus.places = [...standaloneFocus.places, placeName];
       standaloneFocus.isolate = true;
+      sync(true);
+      render();
     }
-    sync(true);
-    render();
     if (ll && map) map.flyTo({ center: ll, zoom: 14, duration: 500 });
-    toast(`Focalizat pe localitatea ${placeName}`);
+    toast(active ? `Vizualizare pe localitatea ${placeName}. Situația deschisă nu a fost modificată.` : `Focalizat pe localitatea ${placeName}`);
   };
 
   function stopDrawing() {
@@ -912,6 +921,8 @@ export function initOperations(ctx) {
       return message("Salvează marcajul curent (Adaugă / Actualizează) sau apasă Renunță înainte de a folosi alt instrument.");
     }
     stopOtherTools();
+    // Picking UATs edits the situation's own areas, so the map shows those again.
+    if (tool === "area") viewFocus = null;
     if (tool === "retrace-road") {
       mode = "road";
       points = []; startSnap = null; roadPool = [];
@@ -1739,7 +1750,7 @@ export function initOperations(ctx) {
     active.places = active.places || [];
     active.isolateArea = active.isolateArea ?? false;
     active.tintAreas = active.tintAreas ?? true;
-    pending = null; editingId = null; dirty = false; exported = false; notice = ""; confirmDeleteId = null;
+    pending = null; editingId = null; dirty = false; exported = false; notice = ""; confirmDeleteId = null; viewFocus = null;
     // Without a Cloud copy the situation lives only here, once the Cloud has answered at all.
     cloudBase = copy?.updatedAt ?? null; cloudConflict = null;
     unpublished = copy ? active.updatedAt > copy.updatedAt : cloudSeen;
@@ -1752,7 +1763,7 @@ export function initOperations(ctx) {
   }
 
   function closeActive() {
-    active = null; pending = null; editingId = null; confirmDeleteId = null;
+    active = null; pending = null; editingId = null; confirmDeleteId = null; viewFocus = null;
     unpublished = false; cloudBase = null; cloudConflict = null;
     stopDrawing(); sync(true);
   }
@@ -1942,6 +1953,7 @@ export function initOperations(ctx) {
   function present() {
     if (pending || mode || itinerary.isPicking()) return message("Finalizează marcajul sau selecția înainte de prezentare.");
     if (!active) return;
+    viewFocus = null;
     hideResolvedInPresentation = false;
     compactPresentation = isCompactViewport();
     messagesCollapsed = compactPresentation;
@@ -2063,7 +2075,7 @@ export function initOperations(ctx) {
         active.places = [];
         active.isolateArea = false;
         active.tintAreas = true;
-        dirty = true; unpublished = true; cloudBase = null; cloudConflict = null; exported = false; notice = "";
+        dirty = true; unpublished = true; cloudBase = null; cloudConflict = null; viewFocus = null; exported = false; notice = "";
         if (applyPreset) applyPreset(type);
         sync(true); render();
       } catch { message("Introdu o denumire pentru situație."); }
@@ -2325,6 +2337,7 @@ export function initOperations(ctx) {
   focusbar.onclick = (event) => {
     const btn = event.target.closest("button");
     if (!btn) return;
+    if (viewFocus) return viewFocusClick(btn);
     if (btn.dataset.fremoveUat) {
       if (active) { active.areas = active.areas.filter(a => a !== btn.dataset.fremoveUat); changed(); }
       else standaloneFocus.areas = standaloneFocus.areas.filter(a => a !== btn.dataset.fremoveUat);
@@ -2348,6 +2361,27 @@ export function initOperations(ctx) {
       sync(true); render();
     }
   };
+
+  function viewFocusClick(btn) {
+    const act = btn.dataset.faction;
+    if (btn.dataset.fremoveUat) viewFocus.areas = viewFocus.areas.filter(a => a !== btn.dataset.fremoveUat);
+    else if (btn.dataset.fremovePlace) viewFocus.places = viewFocus.places.filter(p => p !== btn.dataset.fremovePlace);
+    else if (act === "toggle-isolate") viewFocus.isolate = !viewFocus.isolate;
+    else if (act === "fit") return fit();
+    else if (act === "clear-focus") viewFocus = null;
+    else if (act === "adopt-view") {
+      if (pending) return message("Finalizează marcajul curent înainte de schimbarea zonei.");
+      active.areas = [...new Set([...active.areas, ...viewFocus.areas])];
+      active.places = [...new Set([...(active.places || []), ...viewFocus.places])];
+      active.isolateArea = viewFocus.isolate;
+      viewFocus = null;
+      changed(); sync(true); render();
+      return toast("Zona vizualizată a fost adăugată în situație.");
+    }
+    if (viewFocus && !viewFocus.areas.length && !viewFocus.places.length) viewFocus = null;
+    sync(true);
+    if (!viewFocus) fit();
+  }
 
   presentation.onclick = (event) => {
     const btn = event.target.closest("button");
