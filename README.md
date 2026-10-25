@@ -60,6 +60,7 @@ Run `node --test tests/*.test.mjs` and `python3 -m unittest discover -s tests -p
    - Orice modificare este salvată instant local; butonul **Salvează în JSON (`situatii.json`)** descarcă fișierul JSON actualizat cu toate evenimentele pentru arhivare sau publicare în repository.
    - Celelalte ecrane primesc situația abia după **Publică în Cloud**. Butonul așteaptă confirmarea Firestore și spune dacă publicarea a reușit, a eșuat sau așteaptă conexiunea. Până atunci, linia de stare arată „nepublicat în Cloud”.
    - O versiune mai nouă publicată de altcineva nu înlocuiește editările nepublicate, marcajul în lucru sau o dată respinsă. Apare o casetă de conflict în care alegi **Încarcă versiunea din Cloud** sau **Publică varianta mea peste ea**. Fără lucru local, situația se actualizează direct, ca înainte. Sosirea altor situații actualizează doar lista din arhivă, nu tot panoul.
+   - **Șterge** cere confirmare pentru situația deschisă. Eliminarea unei situații sau a unui marcaj se poate anula 15 secunde din bara de jos a panoului (**Anulează**); o situație ștearsă revine și în Cloud, așa cum era.
 4. **Mod Prezentare CJSU (`Prezintă în ședință`):**
    - Afișează harta pe tot ecranul cu antetul ședinței, avertizările (cod, sursă, interval, localități), legenda operativă și un **panou de sinteză CJSU interactiv** (clic pe orice drum blocat, zonă, forță sau UAT centrează harta pe acel element), plus comenzi rapide pentru *Hartă / Satelit*, *Zi / Noapte*, *Izolează zona* și *Încadrează*.
 

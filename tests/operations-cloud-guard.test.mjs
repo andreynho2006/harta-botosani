@@ -28,14 +28,14 @@ async function browserChecks({ initOperations, createEvent }) {
   const boot = ({ active, session = {}, save } = {}) => {
     const memory = new Map([['hb.ops.session.v1', JSON.stringify({ active, ...session })]]);
     const storage = { getItem: key => memory.get(key) ?? null, setItem: (key, value) => memory.set(key, value), removeItem: key => memory.delete(key) };
-    const calls = [], toasts = [];
-    const cloudDb = { saveSituation: situation => { calls.push(situation); return save ? save(situation) : Promise.resolve(true); }, deleteSituation: async () => true };
+    const calls = [], toasts = [], deletes = [];
+    const cloudDb = { saveSituation: situation => { calls.push(situation); return save ? save(situation) : Promise.resolve(true); }, deleteSituation: async id => { deletes.push(id); return true; } };
     const state = { data: { admin: { features: [] }, localities: [] }, visible: {}, overlays: {}, basemap: 'harta', theme: 'zi' };
     document.querySelector('#tab-situatii').replaceChildren();
     const ops = initOperations({ map, storage, state, toast: text => toasts.push(text), selectTab: noop, setSheet: noop, stopOtherTools: noop,
       applyStyle: noop, renderLayerPanel: noop, cloudDb, publishWaitMs: 40 });
     const archive = () => JSON.parse(memory.get('hb.events.v1') || '{"events":[]}').events;
-    return { ops, calls, toasts, archive };
+    return { ops, calls, toasts, archive, deletes };
   };
   const $ = selector => document.querySelector(selector);
   const title = () => $('[data-ops-card="event"] h2')?.textContent;
@@ -151,6 +151,37 @@ async function browserChecks({ initOperations, createEvent }) {
       check('latePublishLands', notice().startsWith('Publicarea s-a încheiat') && status().startsWith('Publicat în Cloud'));
     }
 
+    // Removing a marker is immediate, and "Anulează" puts it back where it was.
+    {
+      const mine = situation('Inundație Jijia');
+      const point = (id, title) => ({ type: 'Feature', geometry: { type: 'Point', coordinates: [26.6, 47.7] }, properties: { id, kind: 'isu', status: 'confirmed', title, observedAt: mine.updatedAt } });
+      mine.features.features.push(point('m1', 'Echipaj ISU 1'), point('m2', 'Echipaj ISU 2'));
+      const { archive } = boot({ active: mine });
+      $('[data-remove="m1"]').click();
+      const stored = () => archive().find(event => event.id === mine.id)?.features.features.map(f => f.properties.id).join(',');
+      check('markerRemovedAtOnce', !$('[data-remove="m1"]') && stored() === 'm2' && $('.ops-undo')?.textContent.includes('Echipaj ISU 1'));
+      $('[data-action="undo"]').click();
+      check('markerUndoRestoresOrder', $('[data-remove="m1"]') && stored() === 'm1,m2' && !$('.ops-undo'));
+    }
+
+    // Deleting a situation asks first, then can be undone in this browser and in the Cloud.
+    {
+      const mine = situation('Exercițiu CJSU');
+      const { ops, archive, calls, deletes } = boot({ active: mine });
+      ops.syncFromCloud([structuredClone(mine)]);
+      const inArchive = () => archive().some(event => event.id === mine.id);
+      $('[data-delete-id]').click();
+      check('deleteAsksFirst', $('.ops-confirm')?.textContent.includes('și din Cloud') && inArchive() && !deletes.length);
+      $('[data-action="cancel-delete"]').click();
+      check('deleteCanBeCancelled', !$('.ops-confirm') && title() === 'Exercițiu CJSU' && inArchive());
+      $('[data-delete-id]').click();
+      $('[data-confirm-delete]').click(); await settle();
+      check('deleteRemovesEverywhere', !inArchive() && deletes[0] === mine.id && !title() && $('.ops-undo')?.textContent.includes('Exercițiu CJSU'));
+      ops.syncFromCloud([]);
+      $('[data-action="undo"]').click(); await settle();
+      check('deleteUndoRestores', inArchive() && title() === 'Exercițiu CJSU' && calls.some(sent => sent.id === mine.id && sent.updatedAt === mine.updatedAt) && !$('.ops-undo'));
+    }
+
     // One malformed document does not stop the others from syncing.
     {
       const { ops, archive } = boot({});
@@ -163,7 +194,7 @@ async function browserChecks({ initOperations, createEvent }) {
   out.textContent = JSON.stringify(result);
 }
 
-test('Cloud snapshots never replace work in progress, and publishing reports what really happened', { skip: !existsSync(chrome) }, () => {
+test('Cloud snapshots keep work in progress, publishing reports the real result, and removals can be undone', { skip: !existsSync(chrome) }, () => {
   const dir = mkdtempSync(join(tmpdir(), 'cjsu-cloud-guard-'));
   const web = new URL('../web/', import.meta.url).href;
   const page = `<!doctype html><meta charset="utf-8"><script src="${web}vendor/proj4.js"></script><div class="app"><aside class="side"><div id="tab-situatii"></div></aside><div class="mapwrap"><div id="map"></div></div></div><pre id="results"></pre><script type="module">import { initOperations } from "${web}js/operations.js"; import { createEvent } from "${web}js/event-store.js"; (${browserChecks.toString()})({ initOperations, createEvent })</script>`;

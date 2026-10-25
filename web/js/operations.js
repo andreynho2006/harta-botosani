@@ -405,6 +405,7 @@ export function initOperations(ctx) {
   // `unpublished` tracks that gap; `cloudBase` is the Cloud version the open situation started
   // from, so a colleague's newer copy is told apart from the echo of our own publish.
   let unpublished = false, cloudBase = null, cloudConflict = null, publishing = false, cloudSeen = false;
+  let confirmDeleteId = null, undo = null;
   const cloudCopies = new Map(), sentVersions = new Set();
 
   state.operations = {
@@ -1246,8 +1247,15 @@ export function initOperations(ctx) {
       <div class="ops-actions">
         <button class="btn" type="button" data-action="archive-export">Salvează baza (.json)</button>
         <label class="btn file ops-import">Încarcă .json<input id="ops-import" type="file" accept=".json,application/json" hidden></label>
-        ${active ? `<button class="btn" type="button" data-delete-id="${esc(active.id)}" title="Șterge situația curentă din arhivă">Șterge</button>` : ""}
+        ${active && confirmDeleteId !== active.id ? `<button class="btn" type="button" data-delete-id="${esc(active.id)}" title="Șterge situația curentă din arhivă">Șterge</button>` : ""}
       </div>
+      ${active && confirmDeleteId === active.id ? `<div class="ops-confirm" role="group" aria-label="Confirmă ștergerea situației">
+        <p>Ștergi situația „${esc(active.title)}” din acest browser${cloudCopies.has(active.id) ? " și din Cloud" : ""}? O poți pune la loc câteva secunde după ștergere.</p>
+        <div class="ops-actions">
+          <button class="btn danger" type="button" data-confirm-delete="${esc(active.id)}">Da, șterge</button>
+          <button class="btn" type="button" data-action="cancel-delete">Renunță</button>
+        </div>
+      </div>` : ""}
     </section>`;
   }
 
@@ -1415,6 +1423,7 @@ export function initOperations(ctx) {
       </section>
 
       ${archiveHTML(events)}
+      ${undoHTML()}
     </div>`;
     alertEditor.restoreRejectedDates(rejectedDates);
     operationCards.refresh({ markerId: pending?.properties?.id ?? null });
@@ -1499,12 +1508,10 @@ export function initOperations(ctx) {
   // goes out when the network returns. Past this wait the operator hears it is still pending.
   const PUBLISH_WAIT_MS = ctx.publishWaitMs ?? 10000;
 
-  // Resolves to "ok", "failed" or "waiting". A write that answers after the wait still marks
-  // the version as published through `onLate`.
-  function publishToCloud(event, onLate) {
-    sentVersions.add(`${event.id}@${event.updatedAt}`);
-    const write = Promise.resolve()
-      .then(() => cloudDb.saveSituation(structuredClone(event)))
+  // Resolves to "ok", "failed" or "waiting". A write that answers after the wait still
+  // reports success through `onLate`.
+  function cloudWrite(run, onLate = () => {}) {
+    const write = Promise.resolve().then(run)
       .then(ok => ok ? "ok" : "failed", error => { console.warn(error); return "failed"; });
     let timer;
     const wait = new Promise(resolve => { timer = setTimeout(() => resolve("waiting"), PUBLISH_WAIT_MS); });
@@ -1513,6 +1520,73 @@ export function initOperations(ctx) {
       if (result === "waiting") write.then(late => { if (late === "ok") onLate(); });
       return result;
     });
+  }
+
+  function publishToCloud(event, onLate) {
+    sentVersions.add(`${event.id}@${event.updatedAt}`);
+    const copy = structuredClone(event);
+    return cloudWrite(() => cloudDb.saveSituation(copy), onLate);
+  }
+
+  // Removing is immediate and stays undoable for a while, so markers need no dialog; only a
+  // whole situation, which also leaves the Cloud, is confirmed first.
+  const UNDO_MS = 15000;
+  function offerUndo(text, restore) {
+    clearTimeout(undo?.timer);
+    undo = { text, restore, timer: setTimeout(dropUndo, UNDO_MS) };
+    const old = panel.querySelector(".ops-undo");
+    if (old) old.outerHTML = undoHTML();
+    else panel.querySelector(".ops")?.insertAdjacentHTML("beforeend", undoHTML());
+  }
+
+  function dropUndo() {
+    clearTimeout(undo?.timer);
+    undo = null;
+    panel.querySelector(".ops-undo")?.remove();
+  }
+
+  function undoHTML() {
+    return undo ? `<div class="ops-undo" role="status"><span>${esc(undo.text)}</span><button class="btn" type="button" data-action="undo">Anulează</button></div>` : "";
+  }
+
+  async function deleteSituation(id) {
+    const local = db.load(id);
+    if (!local) { confirmDeleteId = null; return render(); }
+    const wasOpen = active?.id === id;
+    if (wasOpen && (pending || mode || itinerary.isPicking())) return message("Finalizează sau anulează marcajul în curs înainte de a șterge situația.");
+    if (wasOpen && intervalRejected("Situația nu a fost ștearsă.")) return;
+    confirmDeleteId = null;
+    const cloudCopy = cloudCopies.get(id) ?? null;
+    const openState = wasOpen ? { unpublished, cloudBase } : null;
+    db.remove(id);
+    if (wasOpen) closeActive();
+    render();
+    offerUndo(`Situația „${local.title}” a fost ștearsă.`, () => restoreSituation(local, cloudCopy, openState));
+    if (!cloudCopy || !cloudDb?.deleteSituation) return toast("Situația a fost ștearsă din acest browser.");
+    const result = await cloudWrite(() => cloudDb.deleteSituation(id));
+    if (result === "ok") toast("Situația a fost ștearsă și din Cloud.");
+    else if (result === "waiting") message("Situația a fost ștearsă din acest browser; ștergerea din Cloud se trimite când revine conexiunea.");
+    else message("Situația a fost ștearsă din acest browser, dar nu și din Cloud, așa că va reapărea la următoarea sincronizare.");
+  }
+
+  // Puts back the local copy at once, and the Cloud copy as it was before the deletion.
+  function restoreSituation(local, cloudCopy, openState) {
+    if (openState && !canReplaceDraft()) return false;
+    try { db.put(local); }
+    catch (error) { console.warn(error); message("Situația nu a putut fi pusă la loc în acest browser."); return false; }
+    if (openState) {
+      setActive(local);
+      unpublished = openState.unpublished; cloudBase = openState.cloudBase;
+      persistSession(); refreshPublishState();
+    } else render();
+    toast(`Situația „${local.title}” a fost pusă la loc.`);
+    if (!cloudCopy || !cloudDb?.saveSituation) return true;
+    publishToCloud(cloudCopy).then(result => {
+      if (result !== "failed") return;
+      if (active?.id === local.id) { unpublished = true; persistSession(); refreshPublishState(); }
+      message("Situația e pusă la loc în acest browser, dar nu și în Cloud: apasă „Publică în Cloud”.");
+    });
+    return true;
   }
 
   // Our version is in the Cloud: it becomes the base, and stays unpublished only if the
@@ -1665,7 +1739,7 @@ export function initOperations(ctx) {
     active.places = active.places || [];
     active.isolateArea = active.isolateArea ?? false;
     active.tintAreas = active.tintAreas ?? true;
-    pending = null; editingId = null; dirty = false; exported = false; notice = "";
+    pending = null; editingId = null; dirty = false; exported = false; notice = ""; confirmDeleteId = null;
     // Without a Cloud copy the situation lives only here, once the Cloud has answered at all.
     cloudBase = copy?.updatedAt ?? null; cloudConflict = null;
     unpublished = copy ? active.updatedAt > copy.updatedAt : cloudSeen;
@@ -1678,7 +1752,7 @@ export function initOperations(ctx) {
   }
 
   function closeActive() {
-    active = null; pending = null; editingId = null;
+    active = null; pending = null; editingId = null; confirmDeleteId = null;
     unpublished = false; cloudBase = null; cloudConflict = null;
     stopDrawing(); sync(true);
   }
@@ -2101,9 +2175,26 @@ export function initOperations(ctx) {
     if (button.dataset.remove && active) {
       if (pending) return message("Finalizează sau anulează editarea marcajului curent.");
       if (intervalRejected("Marcajul nu a fost eliminat.")) return;
-      active.features.features = active.features.features.filter(f => f.properties.id !== button.dataset.remove);
+      const index = active.features.features.findIndex(f => f.properties.id === button.dataset.remove);
+      if (index < 0) return;
+      const [removed] = active.features.features.splice(index, 1);
+      const eventId = active.id;
+      unpublished = true;
       try { active = db.save(snapshot()); dirty = false; } catch { changed(); }
-      sync(); render(); return;
+      sync(); render();
+      offerUndo(`Marcajul „${removed.properties.title || KINDS[removed.properties.kind]}” a fost eliminat.`, () => {
+        if (active?.id !== eventId) { message("Între timp s-a deschis altă situație; marcajul nu mai poate fi pus la loc."); return true; }
+        if (pending) { message("Finalizează sau anulează marcajul curent, apoi apasă din nou „Anulează”."); return false; }
+        if (intervalRejected("Marcajul nu a fost pus la loc.")) return false;
+        const features = active.features.features;
+        if (!features.some(f => f.properties.id === removed.properties.id)) features.splice(Math.min(index, features.length), 0, removed);
+        unpublished = true;
+        try { active = db.save(snapshot()); dirty = false; } catch { changed(); }
+        sync(); render();
+        toast("Marcajul a fost pus la loc.");
+        return true;
+      });
+      return;
     }
     if (button.dataset.mark && active) {
       if (pending) return message("Finalizează sau anulează editarea marcajului curent.");
@@ -2131,13 +2222,12 @@ export function initOperations(ctx) {
       return;
     }
     if (button.dataset.deleteId) {
-      const delId = button.dataset.deleteId;
-      db.remove(delId);
-      try { cloudDb?.deleteSituation?.(delId); } catch (e) { console.warn(e); }
-      if (active?.id === delId) { active = null; pending = null; stopDrawing(); sync(true); }
-      render(); toast("Situația a fost ștearsă (și din Cloud).");
+      confirmDeleteId = button.dataset.deleteId;
+      render();
+      panel.querySelector("[data-confirm-delete]")?.focus();
       return;
     }
+    if (button.dataset.confirmDelete) return deleteSituation(button.dataset.confirmDelete);
 
     const action = button.dataset.action;
     if (action === "quick-road" || action === "open-road-form") return openRoadCreator();
@@ -2169,6 +2259,11 @@ export function initOperations(ctx) {
     }
 
     if (action === "save") save();
+    if (action === "cancel-delete") { confirmDeleteId = null; render(); }
+    if (action === "undo" && undo) {
+      const { restore } = undo;
+      if (restore() !== false) dropUndo();
+    }
     if (action === "cloud-overwrite" && active && cloudConflict) save({ overwrite: true });
     if (action === "cloud-take" && active && cloudConflict) {
       if (pending || mode || itinerary.isPicking()) return message("Finalizează sau anulează marcajul în curs înainte de a încărca versiunea din Cloud.");
