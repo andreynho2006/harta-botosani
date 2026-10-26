@@ -59,6 +59,7 @@ test('startup removes OSM hydrants from POIs and search while preserving ISU hyd
     loadJSON: async path => path.includes('pois') ? pois : path.includes('search') ? rows : { features: [] },
     state, prepareHydrants: fc => fc, stats: null, uatAt: null, makeUatLookup: noop,
     search: { add: items => added.push(...items) }, hydrantSearchRows: () => [['ISU hydrant', 'hid']],
+    courseSearchRows: fc => [['Cadastre river', 'cad', fc.features.length]],
     updateDataInfo: noop, renderLayerPanel: noop, renderAnalysis: noop,
     map: {}, toast: noop, selectTab: noop, setSheet: noop, applyStyle: noop,
     initSheet: noop, initMap: noop, initSearch: noop, initUI: noop, initOperations: noop,
@@ -71,4 +72,6 @@ test('startup removes OSM hydrants from POIs and search while preserving ISU hyd
   assert.equal(state.data.hydrography, rivers);
   assert.equal(added.some(row => row[1] === 'poi:hidrant_osm'), false);
   assert.equal(added.some(row => row[1] === 'hid'), true);
+  // the cadastre rivers join the search right after the hydrants
+  assert.deepEqual(added.slice(-2).map(row => row[1]), ['hid', 'cad']);
 });

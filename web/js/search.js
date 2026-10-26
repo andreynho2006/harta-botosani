@@ -1,4 +1,4 @@
-// Căutare locală: localități, străzi, adrese, obiective, ape, hidranți și coordonate.
+// Căutare locală: localități, străzi, adrese, obiective, ape, râuri din cadastru, hidranți și coordonate.
 import { POI, LABELS } from "./config.js";
 
 export const norm = (s) => (s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
@@ -6,7 +6,7 @@ const tokens = (s) => norm(s).split(/[^a-z0-9]+/).filter(Boolean);
 
 const TYPE_WEIGHT = {
   "loc:city": 60, "loc:town": 55, "loc:village": 40, "loc:suburb": 30, "loc:hamlet": 25,
-  poi: 28, hid: 26, apa: 20, str: 18, adr: 10,
+  poi: 28, hid: 26, cad: 24, apa: 20, str: 18, adr: 10,
 };
 
 export function typeInfo(type) {
@@ -17,6 +17,7 @@ export function typeInfo(type) {
   if (kind === "str") return { label: "Stradă", cls: "t-str" };
   if (kind === "adr") return { label: "Adresă", cls: "t-adr" };
   if (kind === "hid") return { label: "Hidrant", cls: "t-hid" };
+  if (kind === "cad") return { label: "Râu (cadastru)", cls: "t-apa" };
   return { label: kind, cls: "" };
 }
 

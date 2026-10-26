@@ -17,6 +17,7 @@ import {
   distance, bearing, direction, circle, fmtDistance, fmtLatLon, fmtStereo, fmtDMS,
   parseCoordinates, makeUatLookup,
 } from "./geo.js";
+import { courseIndex, courseRows, courseSearchRows } from "./hydrography-layer.js?v=20261026-hydro";
 
 const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -145,7 +146,11 @@ function replaceHydrants(fc) {
 /** Înlocuiește hidrografia încărcată (folosit de panoul de administrare, doar în această sesiune). */
 function replaceHydrography(fc) {
   state.data.hydrography = fc;
+  map?.getSource("hydrography")?.setData(fc);
+  search.items = search.items.filter((it) => it.type !== "cad");
+  search.add(courseSearchRows(fc));
   updateDataInfo();
+  renderLayerPanel();
 }
 
 /** Aplică lista de subunități ISU pe hartă; `draft` = păstrată local până la publicarea subunitati.json. */
@@ -220,6 +225,7 @@ async function init() {
   for (const place of state.data.localities) place.uat = uatAt(place.lon, place.lat)?.name || "";
   search.add(searchRows.filter((row) => row[1] !== "poi:hidrant_osm"));
   search.add(hydrantSearchRows());
+  search.add(courseSearchRows(state.data.hydrography));
   updateDataInfo();
 
   renderLayerPanel();
@@ -457,7 +463,7 @@ function initMap() {
   map.on("zoom", zoomTxt);
   zoomTxt();
 
-  const clickable = ["hydrant-icon", "hydrant-dot", "poi-major", "poi-minor", "pin"];
+  const clickable = ["hydrant-icon", "hydrant-dot", "poi-major", "poi-minor", "pin", "hydro-line"];
   for (const id of clickable) {
     map.on("mouseenter", id, () => { if (!state.mode) map.getCanvas().style.cursor = "pointer"; });
     map.on("mouseleave", id, () => { if (!state.mode) map.getCanvas().style.cursor = ""; });
@@ -473,7 +479,7 @@ function initMap() {
 
 // prioritatea la clic: ce e deasupra și mai important câștigă
 const PICK_ORDER = ["hydrant-icon", "hydrant-dot", "poi-major", "poi-minor", "pin", "buildings", "roads", "tracks", "rail",
-  "dams", "rivers", "streams", "water", "places", "landuse"];
+  "hydro-line", "hydro-label", "dams", "rivers", "streams", "water", "places", "landuse"];
 
 function onMapClick(e) {
   if (Date.now() < suppressClickUntil) return;
@@ -565,6 +571,12 @@ function describe(f) {
     return { title, kind: LABELS.road[p.cls] + (p.bridge ? " · pod" : ""), rows, osm: p.osm };
   }
   if (id === "rail") return { title: p.name || "Cale ferată", kind: "Cale ferată", rows };
+  if (id === "hydro-line" || id === "hydro-label") {
+    // queryRenderedFeatures dă doar bucata din tile și listele ca text JSON: fișa se ia din cadastrul întreg, după cod
+    const course = courseIndex(state.data.hydrography).get(p.code) ?? f;
+    return { title: course.properties.name, kind: "Curs de apă · cadastrul apelor (ABA)",
+      rows: courseRows(course, state.data.hydrography), geometry: course.geometry };
+  }
   if (["rivers", "streams", "dams", "water"].includes(id)) {
     add("Suprafață", p.area_ha && `${p.area_ha.toLocaleString("ro-RO")} ha`);
     if (p.intermittent) add("Regim", "temporar (seacă vara)");
@@ -601,7 +613,7 @@ function showInfo(f, clickLL) {
   if (f) {
     d = describe(f);
     if (f.geometry.type === "Point") ll = f.geometry.coordinates;
-    const geom = f.layer.id === "landuse" ? { type: "Point", coordinates: ll } : f.geometry;
+    const geom = f.layer.id === "landuse" ? { type: "Point", coordinates: ll } : d.geometry ?? f.geometry;
     setOverlay("sel", { type: "FeatureCollection", features: [{ type: "Feature", properties: {}, geometry: geom }] });
   } else {
     const u = uatAt(...ll);
@@ -1213,13 +1225,24 @@ function initSearch() {
     list.hidden = true;
     input.blur();
     const ll = [r.lon, r.lat];
-    setOverlay("pin", { type: "FeatureCollection", features: [{ type: "Feature", properties: {}, geometry: { type: "Point", coordinates: ll } }] });
+    const course = r.type === "cad" ? courseIndex(state.data.hydrography).get(r.ref) : null;
+    // un râu nu primește pin: fișa îi desenează tot cursul
+    setOverlay("pin", r.type === "cad" ? FC()
+      : { type: "FeatureCollection", features: [{ type: "Feature", properties: {}, geometry: { type: "Point", coordinates: ll } }] });
     if (r.type === "hid") {
       const f = state.data.hydrants.features.find((x) => x.id === r.ref);
       if (f) showInfo({ ...f, layer: { id: "hydrant-icon" } }, ll);
     } else if (r.type?.startsWith("poi:")) {
       const f = state.data.pois.features.find((x) => x.geometry.coordinates[0] === r.lon && x.geometry.coordinates[1] === r.lat);
       if (f) showInfo({ ...f, layer: { id: "poi-major" } }, ll);
+    } else if (course) {
+      if (!state.visible.cadastru) {
+        state.visible.cadastru = true;
+        store.set("visible.v2", state.visible);
+        applyStyle();
+        renderLayerPanel();
+      }
+      showInfo({ ...course, layer: { id: "hydro-line" } }, ll);
     } else if (r.coord) {
       showInfo(null, ll);
     } else {
@@ -1228,7 +1251,7 @@ function initSearch() {
     }
     const padding = viewPadding();
     if (r.bbox && r.type !== "adr") {
-      map.fitBounds([[r.bbox[0], r.bbox[1]], [r.bbox[2], r.bbox[3]]], { padding, maxZoom: 17, duration: 800 });
+      map.fitBounds([[r.bbox[0], r.bbox[1]], [r.bbox[2], r.bbox[3]]], { padding, maxZoom: r.type === "cad" ? 13 : 17, duration: 800 });
     } else {
       const z = r.type?.startsWith("loc:city") ? 13 : r.type?.startsWith("loc:town") ? 14 : r.type?.startsWith("loc:") ? 15 : 17.5;
       map.flyTo({ center: ll, zoom: z, duration: 900, padding });

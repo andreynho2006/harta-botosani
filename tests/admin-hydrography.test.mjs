@@ -247,7 +247,8 @@ test('the data line names the rivers only when the hydrography is loaded', () =>
     mainSource.slice(mainSource.indexOf('/** Înlocuiește hidrografia încărcată'), mainSource.indexOf('/** Aplică lista de subunități ISU'));
   const line = { textContent: '' };
   const state = { data: { hydrants: { features: [] }, hydrography: { features: [] } } };
-  const ctx = vm.createContext({ $: () => line, stats: null, state });
+  const search = { items: [], add() {} };
+  const ctx = vm.createContext({ $: () => line, stats: null, state, map: undefined, search, courseSearchRows: () => [], renderLayerPanel() {} });
   vm.runInContext(source + '\nglobalThis.api = { updateDataInfo, replaceHydrography };', ctx);
   ctx.api.updateDataInfo();
   assert.equal(line.textContent, 'Date OSM din – · fără listă de hidranți');
