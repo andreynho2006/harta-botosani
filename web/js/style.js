@@ -18,7 +18,7 @@ export const PALETTES = {
     bridge: "#3b3b3b", rail: "#6a6a6a", railDash: "#ffffff",
     county: "#7b4a8f", uat: "#9a83a8",
     text: "#2b2b2b", textSoft: "#5b5650", halo: "#ffffff", placeText: "#1e1e1e",
-    accent: "#c8102e", measure: "#1f5fbf", select: "#0a84ff",
+    accent: "#c8102e", measure: "#1f5fbf", select: "#0a84ff", hydro: "#1565c0",
   },
   noapte: {
     land: "#1a1d21", forest: "#1d2820", grass: "#1f2522", orchard: "#202620", residential: "#22252a",
@@ -33,7 +33,7 @@ export const PALETTES = {
     bridge: "#000000", rail: "#8b8f96", railDash: "#1a1d21",
     county: "#b58ac8", uat: "#7f6a8e",
     text: "#dfe3e8", textSoft: "#a8afb8", halo: "#14171a", placeText: "#f2f4f6",
-    accent: "#ff4d5e", measure: "#5aa2ff", select: "#3fa7ff",
+    accent: "#ff4d5e", measure: "#5aa2ff", select: "#3fa7ff", hydro: "#58a6ff",
   },
 };
 
@@ -70,6 +70,17 @@ function roadWidth(extra = 0) {
   return ["interpolate", ["exponential", 1.4], ["zoom"], ...stops];
 }
 
+// lățimea cursurilor din cadastru (px) pe zoom 7 / 10 / 14: ordinul 1 (se varsă în Dunăre) e cel mai gros, afluenții tot mai subțiri
+const HYDRO_ZOOMS = [7, 10, 14];
+const HYDRO_WIDTH = { 1: [2, 3, 6], 2: [1.2, 2, 4], other: [0.6, 1.2, 2.5] };
+
+function hydroWidth() {
+  const stops = HYDRO_ZOOMS.flatMap((z, i) => [z, ["match", ["get", "order"], 1, HYDRO_WIDTH[1][i], 2, HYDRO_WIDTH[2][i], HYDRO_WIDTH.other[i]]]);
+  return ["interpolate", ["linear"], ["zoom"], ...stops];
+}
+
+const emptyFC = () => ({ type: "FeatureCollection", features: [] });
+
 const vis = (on) => (on ? "visible" : "none");
 
 /** Filtrele dinamice (ce categorii sunt vizibile) */
@@ -95,6 +106,9 @@ export function poiFilter(state, major) {
 const FONT = ["Noto Sans Regular"];
 const FONT_M = ["Noto Sans Medium"];
 const FONT_I = ["Noto Sans Italic"];
+// cursurile din cadastru pe satelit: albastru deschis pentru linie, aproape alb pentru nume
+const HYDRO_SAT = "#7fdbff";
+const HYDRO_SAT_TEXT = "#d9f4ff";
 
 export function buildStyle(state) {
   const p = PALETTES[state.theme];
@@ -119,6 +133,7 @@ export function buildStyle(state) {
       },
       pois: { type: "geojson", data: state.data.pois },
       hydrants: { type: "geojson", data: state.data.hydrants },
+      hydrography: { type: "geojson", data: state.data.hydrography ?? emptyFC() },
       admin: { type: "geojson", data: state.data.admin },
       sel: { type: "geojson", data: state.overlays.sel },
       analysis: { type: "geojson", data: state.overlays.analysis },
@@ -148,6 +163,8 @@ export function buildStyle(state) {
       { id: "dams", type: "line", source: "osm", "source-layer": "waterways",
         filter: ["in", ["get", "kind"], ["literal", ["baraj", "stavila"]]], layout: { visibility: vis(v.dams) },
         paint: { "line-color": sat ? "#ffd166" : "#5d5d5d", "line-width": ["interpolate", ["linear"], ["zoom"], 11, 2, 16, 6] } },
+      { id: "hydro-line", type: "line", source: "hydrography", layout: { visibility: vis(v.cadastru), "line-cap": "round", "line-join": "round" },
+        paint: { "line-color": sat ? HYDRO_SAT : p.hydro, "line-width": hydroWidth() } },
 
       { id: "uat-line", type: "line", source: "osm", "source-layer": "boundaries", filter: ["==", ["get", "kind"], "uat"],
         layout: { visibility: vis(v.uat) },
@@ -201,6 +218,10 @@ export function buildStyle(state) {
         layout: { "symbol-placement": "line", "text-field": ["get", "name"], "text-font": FONT_I,
                   "text-size": ["interpolate", ["linear"], ["zoom"], 10, 11, 16, 13], "symbol-spacing": 400 },
         paint: { "text-color": sat ? "#d6ecff" : p.waterText, "text-halo-color": halo, "text-halo-width": 1.2 } },
+      { id: "hydro-label", type: "symbol", source: "hydrography", minzoom: 10,
+        layout: { visibility: vis(v.cadastru), "symbol-placement": "line", "text-field": ["get", "name"], "text-font": FONT_I,
+                  "text-size": ["interpolate", ["linear"], ["zoom"], 10, 11, 16, 13], "symbol-spacing": 450 },
+        paint: { "text-color": sat ? HYDRO_SAT_TEXT : p.hydro, "text-halo-color": halo, "text-halo-width": 1.2 } },
       { id: "road-name", type: "symbol", source: "osm", "source-layer": "roads", minzoom: 13,
         filter: ["all", ["has", "name"], roadFilter(state)], layout: {
           visibility: vis(v.roadlabels), "symbol-placement": "line", "text-field": ["get", "name"], "text-font": FONT,

@@ -1058,6 +1058,7 @@ function swatch(item) {
     roadlabels: `<i class="sq" style="background:#c93a31;width:20px;height:12px;border-radius:3px"></i>`,
     water: `<i class="sq" style="background:${p.water};box-shadow:inset 0 0 0 1px ${p.waterLine}"></i>`,
     rivers: `<i class="ln" style="height:3px;background:${p.waterLine}"></i>`,
+    cadastru: `<i class="ln" style="height:3px;background:${p.hydro}"></i>`,
     streams: `<i class="ln" style="height:1.5px;background:${p.waterLine}"></i>`,
     dams: `<i class="ln" style="height:4px;background:#5d5d5d"></i>`,
     places: `<b style="font-size:12px">Aa</b>`,
@@ -1072,6 +1073,7 @@ function itemCount(item) {
   if (kind === "poi") return state.data.pois.features.filter((f) => f.properties.cat === key).length;
   if (item.id === "hidranti") return state.data.hydrants.features.filter((f) => f.properties._stare !== "defect").length;
   if (item.id === "hidranti_defecti") return state.data.hydrants.features.filter((f) => f.properties._stare === "defect").length;
+  if (item.id === "cadastru") return state.data.hydrography.features.length;
   if (kind === "bld") return stats?.counts?.["cladire_" + key] ?? null;
   return null;
 }
@@ -1119,7 +1121,8 @@ function renderLayerPanel() {
       ${g.items.map((it) => {
         const n = itemCount(it);
         const on = !!state.visible[it.id];
-        const note = it.id === "hidranti" && !n ? `<div class="note">Lista nu a fost încă adăugată.</div>` : "";
+        const missing = { hidranti: "Lista nu a fost încă adăugată.", cadastru: "Cadastrul apelor nu este încărcat." }[it.id];
+        const note = missing && !n ? `<div class="note">${missing}</div>` : "";
         return `<label class="li ${on ? "" : "off"}"><input type="checkbox" data-id="${it.id}" ${on ? "checked" : ""}>
           <span class="sw">${swatch(it)}</span><span class="lbl">${itemLabel(it)}</span>
           <span class="cnt">${n != null ? n.toLocaleString("ro-RO") : ""}</span></label>${note}`;

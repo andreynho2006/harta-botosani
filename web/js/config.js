@@ -64,6 +64,7 @@ export const LAYER_GROUPS = [
   { id: "ape", label: "Hidrografie", items: [
     { id: "water", label: "Lacuri și acumulări", on: true },
     { id: "rivers", label: "Râuri și canale", on: true },
+    { id: "cadastru", label: "Hidrografie (cadastru)", kind: "hydrography", on: false },
     { id: "streams", label: "Pâraie și șanțuri", on: false },
     { id: "dams", label: "Baraje (contur)", on: false },
   ]},
@@ -93,7 +94,7 @@ export const LAYER_PRESETS = [
     id: "flood",
     label: "Inundații / Hidrologie",
     short: "🌊 Inundații",
-    layers: ["uat", "places", "water", "rivers", "streams", "dams", "poi:baraj", "road:dn", "road:dj", "road:dc", "road:street", "roadlabels",
+    layers: ["uat", "places", "water", "rivers", "cadastru", "streams", "dams", "poi:baraj", "road:dn", "road:dj", "road:dc", "road:street", "roadlabels",
       "bld:casa", "bld:bloc", "bld:public", "poi:pompieri", "poi:ambulanta", "poi:jandarmerie", "poi:primarie", "poi:scoala"],
   },
   {
