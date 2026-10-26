@@ -5,6 +5,7 @@ const polygons = (g) => g?.type === 'Polygon' ? [g.coordinates] : g?.type === 'M
 const interpolate = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
 const cross = (a, b) => a[0] * b[1] - a[1] * b[0];
 const difference = (a, b) => [a[0] - b[0], a[1] - b[1]];
+const lineParts = (g) => g?.type === 'LineString' ? [g.coordinates] : g?.type === 'MultiLineString' ? g.coordinates : [];
 
 function ringContains(ring, point) {
   let inside = false;
@@ -152,9 +153,7 @@ export function roadExits(roads, geometry, limitMeters = 250) {
   const polys = polygons(geometry), edges = edgesOf(polys), features = [], exits = new Map();
   const input = roads?.type === 'FeatureCollection' ? roads.features : Array.isArray(roads) ? roads : [];
   for (const road of input) {
-    const g = road.geometry;
-    const lines = g?.type === 'LineString' ? [g.coordinates] : g?.type === 'MultiLineString' ? g.coordinates : [];
-    for (const line of lines) {
+    for (const line of lineParts(road.geometry)) {
       const chunks = portions(line, polys, edges);
       for (let i = 0; i < chunks.length; i++) {
         if (chunks[i].inside) continue;
@@ -180,4 +179,42 @@ export function roadExits(roads, geometry, limitMeters = 250) {
     geometry: { type: 'LineString', coordinates: piece.coordinates },
   });
   return fc(features);
+}
+
+function touches(line, [[minx, miny], [maxx, maxy]]) {
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  for (const [x, y] of line) {
+    if (x < x0) x0 = x;
+    if (x > x1) x1 = x;
+    if (y < y0) y0 = y;
+    if (y > y1) y1 = y;
+  }
+  return x0 <= maxx && x1 >= minx && y0 <= maxy && y1 >= miny;
+}
+
+const insideMemo = new WeakMap();
+
+/**
+ * The stretches of `lines` (a FeatureCollection of lines) that lie inside `geometry`, one LineString per stretch with the
+ * properties of its line. A `within` filter on a label layer tests a whole line, so a river that crosses the border loses
+ * its label even where it is inside; cutting the line at the border leaves the inside stretch to be labelled.
+ * The answer is kept per collection, so the same lines and area give the same object back (a style diff then sees no change).
+ */
+export function linesInside(lines, geometry) {
+  const polys = polygons(geometry);
+  if (!polys.length || !Array.isArray(lines?.features)) return fc([]);
+  const key = JSON.stringify(geometry), last = insideMemo.get(lines);
+  if (last?.key === key) return last.result;
+  const edges = edgesOf(polys), box = geometryBounds(geometry), features = [];
+  for (const feature of lines.features) {
+    for (const line of lineParts(feature.geometry)) {
+      if (!touches(line, box)) continue;
+      for (const chunk of portions(line, polys, edges)) {
+        if (chunk.inside) features.push({ type: 'Feature', properties: feature.properties, geometry: { type: 'LineString', coordinates: chunk.coordinates } });
+      }
+    }
+  }
+  const result = fc(features);
+  insideMemo.set(lines, { key, result });
+  return result;
 }

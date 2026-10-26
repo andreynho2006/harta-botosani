@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { containsPoint, geometryBounds, outsideMask, roadExits } from '../web/js/commune-geometry.js';
+import { containsPoint, geometryBounds, linesInside, outsideMask, roadExits } from '../web/js/commune-geometry.js';
 
 const ring = (x0, y0, x1, y1) => [[x0, y0], [x1, y0], [x1, y1], [x0, y1], [x0, y0]];
 const square = { type: 'Polygon', coordinates: [ring(26, 47, 26.02, 47.02)] };
@@ -135,4 +135,64 @@ test('custom length limits follow bent roads, and short exits stop at the endpoi
   const short = roadExits([road([[26.01, 47.01], [26.0201, 47.01]])], square);
   approx(short.features.at(-1).geometry.coordinates.at(-1)[0], 26.0201);
   assert.equal(roadExits([road([[26.01, 47.01], [26.04, 47.01]])], square, 0).features.length, 0);
+});
+
+const river = (coordinates, properties = { name: 'Example River', code: 'RO_X_1' }) => ({
+  type: 'Feature', properties, geometry: Array.isArray(coordinates[0][0])
+    ? { type: 'MultiLineString', coordinates } : { type: 'LineString', coordinates },
+});
+const insideMidpoints = (result, geometry) => {
+  for (const feature of result.features) {
+    const coords = feature.geometry.coordinates;
+    for (let i = 1; i < coords.length; i++) assert.equal(containsPoint(geometry, coords[i].map((v, d) => (v + coords[i - 1][d]) / 2)), true);
+  }
+};
+
+test('linesInside cuts a line that crosses the border and keeps the stretch inside, with its properties', () => {
+  const result = linesInside(collection(river([[26.01, 47.01], [26.01, 47.05]])), square);
+  assert.equal(result.type, 'FeatureCollection');
+  assert.equal(result.features.length, 1);
+  const [feature] = result.features;
+  assert.equal(feature.geometry.type, 'LineString');
+  assert.deepEqual(feature.properties, { name: 'Example River', code: 'RO_X_1' });
+  approx(feature.geometry.coordinates[0][1], 47.01);
+  approx(feature.geometry.coordinates.at(-1)[1], 47.02);
+  insideMidpoints(result, square);
+});
+
+test('linesInside keeps a line that is inside whole and drops one that is outside', () => {
+  const inside = river([[26.005, 47.005], [26.015, 47.015]]);
+  const outside = river([[26.03, 47], [26.04, 47.02]], { name: 'Other', code: 'RO_X_2' });
+  const result = linesInside(collection(inside, outside), square);
+  assert.deepEqual(result.features.map(f => f.properties.name), ['Example River']);
+  assert.deepEqual(result.features[0].geometry.coordinates, inside.geometry.coordinates);
+});
+
+test('linesInside gives one stretch for each time a line is inside, across the parts of a multiline', () => {
+  const geometry = { type: 'MultiPolygon', coordinates: [
+    [ring(26, 47, 26.02, 47.02), ring(26.005, 47.005, 26.015, 47.015)],
+    [ring(26.03, 47, 26.04, 47.02)],
+  ] };
+  const result = linesInside(collection(river([[[25.99, 47.01], [26.05, 47.01]], [[26.01, 47.003], [26.01, 47.004]]])), geometry);
+  // along 47.01 the first part is inside the first polygon on either side of the hole, then inside the second polygon;
+  // the short second part lies below the hole
+  assert.equal(result.features.length, 4);
+  insideMidpoints(result, geometry);
+});
+
+test('linesInside copes with no lines, no polygon and lines without points', () => {
+  for (const lines of [undefined, null, collection(), collection(river([[26.01, 47.01], [26.01, 47.012]]), river([[]]))]) {
+    const result = linesInside(lines, square);
+    assert.equal(result.type, 'FeatureCollection');
+    assert.equal(result.features.length, lines?.features?.length ? 1 : 0);
+  }
+  assert.deepEqual(linesInside(collection(river([[26.01, 47.01], [26.01, 47.012]])), null).features, []);
+});
+
+test('linesInside answers a second call for the same lines and area with the same collection', () => {
+  const lines = collection(river([[26.01, 47.01], [26.01, 47.05]]));
+  const first = linesInside(lines, square);
+  assert.equal(linesInside(lines, JSON.parse(JSON.stringify(square))), first);
+  assert.notEqual(linesInside(lines, { type: 'Polygon', coordinates: [ring(26, 47, 26.02, 47.03)] }), first);
+  assert.notEqual(linesInside(collection(...lines.features), square), first);
 });
