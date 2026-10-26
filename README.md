@@ -6,7 +6,7 @@ Proiect personal. Rulează în browser, pe PC sau laptop.
 
 ## Ce face
 
-- **Căutare** după localitate, stradă, adresă, instituție, număr de hidrant sau coordonate (WGS84 zecimal, grade-minute-secunde, Stereo 70).
+- **Căutare** după localitate, stradă, adresă, instituție, număr de hidrant, râu din cadastrul apelor sau coordonate (WGS84 zecimal, grade-minute-secunde, Stereo 70).
 - **Fișă la clic** pe orice obiect: categorie, număr drum, pod, tonaj și gabarit (unde există), nivele clădire, adresă, coordonate WGS84 / GMS / Stereo 70.
 - **Analiza unui punct** (clic dreapta): cei mai apropiați hidranți, subunitatea ISU, spitalul, ambulanța și poliția, cu distanță și direcție; clădirile și obiectivele dintr-o rază (50 m – 2 km); rezumat de copiat.
 - **Măsurare** de distanțe, fundal **hartă / satelit**, mod **zi / noapte**, export imagine.
@@ -92,6 +92,8 @@ python3 pipeline/hydrography.py HidrografieABAPB.kmz admin.geojson search.json h
 `admin.geojson` și `search.json` sunt cele de pe ramura `date`. Scriptul tipărește un rezumat: câte cursuri, câți km, câte UAT-uri sunt atinse și ce coduri s-au unit. Testele (`tests/test_hydrography.py`) folosesc date inventate.
 
 Licența datelor ABA nu e clară, iar depozitul și pagina sunt publice, așa că hidrografia se publică numai criptată, ca hidranții. GeoJSON-ul rezultat se încarcă în aplicație, la Administrare → „Hidrografie”, apoi apeși „Descarcă hidrografie.enc” și urci fișierul în `web/data/`. GeoJSON-ul clar nu se urcă nicăieri: nu intră în depozit, nu se publică și nu se trimite la servicii externe.
+
+Cu `hidrografie.enc` încărcat, stratul **„Hidrografie (cadastru)”** din grupul Hidrografie desenează cursurile sub drumuri și etichete, mai groase pentru râurile mari; e oprit implicit și pornit de profilul „🌊 Inundații”. Un clic pe un curs deschide fișa lui (cod cadastral, râul în care se varsă, lungimea totală și cea din județ, suprafața bazinului, denumirile alternative, UAT-urile riverane) și conturează tot cursul. Căutarea găsește râurile după nume sau după o denumire alternativă; alegerea unui rezultat pornește stratul, arată fișa și încadrează râul.
 
 ## Structură
 
