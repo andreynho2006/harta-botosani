@@ -123,6 +123,20 @@ test('courseSearchRows gives one row per course in the SearchIndex tuple format'
   assert.deepEqual(courseSearchRows(undefined), []);
 });
 
+test('courseSearchRows skips a course without coordinates instead of throwing', () => {
+  const nameless = (name, geometry) => ({ type: 'Feature', properties: { code: 'RO_XIII_9', name, parent: 'Prut', alt: [], uats: [] }, geometry });
+  const fantoms = [
+    nameless('Fantoma', { type: 'MultiLineString', coordinates: [] }),
+    nameless('Fantoma', { type: 'MultiLineString', coordinates: [[]] }),
+    nameless('Fantoma', { type: 'LineString', coordinates: [] }),
+    nameless('Fantoma', null),
+  ];
+  for (const fantom of fantoms) {
+    const fc = { type: 'FeatureCollection', features: [fantom, byName('Prut')] };
+    assert.deepEqual(courseSearchRows(fc).map(row => row[0]), ['Prut'], JSON.stringify(fantom.geometry));
+  }
+});
+
 test('courseSearchRows puts the alternate names in the context so a search for them hits', () => {
   const ctx = courseSearchRows(hydrography).find(row => row[0] === 'Bașeu')[4];
   assert.equal(ctx, 'afluent al Prut · 8,5 km · și Baseu Mare, Bașeul');
