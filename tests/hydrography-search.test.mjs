@@ -44,15 +44,16 @@ test('for the same name a cadastre course outranks the OSM river and ranks below
 
 // ------------------------------------------------------------------ main.js wiring
 
-function replace(fc, { withMap = true } = {}) {
-  const calls = { data: [], info: 0, panel: 0 };
+function replace(fc, { withMap = true, operations } = {}) {
+  const calls = { data: [], info: 0, panel: 0, style: 0 };
   const search = indexOf([
     ['Jijia', 'cad', 1, 1, '', null, 'RO_OLD'], ['Hidrant 7', 'hid', 2, 2, '', null, 7], ['Pârâul Vechi', 'apa:parau', 3, 3, '', null, 'w1'],
   ]);
-  const state = { data: { hydrography: empty() } };
+  const state = { data: { hydrography: empty() }, operations };
   const map = withMap ? { getSource: id => (id === 'hydrography' ? { setData: data => calls.data.push(data) } : null) } : undefined;
   vm.runInNewContext(`${mainSlice('function replaceHydrography(', '/** Aplică lista de subunități')}\nreplaceHydrography(fc);`, {
     fc, state, map, search, courseSearchRows, updateDataInfo: () => calls.info++, renderLayerPanel: () => calls.panel++,
+    applyStyle: () => calls.style++,
   });
   return { calls, search, state };
 }
@@ -67,6 +68,13 @@ test('replacing the hydrography updates the source, the search rows, the data li
   assert.deepEqual(cad.map(it => it.ref), hydrography.features.map(f => f.properties.code));
   // the other kinds of rows stay
   assert.deepEqual(search.items.filter(it => it.type !== 'cad').map(it => it.label), ['Hidrant 7', 'Pârâul Vechi']);
+});
+
+test('replacing the hydrography inside a focus rebuilds the style, because the focus labels come from a cut copy of it', () => {
+  const focus = { type: 'Polygon', coordinates: [[[26, 47], [27, 47], [27, 48], [26, 47]]] };
+  assert.equal(replace(hydrography, { operations: { focusGeometry: focus } }).calls.style, 1);
+  assert.equal(replace(hydrography, { operations: { focusGeometry: null } }).calls.style, 0);
+  assert.equal(replace(hydrography).calls.style, 0);
 });
 
 test('replacing the hydrography before the map exists, or with an empty one, still works', () => {

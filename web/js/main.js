@@ -147,6 +147,8 @@ function replaceHydrants(fc) {
 function replaceHydrography(fc) {
   state.data.hydrography = fc;
   map?.getSource("hydrography")?.setData(fc);
+  // în focus, etichetele râurilor vin dintr-o copie a cadastrului tăiată la graniță: se reface odată cu stilul
+  if (state.operations?.focusGeometry) applyStyle();
   search.items = search.items.filter((it) => it.type !== "cad");
   search.add(courseSearchRows(fc));
   updateDataInfo();
