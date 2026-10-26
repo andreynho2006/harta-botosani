@@ -218,3 +218,12 @@ export function linesInside(lines, geometry) {
   insideMemo.set(lines, { key, result });
   return result;
 }
+
+/**
+ * Puts the cadastre cut at `geometry` into `style` as the source of its labels and returns the source's id. The lines
+ * themselves stay on the `hydrography` source, whole, so a click still finds the course.
+ */
+export function addHydroLabelSource(style, geometry) {
+  style.sources['hydrography-labels'] = { type: 'geojson', data: linesInside(style.sources.hydrography?.data, geometry) };
+  return 'hydrography-labels';
+}

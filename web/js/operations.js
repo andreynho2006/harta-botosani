@@ -8,7 +8,7 @@ import {
   snapToRoad, buildRoadSegment, findRoadRoute, findRoadByRef, sliceRoadByKm, sliceRoadByPlaces,
   projectPointOnRoad, roadNetworkToFeatures, roadsListOf, lineLengthKm, roadKmOrigin, kmBeyondRoad,
 } from "./road-sketch.js?v=20261025-safe-routes";
-import { outsideMask, geometryBounds } from "./commune-geometry.js";
+import { outsideMask, geometryBounds } from "./commune-geometry.js?v=20261026-hydro";
 import { circle } from "./geo.js";
 import { LAYER_GROUPS, LAYER_PRESETS } from "./config.js?v=20261026-hydro";
 import { localTime, isoTime, dateLabel, intervalLabel } from "./operations-time.js?v=20261025-same-day";

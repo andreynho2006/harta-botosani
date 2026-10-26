@@ -1,6 +1,6 @@
 /* global maplibregl */
 import { buildStyle, PALETTES } from "./style.js?v=20261026-hydro";
-import { containsPoint, geometryBounds, outsideMask, roadExits } from "./commune-geometry.js";
+import { addHydroLabelSource, containsPoint, geometryBounds, outsideMask, roadExits } from "./commune-geometry.js?v=20261026-hydro";
 
 const empty = () => ({ type: "FeatureCollection", features: [] });
 let dialog;
@@ -62,7 +62,10 @@ export function buildCommuneStyle(uat, state) {
   const style = buildStyle(focusState);
   const labels = style.layers.filter((layer) => layer.type === "symbol").map((layer) => {
     // punctele sunt deja decupate pe comună; OSM și cadastrul apelor au tot județul în sursă
-    if (layer.source !== "osm" && layer.source !== "hydrography") return layer;
+    // „within” judecă linia întreagă dintr-un tile: un râu care iese din comună și-ar pierde eticheta și pe bucata dinăuntru,
+    // deci etichetele cadastrului vin dintr-o sursă tăiată la graniță
+    if (layer.source === "hydrography") return { ...layer, source: addHydroLabelSource(style, geometry) };
+    if (layer.source !== "osm") return layer;
     const inside = ["within", geometry];
     return { ...layer, filter: layer.filter ? ["all", layer.filter, inside] : inside };
   });

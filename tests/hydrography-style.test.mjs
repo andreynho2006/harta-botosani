@@ -6,6 +6,7 @@ globalThis.location = { href: 'http://localhost:8000/' };
 const { LAYER_GROUPS, LAYER_PRESETS, itemLabel } = await import('../web/js/config.js');
 const { buildStyle, PALETTES } = await import('../web/js/style.js');
 const { buildCommuneStyle } = await import('../web/js/commune.js');
+const { containsPoint } = await import('../web/js/commune-geometry.js');
 
 const empty = () => ({ type: 'FeatureCollection', features: [] });
 const defaults = () => Object.fromEntries(LAYER_GROUPS.flatMap(group => group.items.map(item => [item.id, item.on])));
@@ -53,17 +54,49 @@ test('the commune map builds without a cadastre in its state', () => {
   assert.ok(layer(style, 'hydro-line'));
 });
 
-test('the commune map labels only the cadastre rivers inside the commune', () => {
+test('the commune map keeps the OSM river labels inside the commune and moves the cadastre labels to a source cut at the border', () => {
   const polygon = { type: 'Polygon', coordinates: [[[26, 47], [26.02, 47], [26.02, 47.02], [26, 47.02], [26, 47]]] };
   const uat = { name: 'Example', feature: { type: 'Feature', properties: { name: 'Example', kind: 'uat' }, geometry: polygon } };
   const state = stateWith({}, { hydrography });
   state.visible.cadastru = true;
   const style = buildCommuneStyle(uat, state);
-  assert.deepEqual(layer(style, 'hydro-label').filter, ['within', polygon]);
   assert.deepEqual(layer(style, 'river-label').filter.at(-1), ['within', polygon]);
+  // a `within` filter tests the whole line of a tile piece, so the cadastre labels get their own source instead
+  assert.ok(!JSON.stringify(layer(style, 'hydro-label').filter ?? null).includes('within'));
+  assert.equal(layer(style, 'hydro-label').source, 'hydrography-labels');
+  assert.equal(layer(style, 'hydro-label').layout.visibility, 'visible');
+  assert.equal(layer(style, 'hydro-line').source, 'hydrography');
+  assert.equal(style.sources.hydrography.data, hydrography);
   // the labels are drawn above the mask, so they must not leak outside the commune
   assert.ok(index(style, 'hydro-label') > index(style, 'commune-mask'));
   assert.equal(layer(style, 'poi-major').filter.at(-1)[0] === 'within', false);
+});
+
+test('a cadastre river that crosses the commune border keeps its label inside, and nothing outside', () => {
+  const polygon = { type: 'Polygon', coordinates: [[[26, 47], [26.02, 47], [26.02, 47.02], [26, 47.02], [26, 47]]] };
+  const uat = { name: 'Example', feature: { type: 'Feature', properties: { name: 'Example', kind: 'uat' }, geometry: polygon } };
+  const river = (name, coordinates) => ({ type: 'Feature', properties: { name, code: `RO_${name}` }, geometry: { type: 'MultiLineString', coordinates: [coordinates] } });
+  const cadastre = { type: 'FeatureCollection', features: [
+    river('Trecătoarea', [[26.01, 47.01], [26.01, 47.05]]), river('Dinăuntru', [[26.002, 47.002], [26.018, 47.018]]),
+    river('Departe', [[26.5, 47.1], [26.5, 47.2]]),
+  ] };
+  const state = stateWith({}, { hydrography: cadastre });
+  state.visible.cadastru = true;
+  const labelled = buildCommuneStyle(uat, state).sources['hydrography-labels'].data;
+  assert.deepEqual(labelled.features.map(f => f.properties.name).sort(), ['Dinăuntru', 'Trecătoarea']);
+  for (const feature of labelled.features) {
+    assert.equal(feature.properties.code, `RO_${feature.properties.name}`);
+    for (const point of feature.geometry.coordinates) assert.ok(containsPoint(polygon, point), `${feature.properties.name} at ${point}`);
+  }
+  const crossing = labelled.features.find(f => f.properties.name === 'Trecătoarea').geometry.coordinates;
+  assert.ok(Math.abs(crossing.at(-1)[1] - 47.02) < 1e-9, 'the stretch ends at the border');
+  assert.deepEqual(state.data.hydrography, cadastre);
+});
+
+test('the commune map labels no cadastre river when the state has none', () => {
+  const polygon = { type: 'Polygon', coordinates: [[[26, 47], [26.02, 47], [26.02, 47.02], [26, 47.02], [26, 47]]] };
+  const uat = { name: 'Example', feature: { type: 'Feature', properties: { name: 'Example', kind: 'uat' }, geometry: polygon } };
+  assert.deepEqual(buildCommuneStyle(uat, stateWith()).sources['hydrography-labels'].data, empty());
 });
 
 test('the cadastre layers follow state.visible.cadastru', () => {
@@ -138,6 +171,33 @@ test('the operational decoration keeps both cadastre layers, and the label stays
   const focus = { type: 'Polygon', coordinates: [[[26, 47], [27, 47], [27, 48], [26, 47]]] };
   const style = buildStyle(stateWith({ operations: { focusGeometry: focus } }, { hydrography }));
   assert.ok(layer(style, 'hydro-line'));
-  assert.deepEqual(layer(style, 'hydro-label').filter, ['within', focus]);
+  assert.equal(layer(style, 'hydro-line').source, 'hydrography');
+  assert.equal(style.sources.hydrography.data, hydrography);
+  assert.ok(!JSON.stringify(layer(style, 'hydro-label').filter ?? null).includes('within'));
+  assert.equal(layer(style, 'hydro-label').source, 'hydrography-labels');
   assert.ok(index(style, 'hydro-line') < index(style, 'ops-alert-outline'));
+  assert.ok(index(style, 'hydro-label') > index(style, 'ops-mask'));
+});
+
+test('in a focus a river that crosses its border is labelled up to the border', () => {
+  // the focus is the triangle under the diagonal from (26, 47) to (27, 48): the Prut at 26.5 leaves it at 47.5
+  const focus = { type: 'Polygon', coordinates: [[[26, 47], [27, 47], [27, 48], [26, 47]]] };
+  const labelled = buildStyle(stateWith({ operations: { focusGeometry: focus } }, { hydrography })).sources['hydrography-labels'].data;
+  const prut = labelled.features.filter(f => f.properties.name === 'Prut');
+  assert.equal(prut.length, 2);
+  const latitudes = prut.flatMap(f => f.geometry.coordinates.map(point => point[1]));
+  assert.ok(Math.abs(Math.max(...latitudes) - 47.5) < 1e-9, `the Prut is labelled up to ${Math.max(...latitudes)}`);
+  for (const feature of labelled.features) for (const point of feature.geometry.coordinates) assert.ok(containsPoint(focus, point), `${feature.properties.name} at ${point}`);
+  // the Jijia (26.2) leaves the focus at 47.2, the Bașeu (26.4, 47.5 to 47.58) is outside
+  assert.ok(labelled.features.some(f => f.properties.name === 'Jijia'));
+  assert.ok(!labelled.features.some(f => f.properties.name === 'Bașeu'));
+});
+
+test('without a focus the cadastre labels keep the whole source, and a focus without a cadastre labels nothing', () => {
+  const plain = buildStyle(stateWith({}, { hydrography }));
+  assert.equal(layer(plain, 'hydro-label').source, 'hydrography');
+  assert.equal(plain.sources['hydrography-labels'], undefined);
+  const focus = { type: 'Polygon', coordinates: [[[26, 47], [27, 47], [27, 48], [26, 47]]] };
+  const style = buildStyle(stateWith({ operations: { focusGeometry: focus } }));
+  assert.deepEqual(style.sources['hydrography-labels'].data, empty());
 });

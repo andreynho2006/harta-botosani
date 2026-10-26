@@ -1,4 +1,5 @@
 import { ALERT_COLORS, ALERT_COLORS_DARK, ALERT_INK, ALERT_INK_DARK } from './operations-alerts.js?v=20261019-multi-alerts';
+import { addHydroLabelSource } from './commune-geometry.js?v=20261026-hydro';
 
 const emptyCollection = () => ({ type: 'FeatureCollection', features: [] });
 const isGeometry = type => ['==', ['geometry-type'], type];
@@ -67,6 +68,12 @@ export function decorateOperationalStyle(style, state = {}) {
   const baseSymbols = style.layers.filter(layer => layer.type === 'symbol');
   if (operations.focusGeometry) {
     for (const layer of baseSymbols) {
+      // `within` judges a whole line, so a river that leaves the focus would lose its label inside it too:
+      // the cadastre labels come from a copy of the cadastre cut at the focus border
+      if (layer.source === 'hydrography' && style.sources.hydrography) {
+        layer.source = addHydroLabelSource(style, operations.focusGeometry);
+        continue;
+      }
       const within = ['within', operations.focusGeometry];
       layer.filter = layer.filter ? ['all', layer.filter, within] : within;
     }

@@ -1,6 +1,6 @@
 // Stilul hărții (zi / noapte) construit din datele locale.
 import { POI } from "./config.js?v=20261026-hydro";
-import { decorateOperationalStyle } from "./operations-style.js?v=20261025-room-scale";
+import { decorateOperationalStyle } from "./operations-style.js?v=20261026-hydro";
 
 const base = location.href.replace(/[#?].*$/, "").replace(/[^/]*$/, "");
 
