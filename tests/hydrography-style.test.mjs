@@ -53,6 +53,19 @@ test('the commune map builds without a cadastre in its state', () => {
   assert.ok(layer(style, 'hydro-line'));
 });
 
+test('the commune map labels only the cadastre rivers inside the commune', () => {
+  const polygon = { type: 'Polygon', coordinates: [[[26, 47], [26.02, 47], [26.02, 47.02], [26, 47.02], [26, 47]]] };
+  const uat = { name: 'Example', feature: { type: 'Feature', properties: { name: 'Example', kind: 'uat' }, geometry: polygon } };
+  const state = stateWith({}, { hydrography });
+  state.visible.cadastru = true;
+  const style = buildCommuneStyle(uat, state);
+  assert.deepEqual(layer(style, 'hydro-label').filter, ['within', polygon]);
+  assert.deepEqual(layer(style, 'river-label').filter.at(-1), ['within', polygon]);
+  // the labels are drawn above the mask, so they must not leak outside the commune
+  assert.ok(index(style, 'hydro-label') > index(style, 'commune-mask'));
+  assert.equal(layer(style, 'poi-major').filter.at(-1)[0] === 'within', false);
+});
+
 test('the cadastre layers follow state.visible.cadastru', () => {
   for (const on of [false, true]) {
     const state = stateWith({}, { hydrography });

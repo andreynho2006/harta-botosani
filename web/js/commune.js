@@ -61,7 +61,8 @@ export function buildCommuneStyle(uat, state) {
   };
   const style = buildStyle(focusState);
   const labels = style.layers.filter((layer) => layer.type === "symbol").map((layer) => {
-    if (layer.source !== "osm") return layer;
+    // punctele sunt deja decupate pe comună; OSM și cadastrul apelor au tot județul în sursă
+    if (layer.source !== "osm" && layer.source !== "hydrography") return layer;
     const inside = ["within", geometry];
     return { ...layer, filter: layer.filter ? ["all", layer.filter, inside] : inside };
   });

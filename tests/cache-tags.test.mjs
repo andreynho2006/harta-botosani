@@ -54,6 +54,11 @@ test('every module is imported under one URL', () => {
   assert.deepEqual(split, []);
 });
 
+test('the page loads its entry module under a tag, so a new release is not served from the ten-minute cache', () => {
+  const entry = urlsByModule(['index.html']).get('js/main.js');
+  assert.deepEqual([...entry.keys()].map(url => /^js\/main\.js\?v=\d{8}-[a-z0-9-]+$/.test(url)), [true]);
+});
+
 test('the scan tells a split module from a single one', () => {
   const split = jsReferences('js/a.js', `import { a } from './x.js?v=1';\nimport('./y.js');\nnew Worker(new URL('./w.js?v=2', import.meta.url));`);
   assert.deepEqual(split.map(({ url }) => url), ['js/x.js?v=1', 'js/y.js', 'js/w.js?v=2']);
