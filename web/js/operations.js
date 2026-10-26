@@ -1,7 +1,7 @@
 import { normalizeAlerts, affectedAlertLocations, resolvePlace, placeKey, placeLabel, legacyNote, countLabel, ALERT_LABELS, ALERT_RANK } from "./operations-alerts.js?v=20261019-multi-alerts";
 import { buildAlertGeography, buildAlertLabels, alertOutlined, attachAlertPopups } from "./operations-alert-map.js?v=20261025-same-day";
-import { createAlertEditor } from "./operations-alert-editor.js?v=20261025-rivers";
-import { fetchAnmFeeds } from "./operations-alert-feed.js?v=20261025-rivers";
+import { createAlertEditor } from "./operations-alert-editor.js?v=20261026-hydro";
+import { fetchAnmFeeds } from "./operations-alert-feed.js?v=20261026-hydro";
 import { presentationFeatures, presentationRiskGroups, presentationKindLabel } from "./operations-risks.js?v=20261018-cards";
 import { EventStore, CloudStates, createEvent, sanitizeEvent, cleanupLegacyArchive } from "./event-store.js?v=20261025-cloud-state";
 import {
@@ -10,10 +10,10 @@ import {
 } from "./road-sketch.js?v=20261025-safe-routes";
 import { outsideMask, geometryBounds } from "./commune-geometry.js";
 import { circle } from "./geo.js";
-import { LAYER_GROUPS, LAYER_PRESETS } from "./config.js?v=20261018-itineraries-v2";
+import { LAYER_GROUPS, LAYER_PRESETS } from "./config.js?v=20261026-hydro";
 import { localTime, isoTime, dateLabel, intervalLabel } from "./operations-time.js?v=20261025-same-day";
 import { createOperationsCards } from "./operations-cards.js?v=20261018-cards";
-import { createInterventionPlanner } from "./intervention-planner.js?v=20261025-safe-routes";
+import { createInterventionPlanner } from "./intervention-planner.js?v=20261026-hydro";
 
 const FC = (features = []) => ({ type: "FeatureCollection", features });
 const esc = (value) => String(value ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));

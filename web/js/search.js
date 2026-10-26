@@ -1,5 +1,5 @@
 // Căutare locală: localități, străzi, adrese, obiective, ape, râuri din cadastru, hidranți și coordonate.
-import { POI, LABELS } from "./config.js";
+import { POI, LABELS } from "./config.js?v=20261026-hydro";
 
 export const norm = (s) => (s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
 const tokens = (s) => norm(s).split(/[^a-z0-9]+/).filter(Boolean);

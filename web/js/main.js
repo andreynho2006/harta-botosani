@@ -1,14 +1,14 @@
 /* global maplibregl */
-import { POI, LAYER_GROUPS, LAYER_PRESETS, LABELS, START_VIEW, itemLabel } from "./config.js?v=20261018-itineraries-v2";
-import { buildStyle, PALETTES } from "./style.js?v=20261025-room-scale";
-import { buildIcons, iconDataURL } from "./icons.js?v=20261025-room-scale";
-import { SearchIndex, typeInfo, norm } from "./search.js";
+import { POI, LAYER_GROUPS, LAYER_PRESETS, LABELS, START_VIEW, itemLabel } from "./config.js?v=20261026-hydro";
+import { buildStyle, PALETTES } from "./style.js?v=20261026-hydro";
+import { buildIcons, iconDataURL } from "./icons.js?v=20261026-hydro";
+import { SearchIndex, typeInfo, norm } from "./search.js?v=20261026-hydro";
 import { ensureLogin, decryptJSON, logout } from "./auth.js";
 import { renderAdmin } from "./admin.js?v=20261025-rivers";
 import { formatRestriction } from "./restrictions.js";
 import { normalizeSubunitsDoc, mergeSubunitsIntoPois, SUBUNITS_DRAFT_KEY, isNewerSubunitsDocument } from "./subunits.js?v=20261018-itineraries-v2";
-import { openCommuneMap, isCommuneMapOpen } from "./commune.js?v=20261019-multi-alerts";
-import { initOperations } from "./operations.js?v=20261025-rivers";
+import { openCommuneMap, isCommuneMapOpen } from "./commune.js?v=20261026-hydro";
+import { initOperations } from "./operations.js?v=20261026-hydro";
 import {
   saveSubunitsCloud, subscribeSubunits,
   saveSituationCloud, deleteSituationCloud, subscribeSituations, onCloudStatus,

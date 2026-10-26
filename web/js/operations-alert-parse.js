@@ -1,8 +1,8 @@
 // Reads a pasted ANM / INHGA warning: its code, validity interval, phenomena and the county's UATs.
 // Pure and DOM-free; the editor turns each result into a warning the operator then checks.
 import { placeKey } from './operations-alerts.js?v=20261019-multi-alerts';
-import { localTime, isoTime } from './operations-time.js';
-import { readRivers } from './operations-rivers.js?v=20261025-rivers';
+import { localTime, isoTime } from './operations-time.js?v=20261025-same-day';
+import { readRivers } from './operations-rivers.js?v=20261026-hydro';
 
 const CODE_WORDS = { galben: 'yellow', portocaliu: 'orange', rosu: 'red' };
 const MONTHS = {

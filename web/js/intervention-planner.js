@@ -1,6 +1,6 @@
 import { getInterventionUnits } from './intervention-units.js?v=20261018-itineraries-v2';
 import { parseCoordinateCandidates } from './subunits.js?v=20261018-itineraries-v2';
-import { POI } from './config.js?v=20261018-itineraries-v2';
+import { POI } from './config.js?v=20261026-hydro';
 
 const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const validPoint = point => Array.isArray(point) && point.length === 2 && point.every(Number.isFinite) &&

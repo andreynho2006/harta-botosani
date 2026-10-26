@@ -1,5 +1,5 @@
 /* global maplibregl */
-import { buildStyle, PALETTES } from "./style.js?v=20261019-multi-alerts";
+import { buildStyle, PALETTES } from "./style.js?v=20261026-hydro";
 import { containsPoint, geometryBounds, outsideMask, roadExits } from "./commune-geometry.js";
 
 const empty = () => ({ type: "FeatureCollection", features: [] });

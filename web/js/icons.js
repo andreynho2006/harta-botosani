@@ -1,5 +1,5 @@
 // Pictogramele hărții, desenate pe canvas (nu depind de fișiere externe).
-import { POI } from "./config.js";
+import { POI } from "./config.js?v=20261026-hydro";
 
 // Glife 24×24. Fiecare element: [cale SVG, "fg" = alb sau "bg" = culoarea insignei]
 const GLYPHS = {
