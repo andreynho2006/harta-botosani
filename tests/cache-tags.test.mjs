@@ -36,6 +36,14 @@ function urlsByModule(files) {
   return modules;
 }
 
+/** The YYYYMMDD of the main.js tag in index.html, and the newest YYYYMMDD of any ?v=YYYYMMDD-name tag in the sources.
+ *  Dates only: two tags from the same day with different names are the same release. */
+function entryDates(sourceTexts) {
+  const dates = sourceTexts.flatMap(([, source]) => [...source.matchAll(/\?v=(\d{8})-[a-z0-9-]+/g)].map(([, date]) => date));
+  const page = sourceTexts.find(([file]) => file === 'index.html')?.[1] ?? '';
+  return { entry: page.match(/js\/main\.js\?v=(\d{8})-[a-z0-9-]+/)?.[1] ?? null, newest: dates.sort().at(-1) ?? null };
+}
+
 const sources = [...readdirSync(new URL('js/', web)).filter(name => name.endsWith('.js')).map(name => `js/${name}`), 'index.html'];
 
 test('the scan sees the module graph', () => {
@@ -57,6 +65,20 @@ test('every module is imported under one URL', () => {
 test('the page loads its entry module under a tag, so a new release is not served from the ten-minute cache', () => {
   const entry = urlsByModule(['index.html']).get('js/main.js');
   assert.deepEqual([...entry.keys()].map(url => /^js\/main\.js\?v=\d{8}-[a-z0-9-]+$/.test(url)), [true]);
+});
+
+test('the entry tag carries the newest release date, so a revert or a forgotten bump is not served from the ten-minute cache', () => {
+  const { entry, newest } = entryDates(sources.map(file => [file, readFileSync(new URL(file, web), 'utf8')]));
+  assert.equal(entry, newest, `index.html loads main.js under ${entry} while a module is tagged ${newest}`);
+});
+
+test('the entry date is compared with the newest tag, not with the whole tag', () => {
+  const page = tag => ['index.html', `<script type="module" src="js/main.js?v=${tag}"></script>`];
+  const module = tag => ['js/a.js', `import { a } from './b.js?v=${tag}';`];
+  assert.deepEqual(entryDates([page('20261025-rivers'), module('20261026-hydro')]), { entry: '20261025', newest: '20261026' });
+  assert.deepEqual(entryDates([page('20261026-hydro'), module('20261026-labels')]), { entry: '20261026', newest: '20261026' });
+  assert.deepEqual(entryDates([page('20261026-hydro'), module('20261018-cards')]), { entry: '20261026', newest: '20261026' });
+  assert.deepEqual(entryDates([['index.html', '<script type="module" src="js/main.js"></script>'], module('20261026-hydro')]), { entry: null, newest: '20261026' });
 });
 
 test('the scan tells a split module from a single one', () => {
