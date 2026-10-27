@@ -1,0 +1,6 @@
+/tiles/*
+  Cache-Control: public, max-age=86400
+/vendor/*
+  Cache-Control: public, max-age=604800
+/fonts/*
+  Cache-Control: public, max-age=604800
