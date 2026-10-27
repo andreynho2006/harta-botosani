@@ -101,6 +101,8 @@ function listOf(value) {
 }
 
 const isNumber = (value) => typeof value === "number" && Number.isFinite(value);
+// A course length of 0 in the cadastre means "not measured", not a course of no length.
+const totalKm = (p) => (isNumber(p.lengthKm) && p.lengthKm > 0 ? p.lengthKm : null);
 
 /** Rows [label, value] of the info sheet; empty values are left out. */
 export function courseRows(feature, fc) {
@@ -109,8 +111,11 @@ export function courseRows(feature, fc) {
   const add = (label, value) => { if (value) rows.push([label, value]); };
   add("Cod cadastral", cadastreCode(p.code));
   add("Se varsă în", parentLabel(p.parent, fc));
-  add("Lungime totală", isNumber(p.lengthKm) && `${nf1.format(p.lengthKm)} km`);
-  const inCounty = lengthInCountyKm(feature.geometry);
+  const total = totalKm(p);
+  add("Lungime totală", total && `${nf1.format(total)} km`);
+  // The drawn line runs longer than the cadastre's measured course (meanders, the 1 km kept past the county border),
+  // so the county share is capped at the whole course.
+  const inCounty = Math.min(lengthInCountyKm(feature.geometry), total ?? Infinity);
   add("Lungime în județ (aprox.)", inCounty > 0 && `≈ ${(inCounty < 10 ? nf1 : nf0).format(inCounty)} km`);
   add("Suprafața bazinului", isNumber(p.basinKm2) && `${nf1.format(p.basinKm2)} km²`);
   const alt = listOf(p.alt);
@@ -129,7 +134,8 @@ export function courseSearchRows(fc) {
     if (!anchor) continue;
     const parent = parentLabel(p.parent, fc);
     const alt = listOf(p.alt);
-    const ctx = [parent && `afluent al ${parent}`, isNumber(p.lengthKm) && `${nf1.format(p.lengthKm)} km`, alt.length && `și ${alt.join(", ")}`]
+    const total = totalKm(p);
+    const ctx = [parent && `afluent al ${parent}`, total && `${nf1.format(total)} km`, alt.length && `și ${alt.join(", ")}`]
       .filter(Boolean).join(" · ");
     rows.push([p.name, "cad", anchor[0], anchor[1], ctx, courseBBox(f.geometry), p.code]);
   }

@@ -83,7 +83,7 @@ test('courseRows lists the sheet rows in order, with the number formats of the a
     ['Cod cadastral', 'XIII-1.10'],
     ['Se varsă în', 'Prut'],
     ['Lungime totală', '8,5 km'],
-    ['Lungime în județ (aprox.)', '≈ 8,9 km'],
+    ['Lungime în județ (aprox.)', '≈ 8,5 km'],
     ['Suprafața bazinului', '120 km²'],
     ['Alte denumiri', 'Baseu Mare, Bașeul'],
     ['UAT-uri riverane', '1: Cetate'],
@@ -98,6 +98,18 @@ test('courseRows skips what the cadastre does not give', () => {
   ]);
   const bare = { type: 'Feature', properties: { name: 'X', code: 'RO_XII_1' }, geometry: { type: 'MultiLineString', coordinates: [] } };
   assert.deepEqual(courseRows(bare, hydrography), [['Cod cadastral', 'XII-1']]);
+});
+
+test('the county length never exceeds the cadastre length, and a zero cadastre length is left out', () => {
+  // the drawn line of Bașeu is ≈ 8,9 km against 8,46 km in the cadastre
+  const rows = new Map(courseRows(byName('Bașeu'), hydrography));
+  assert.equal(rows.get('Lungime în județ (aprox.)'), '≈ 8,5 km');
+  const zero = { ...byName('Bașeu'), properties: { ...byName('Bașeu').properties, lengthKm: 0 } };
+  const zeroRows = new Map(courseRows(zero, hydrography));
+  assert.equal(zeroRows.has('Lungime totală'), false);
+  assert.equal(zeroRows.get('Lungime în județ (aprox.)'), '≈ 8,9 km');
+  const [row] = courseSearchRows({ type: 'FeatureCollection', features: [zero] });
+  assert.doesNotMatch(row[4], /0 km/);
 });
 
 test('courseRows reads lists that went through MapLibre as JSON text', () => {
